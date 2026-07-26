@@ -1,0 +1,162 @@
+{
+ 
+
+  "Tailwind Grid map": {
+    "prefix": "gridmap",
+    "body": [
+      "<div className=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mt-20 w-[80%] mx-auto gap-6\">",
+      "\t{${1:items}.map((${2:item}) => (",
+      "\t\t<div key={${2}.id} className=\"p-4 bg-white rounded-lg shadow\">",
+      "\t\t\t${0}",
+      "\t\t</div>",
+      "\t))}",
+      "</div>"
+    ]
+  },
+
+  "useState Hook": {
+    "prefix": "us",
+    "body": [
+      "const [${1:state}, set${1/(.*)/${1:/capitalize}/}] = useState(${2:null});"
+    ]
+  },
+
+  "useEffect async": {
+    "prefix": "ue",
+    "body": [
+      "useEffect(() => {",
+      "\tconst load = async () => {",
+      "\t\ttry {",
+      "\t\t\t${0}",
+      "\t\t} catch (e) {",
+      "\t\t\tconsole.error(e);",
+      "\t\t}",
+      "\t};",
+      "",
+      "\tload();",
+      "}, []);"
+    ]
+  },
+
+  "Modal Full": {
+    "prefix": "modal",
+    "body": [
+      "const [isOpen, setIsOpen] = useState(false);",
+      "",
+      "{isOpen && (",
+      "\t<div className=\"fixed inset-0 bg-black/50 flex items-center justify-center\">",
+      "\t\t<div className=\"bg-white p-6 rounded-lg w-[400px]\">",
+      "\t\t\t${0}",
+      "\t\t\t<button onClick={() => setIsOpen(false)} className=\"mt-4 px-4 py-2 bg-blue-600 text-white rounded\">Close</button>",
+      "\t\t</div>",
+      "\t</div>",
+      ")}"
+    ]
+  },
+  
+  "Navbar bg on scroll": {
+    "prefix": "navscroll",
+    "body": [
+      "const [${1:navBg}, set${1/(.*)/${1:/capitalize}/}] = useState(false);",
+      "",
+      "useEffect(() => {",
+      "\tconst handler = () => {",
+      "\t\tset${1/(.*)/${1:/capitalize}/}(window.scrollY >= ${2:90});",
+      "\t};",
+      "",
+      "\twindow.addEventListener('scroll', handler);",
+      "\treturn () => window.removeEventListener('scroll', handler);",
+      "}, []);"
+    ],
+    "description": "Toggle state on scroll position (navbar background)"
+  },
+"Return map render": {
+  "prefix": "rmapr",
+  "body": [
+    "return ${1:items}.map((${2:item}, ${3:index}) => (",
+    "\t<${4:div} key={${3}}>{${2}}</${4}>",
+    "));"
+  ],
+  "description": "Return JSX array from map"
+}
+,
+
+	"Tailwind Button": {
+		"prefix": "btntw",
+		"body": [
+			"<button className=\"px-4 py-2 bg-blue-500 text-white rounded ${1}\" onClick={${2}}>${3:Click me}</button>"
+		],
+		"description": "Button with Tailwind classes"
+	},
+	"Tailwind Card": {
+		"prefix": "cardtw",
+		"body": [
+			"<div className=\"p-4 border rounded shadow ${1}\">",
+			"\t<h2 className=\"text-lg font-bold mb-2\">${2:Title}</h2>",
+			"\t<p>${3:Content}</p>",
+			"</div>"
+		],
+		"description": "Card component with Tailwind"
+	},
+		"Unordered list from array": {
+		"prefix": "ulmap",
+		"body": [
+			"<ul className=\"${1}\">",
+			"\t{${2:items}.map((${3:item}, ${4:i}) => (",
+			"\t\t<li key={${4}} className=\"${5}\">${3}</li>",
+			"\t))}",
+			"</ul>"
+		],
+		"description": "ul > li rendered from array"
+	},
+	"Site Footer": {
+		"prefix": "footerblock",
+		"body": [
+			"<footer className=\"bg-gray-800 text-gray-300 text-center py-4\">",
+			"\t<p>© ${1:2025} ${2:Your Company}. All rights reserved.</p>",
+			"</footer>"
+		],
+		"description": "Simple site footer"
+	},
+	"Responsive Grid Layout": {
+		"prefix": "gridtw",
+		"body": [
+			"<div className=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${1}\">",
+			"\t{${2:items}.map((${3:item}, ${4:index}) => (",
+			"\t\t<div key={${4}} className=\"bg-white p-4 rounded shadow\">",
+			"\t\t\t<h3 className=\"font-bold mb-2\">${3}.title</h3>",
+			"\t\t\t<p>${3}.description</p>",
+			"\t\t</div>",
+			"\t))}",
+			"</div>"
+		],
+		"description": "Tailwind grid layout with cards"
+	},
+    "Input": {
+    "prefix": "inputc",
+    "body": [
+      "<input className=\"${1}\" type=\"${2:text}\" placeholder=\"${3}\" />"
+    ],
+    "description": "Input field"
+  },
+		"Form with label and input": {
+		"prefix": "forminput",
+		"body": [
+			"<form onSubmit={${1:handleSubmit}} className=\"${2}\">",
+			"\t<label htmlFor=\"${3:id}\" className=\"block mb-1 font-medium\">${4:Label}</label>",
+			"\t<input",
+			"\t\ttype=\"${5:text}\"",
+			"\t\tid=\"${3}\"",
+			"\t\tname=\"${3}\"",
+			"\t\tvalue={${6:value}}",
+			"\t\tonChange={${7:handleChange}}",
+			"\t\tclassName=\"border px-3 py-2 rounded w-full\"",
+			"\t/>",
+			"\t<button type=\"submit\" className=\"mt-3 px-4 py-2 bg-blue-600 text-white rounded\">${8:Submit}</button>",
+			"</form>"
+		],
+		"description": "Form with label and input"
+	},
+}
+
+
