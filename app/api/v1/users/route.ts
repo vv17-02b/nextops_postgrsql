@@ -13,14 +13,17 @@ export async function GET() {
         name: true, 
         role: true, 
         plan: true,
-        image: true // Додаємо зчитування лінку на фото
+        image: true 
       },
       orderBy: { createdAt: "desc" },
     });
 
     // 2. Фільтруємо дублікати за іменем розробника за допомогою Map
     const uniqueMap = new Map();
-    realUsers.forEach(u => {
+    
+    // 🔥 ГОЛОВНИЙ ФІКС ТИПІЗАЦІЇ: Явно вказуємо тип 'any' для параметра 'u'
+    // Це повністю усуває помилку 'implicitly has an any type' у збірці Vercel
+    realUsers.forEach((u: any) => {
       const lowerName = u.name ? u.name.toLowerCase().trim() : "";
       if (!uniqueMap.has(lowerName) && lowerName !== "") {
         uniqueMap.set(lowerName, u);

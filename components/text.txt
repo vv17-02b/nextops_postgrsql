@@ -5,6 +5,9 @@ yarn build
 yarn start
 rm -rf .next
 yarn dev develop
+git add .
+git commit -m "fix: explicit any type inside reviews mapper for vercel build"
+git push origin main
 
 my - unified - work - space /
 │
