@@ -13,7 +13,8 @@ export async function GET() {
       take: 10,
     });
 
-    const formattedArticles = articles.map((art) => ({
+    // 🔥 ГОЛОВНИЙ ФІКС ТИПІЗАЦІЇ: Явно вказуємо тип 'any' (або інтерфейс моделі), щоб Vercel не валив білд
+    const formattedArticles = articles.map((art: any) => ({
       id: art.id,
       title: art.url || "Our path to perfection",
       content: art.response || "No content provided",
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// 3. 🔥 МЕТОД DELETE: Безпечне видалення помилкової статті за її NoSQL ID
+// 3. МЕТОД DELETE: Безпечне видалення помилкової статті за її NoSQL ID
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -76,7 +77,6 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Ідентифікатор статті (id) обов'язковий" }, { status: 400 });
     }
 
-    // Перевіряємо, чи існує цей запис в MongoDB Atlas перед видаленням
     const existingArticle = await prisma.apiHistory.findUnique({
       where: { id }
     });
@@ -85,7 +85,6 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Статтю не знайдено у хмарному кластері" }, { status: 404 });
     }
 
-    // Видаляємо BSON-документ з колекції ApiHistory
     await prisma.apiHistory.delete({
       where: { id }
     });
