@@ -4,74 +4,68 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// 1. МЕТОД GET: Зчитування публічних відгуків користувачів для стрічки
+// 1. МЕТОД GET: Зчитування та правильне мапування відгуків з хмари MongoDB Atlas
 export async function GET() {
   try {
-    // Дістаємо останні 10 відгуків з MongoDB Atlas
+    // Шукаємо в базі документи, які мають маркер FEEDBACK у полі method
     const reviews = await prisma.apiHistory.findMany({
-      where: {
-        method: "FEEDBACK" // Використовуємо окремий маркер у полі method вашої моделі ApiHistory
-      },
-      orderBy: { 
-        createdAt: "desc" 
-      },
+      where: { method: "FEEDBACK" },
+      orderBy: { createdAt: "desc" },
       take: 10,
     });
 
-    // Форматуємо NoSQL документи під суворі очікування нашого фронтенду
-    const formattedReviews = reviews.map((rev) => ({
+    // 🔥 ГОЛОВНИЙ ФІКС ТИПІЗАЦІЇ: Явно вказуємо тип 'any' для параметра 'rev'
+    // Це повністю усуває помилку 'implicitly has an any type' у збірці Vercel
+    const formattedReviews = reviews.map((rev: any) => ({
       id: rev.id,
-      user: rev.url || "anonymous", // Мапимо збережене поле під ім'я
-      text: rev.response || "No text provided", // Мапимо під текст коментаря
-      rating: rev.status || 5, // Мапимо під оцінку зірок
+      user: rev.url || "anonymous",               // Мапимо збережене поле під ім'я
+      text: rev.response || "No text provided",   // Мапимо під текст коментаря
+      rating: rev.status || 5,                    // Мапимо статус під зірочки рейтингу
       createdAt: rev.createdAt.toISOString()
     }));
 
-    // Повертаємо об'єкт із суворим ключем reviews, який вимагає лендінг
     return NextResponse.json({ success: true, reviews: formattedReviews }, { status: 200 });
-  } catch (error: any) {
+  } catch (error) {
     console.error("⚠️ [ API_REVIEWS_GET_CRASH ]:", error);
-    return NextResponse.json({ success: false, error: "Помилка сервера при отриманні відгуків" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Помилка кластера при читанні відгуків" }, { status: 500 });
   }
 }
 
-// 2. МЕТОД POST: Збереження нового відгуку безпосередньо в базу даних
+// 2. МЕТОД POST: Публікація нових відгуків через Постман
 export async function POST(req: NextRequest) {
   try {
     const bodyData = await req.json().catch(() => ({}));
     const { user, text, rating } = bodyData;
 
-    if (!user || !text) {
-      return NextResponse.json({ success: false, error: "Нікнейм та текст відгуку є обов'язковими" }, { status: 400 });
+    if (!user || !text || !rating) {
+      return NextResponse.json({ success: false, error: "Всі поля обов'язакові" }, { status: 400 });
     }
 
-    // Записуємо дані у вашу універсальну автономну модель ApiHistory
-    const newFeedbackLog = await prisma.apiHistory.create({
+    // Записуємо дані у твою універсальну NoSQL модель ApiHistory
+    const newReview = await prisma.apiHistory.create({
       data: {
-        userId: "65cb7f4a21de456789abcdef", // Тимчасовий дефолтний ObjectId для неавторизованих гостей
-        method: "FEEDBACK", // Наш залізний маркер для фільтрації відгуків
-        url: user.trim(), // Зберігаємо нікнейм у поле url
-        response: text.trim(), // Зберігаємо текст відгуку в поле response
-        status: Number(rating) || 5, // Зберігаємо оцінку зірок у полі status
+        userId: "65cb7f4a21de456789abcdef", // Дефолтний ObjectId
+        method: "FEEDBACK",                 // Наш залізний маркер для відгуків
+        url: user.trim(),                   // Записуємо нікнейм у поле url
+        response: text.trim(),              // Записуємо текст у поле response
         headers: null,
-        body: null
+        body: null,
+        status: Number(rating) || 5         // Записуємо оцінку у поле status
       }
     });
 
-    // Повертаємо успішний статус та замаплений об'єкт
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       review: {
-        id: newFeedbackLog.id,
-        user: newFeedbackLog.url,
-        text: newFeedbackLog.response,
-        rating: newFeedbackLog.status,
-        createdAt: newFeedbackLog.createdAt.toISOString()
+        id: newReview.id,
+        user: newReview.url,
+        text: newReview.response,
+        rating: newReview.status,
+        createdAt: newReview.createdAt.toISOString()
       }
     }, { status: 201 });
-
-  } catch (error: any) {
+  } catch (error) {
     console.error("⚠️ [ API_REVIEWS_POST_CRASH ]:", error);
-    return NextResponse.json({ success: false, error: "Помилка сервера при збереженні відгуку" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Помилка сервера при публікації відгуку" }, { status: 500 });
   }
 }
