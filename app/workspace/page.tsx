@@ -102,7 +102,7 @@ export default function WorkspacePage() {
         <div className="flex items-center gap-4 w-full sm:w-auto justify-end">
           <Link href="/" className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-widest bg-gradient-to-r from-neutral-900 to-neutral-850 hover:from-neutral-800 hover:to-neutral-750 text-neutral-300 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-xl transition shadow-lg cursor-pointer">
             <ArrowLeft className="w-3.5 h-3.5 text-blue-500 font-bold" />
-            <span>RETURN_TO_HOME</span>
+            <span>ПОВЕРНУТИСЬ_ДОДОМУ</span>
           </Link>
         </div>
       </header>
@@ -110,7 +110,7 @@ export default function WorkspacePage() {
       <main className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-5 border border-white/5 bg-neutral-900/40 backdrop-blur-xl p-5 rounded-2xl shadow-xl space-y-4">
           <h2 className="text-xs font-black text-cyan-400 uppercase tracking-wider flex items-center gap-1.5 select-none">
-            <Globe className="w-4 h-4" /> CONFIGURE_HTTP_REQUEST
+            <Globe className="w-4 h-4" /> НАЛАШТУВАННЯ_HTTP_ЗАПИТУ
           </h2>
 
           <form onSubmit={handleSendRequest} className="space-y-4">
@@ -162,7 +162,7 @@ export default function WorkspacePage() {
               {isSending ? (
                 <>
                   <span className="w-3.5 h-3.5 border-2 border-t-transparent border-white rounded-full animate-spin"></span>
-                  <span>DISPATCHING_PACKET...</span>
+                  <span>ВІДПРАВКА_ПАКЕТА...</span>
                 </>
               ) : (
                 <>
@@ -177,7 +177,7 @@ export default function WorkspacePage() {
         <div className="lg:col-span-7 border border-white/5 bg-neutral-900/40 backdrop-blur-xl p-5 rounded-2xl shadow-xl flex flex-col min-h-[450px]">
           <div className="flex justify-between items-center border-b border-neutral-800/60 pb-3 mb-3 select-none">
             <h2 className="text-xs font-black text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Code className="w-4 h-4" /> SERVER_RESPONSE_WINDOW
+              <Code className="w-4 h-4" /> ВІКНО_ВІДПОВІДІ_СЕРВЕРА
             </h2>
             {responseStatus && (
               <span className={`px-2.5 py-1 text-xs font-black rounded-lg border font-mono ${
@@ -185,7 +185,7 @@ export default function WorkspacePage() {
                   ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
                   : "bg-red-500/10 text-red-400 border-red-500/20"
               }`}>
-                STATUS: {responseStatus}
+                СТАТУС: {responseStatus}
               </span>
             )}
           </div>
@@ -198,7 +198,7 @@ export default function WorkspacePage() {
 
       <div className="max-w-7xl mx-auto border-t border-neutral-900 mt-6 pt-4 flex items-center justify-center gap-2 text-[10px] text-neutral-600 font-mono select-none">
         <ShieldCheck className="w-4 h-4 text-emerald-500/30" />
-        <span>PROXY RELAY CORE ENCRYPTED WITH SSL SECURITY LAYER // HISTORY_LOGGING: ENABLED</span>
+        <span>PROXY RELAY CORE ЗАШИФРОВАНО ШАРОМ БЕЗПЕКИ SSL // ЗАПИС ІСТОРІЇ: УКЛЮЧЕНО</span>
       </div>
     </div>
   );

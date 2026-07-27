@@ -55,14 +55,14 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
           <span className="text-sm font-mono text-violet-400 font-black tracking-wider">🚀 WEBHOOK_ORCHESTRATOR v1.0</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs bg-violet-500/10 border border-violet-500/20 px-2.5 py-0.5 rounded-lg text-violet-400 font-mono font-bold">GATEWAY</span>
+          <span className="text-xs bg-violet-500/10 border border-violet-500/20 px-2.5 py-0.5 rounded-lg text-violet-400 font-mono font-bold">ШЛЮЗ</span>
           {isOpen && onCloseAction && (
             <button 
               type="button"
               onClick={(e) => { e.stopPropagation(); onCloseAction(); }}
               className="text-xs font-mono font-bold bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-1 rounded-lg hover:bg-red-500 hover:text-white transition cursor-pointer"
             >
-              [ × CLOSE ]
+              [ × ЗАКРИТИ ]
             </button>
           )}
         </div>
@@ -72,7 +72,7 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
       <form onSubmit={handleSubmit} className="space-y-4 bg-black/40 p-4 rounded-xl border border-white/5" onClick={(e) => e.stopPropagation()}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="block text-[10px] font-mono text-neutral-400 mb-1.5 uppercase font-bold tracking-wider">Target Event Trigger</label>
+            <label className="block text-[10px] font-mono text-neutral-400 mb-1.5 uppercase font-bold tracking-wider">Цільовий тригер події</label>
             <select
               value={targetEvent}
               onChange={(e) => setTargetEvent(e.target.value)}
@@ -85,7 +85,7 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
           </div>
 
           <div>
-            <label className="block text-[10px] font-mono text-neutral-400 mb-1.5 uppercase font-bold tracking-wider">Signing Secret Key (SHA-256)</label>
+            <label className="block text-[10px] font-mono text-neutral-400 mb-1.5 uppercase font-bold tracking-wider">Секретний ключ підпису (SHA-256)</label>
             <div className="relative">
               <input
                 type="password"
@@ -101,7 +101,7 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
         </div>
 
         <div>
-          <label className="block text-[10px] font-mono text-neutral-400 mb-1.5 uppercase font-bold tracking-wider">Target Destination URL</label>
+          <label className="block text-[10px] font-mono text-neutral-400 mb-1.5 uppercase font-bold tracking-wider">Цільова URL-адреса призначення</label>
           <div className="flex gap-3">
             <input
               type="url"
@@ -118,7 +118,7 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
               className="px-6 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:brightness-110 text-white font-black text-sm rounded-xl transition font-mono disabled:opacity-40 flex items-center gap-1.5 cursor-pointer shadow-lg shadow-violet-500/10 h-[46px]"
             >
               <Save className="w-4 h-4 shrink-0" />
-              <span>SAVE</span>
+              <span>ЗБЕРЕГТИ</span>
             </button>
           </div>
         </div>
