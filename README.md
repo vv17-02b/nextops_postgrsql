@@ -40,15 +40,7 @@
 
 Для успішного залізобетонного запуску системи у корені проєкту має лежати ізольований файл `.env` із наступною структурою:
 
-```env
-# 1. Хмарна база даних MongoDB Atlas & Prisma Client
-DATABASE_URL="mongodb+srv://admin:your_password@cluster0.mongodb.net/my-workspace?retryWrites=true&w=majority"
-MONGO_URL="mongodb+srv://admin:your_password@cluster0.mongodb.net/my-workspace?retryWrites=true&w=majority"
 
-# 2. Авторизація NextAuth (Auth.js v5)
-AUTH_SECRET="your_generated_jwt_secret_token_32_chars_secure_string"
-NEXTAUTH_URL="http://localhost:3000"
-```
 
 ---
 
