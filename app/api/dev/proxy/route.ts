@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  // 1. СУВОРИЙ ЗАХИСТ СЕРВЕРА ВІД SSRF-АТАК
+  // 1. ЗАХИСТ СЕРВЕРА
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ success: false, error: "Unauthorized: Доступ дозволено тільки інженерам Хабу" }, { status: 401 });
@@ -22,14 +22,13 @@ export async function POST(req: NextRequest) {
   let responseStatus = 500;
 
   try {
-    // Зчитуємо дані конфігурації запиту з клієнтського Емулятора Postman
     const bodyData = await req.json();
     const { url, method, headers, body } = bodyData;
 
     targetUrl = url || "";
     httpMethod = method || "GET";
     
-    // Безпечний парсинг кастомних хедерів
+    // Парсинг кастомних хедерів та тіла запиту
     requestHeaders = (headers && typeof headers === "string") ? JSON.parse(headers) : {};
     requestBody = body || null;
 
@@ -37,12 +36,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "URL цільової адреси не вказано" }, { status: 400 });
     }
 
-    // Хак для обходу локальних SSL-блокувань Node.js у середовищі розробки
     if (process.env.NODE_ENV !== "production") {
       process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
     }
 
-    // 2. ВИКОНАННЯ РЕАЛЬНОГО HTTP ЗАПИТУ У ЗОВНІШНІЙ СВІТ В КЛАСУТЕРІ
+    // 2. ВИКОНАННЯ ДИНАМІЧНОГО HTTP ЗАПИТУ
     try {
       const externalResponse = await fetch(targetUrl, {
         method: httpMethod,
@@ -57,41 +55,37 @@ export async function POST(req: NextRequest) {
       responseText = await externalResponse.text();
 
     } catch (fetchError: any) {
-      // Якщо домен не існує або немає інтернету — м'яко перехоплюємо помилку, обходячи падіння 500
       console.error("❌ [ External Fetch Failed ]:", fetchError.message);
       responseStatus = 404;
       
-      // ВИПРАВЛЕНО: Тепер підказка веде на правильний і стабільний тестовий REST API
+      // ПОВНА ДИНАМІКА: Жодного хардкоду доменів
       responseText = JSON.stringify({
         error: "ENOTFOUND // SERVER_NOT_FOUND",
-        message: `Не вдалося встановити зв'язок з адресою: ${targetUrl}. Перевірте правильність написання URL.`,
-        tip: "Спробуйте використати валідний тестовий ендпоінт, наприклад: https://typicode.com"
+        message: `Не вдалося встановити зв'язок з адресою: ${targetUrl}. Перевірте мережу або правильність написання URL.`,
+        tip: "Переконайтеся, що вказано діючий протокол (http:// або https://) та працездатний хост ресурсу."
       }, null, 2);
     } finally {
-      // Очищення хаку SSL для запобігання глобальним проблемам безпеки Node.js процесу
       if (process.env.NODE_ENV !== "production") {
         delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
       }
     }
 
-    // 3. 🔥 ПОВНЕ УВІМКНЕННЯ ЗАПИСУ ІСТОРІЇ В MONGODB ATLAS
-    // Валідуємо рядок на відповідність стандарту ObjectId
+    // 3. ЗАПИС У БАЗУ ДАНИХ MONGODB ATLAS
     const isValidObjectId = currentUserId && /^[0-9a-fA-F]{24}$/.test(currentUserId);
     if (isValidObjectId) {
       await prisma.apiHistory.create({
         data: {
-          userId: currentUserId, // Прив'язуємо лог строго до поточної NoSQL сесії Vlad
+          userId: currentUserId,
           method: httpMethod,
           url: targetUrl.trim(),
           headers: headers ? String(headers) : null,
           body: requestBody ? JSON.stringify(requestBody) : null,
-          response: responseText.substring(0, 5000), // Обмежуємо розмір відповіді для економії пам'яті хмари
+          response: responseText.substring(0, 5000), 
           status: responseStatus
         }
       });
     }
 
-    // Повертаємо success: true, щоб клієнтський Postman завжди красиво малював логи зеленими літерами
     return NextResponse.json({
       success: true,
       status: responseStatus,
@@ -100,10 +94,6 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error("❌ [ PROXY ENGINE CRASH ]:", error);
-    if (error instanceof Error) {
-      console.error(error.stack);
-    }
-    
     return NextResponse.json({
       success: false,
       status: responseStatus,

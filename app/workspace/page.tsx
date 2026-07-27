@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Terminal, Send, ArrowLeft, ShieldCheck, Globe, Code } from "lucide-react";
@@ -9,34 +9,18 @@ export default function WorkspacePage() {
   const { data: session } = useSession();
 
   const [method, setMethod] = useState("GET");
-  const [url, setUrl] = useState("https://fakestoreapi.com");
+  // Початкове значення — пустий шаблон для введення будь-якого http/https лінка
+  const [url, setUrl] = useState("https://");
   const [headers, setHeaders] = useState('{\n  "Content-Type": "application/json",\n  "Accept": "application/json"\n}');
-  const [body, setBody] = useState('{\n  "title": "Новий ШІ-Робот",\n  "budget": 500\n}');
+  const [body, setBody] = useState('{\n  "title": "Тестовий Пакет",\n  "status": "active"\n}');
   
   const [responseStatus, setResponseStatus] = useState<number | null>(null);
   const [responseData, setResponseData] = useState<string>("// Результат відповіді сервера з'явиться тут після відправки запиту...");
   const [isSending, setIsProcessing] = useState(false);
 
-  // 🤖 АВТОМАТИЧНА ПІДСТАНОВКА РЕАЛЬНИХ ЕНДПОЇНТІВ ДЛЯ ТЕСТУВАННЯ
-  useEffect(() => {
-    if (method === "GET") {
-      setUrl("https://fakestoreapi.com");
-      setBody("");
-    } else if (method === "POST") {
-      setUrl("https://typicode.com");
-      setBody('{\n  "title": "Cyber-Analytic Bot v3",\n  "body": "Production level test packet",\n  "userId": 77\n}');
-    } else if (method === "PUT") {
-      setUrl("https://reqres.in");
-      setBody('{\n  "name": "Vlad AI Lead",\n  "job": "Orchestrator Engineer"\n}');
-    } else if (method === "DELETE") {
-      setUrl("https://typicode.com/1");
-      setBody("");
-    }
-  }, [method]);
-
   const handleSendRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url.trim()) return;
+    if (!url.trim() || url === "https://" || url === "http://") return;
 
     setIsProcessing(true);
     setResponseStatus(null);
@@ -96,7 +80,7 @@ export default function WorkspacePage() {
         <div className="flex items-center gap-2.5">
           <Terminal className="w-5 h-5 text-emerald-400" />
           <h1 className="text-sm sm:text-base font-black tracking-widest text-neutral-200 uppercase">
-            NextOps // API_SANDBOX_POSTMAN_EMULATOR
+            NextOps // UNIVERSAL_API_EMULATOR
           </h1>
         </div>
         <div className="flex items-center gap-4 w-full sm:w-auto justify-end">
@@ -120,16 +104,17 @@ export default function WorkspacePage() {
                 onChange={(e) => setMethod(e.target.value)}
                 className="p-3 text-xs font-black bg-neutral-950 border border-neutral-800 text-emerald-400 font-mono rounded-xl focus:outline-none cursor-pointer"
               >
-                <option value="GET">GET (Фетч товарів)</option>
-                <option value="POST">POST (Створення JSON)</option>
-                <option value="PUT">PUT (Оновлення профілю)</option>
-                <option value="DELETE">DELETE (Видалення)</option>
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="DELETE">DELETE</option>
               </select>
               <input
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 className="flex-1 p-3 text-xs bg-neutral-950 border border-neutral-800 text-white font-mono rounded-xl focus:outline-none focus:border-blue-500"
+                placeholder="https://example.com"
                 required
               />
             </div>
