@@ -7,7 +7,6 @@ import Link from "next/link";
 import { Terminal, Send, ArrowLeft, ShieldCheck, Globe, Code } from "lucide-react";
 
 export default function WorkspacePage() {
-  const { locale } = useAppStore();
   const { data: session } = useSession();
 
   const [url, setUrl] = useState("http://localhost:3000/api/v1/projects");
@@ -27,6 +26,19 @@ export default function WorkspacePage() {
     setResponseStatus(null);
     setResponseData("// З'єднання з кластером MongoDB Atlas через Secure Proxy...");
 
+    // Safe JSON Parsing for Request Body
+    let parsedBody = null;
+    if (method !== "GET" && method !== "HEAD") {
+      try {
+        parsedBody = JSON.parse(body.trim());
+      } catch (jsonErr: any) {
+        setIsProcessing(false);
+        setResponseStatus(400);
+        setResponseData(`// [JSON_PARSE_ERROR]: Некоректний формат Request Body.\n// Перевірте наявність ком та лапок.\n// Деталі: ${jsonErr.message}`);
+        return;
+      }
+    }
+
     try {
       const res = await fetch("/api/dev/proxy", {
         method: "POST",
@@ -35,7 +47,7 @@ export default function WorkspacePage() {
           url: url.trim(),
           method,
           headers: headers.trim(),
-          body: method !== "GET" && method !== "HEAD" ? JSON.parse(body) : null
+          body: parsedBody
         })
       });
 
@@ -44,19 +56,18 @@ export default function WorkspacePage() {
       if (res.ok && result.success) {
         setResponseStatus(result.status);
         try {
-          // Якщо прийшов JSON — красиво форматуємо його з відступами
           const formattedJson = JSON.stringify(JSON.parse(result.data), null, 2);
           setResponseData(formattedJson);
         } catch {
-          setResponseData(result.data || "// Успішно оброблено порожній пакет.");
+          setResponseData(result.data || "// Успішно обролено порожній пакет.");
         }
       } else {
-        setResponseStatus(res.status);
+        setResponseStatus(res.status || 500);
         setResponseData(JSON.stringify(result, null, 2));
       }
     } catch (err: any) {
       setResponseStatus(500);
-      setResponseData(`// [CRASH]: Помилка виконання запиту: ${err.message}`);
+      setResponseData(`// [CRASH]: Помилка виконання запиту через ретранслятор: ${err.message}`);
     } finally {
       setIsProcessing(false);
     }
