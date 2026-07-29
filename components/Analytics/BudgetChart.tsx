@@ -1,3 +1,4 @@
+// C:\Users\Admin\Documents\my-unified-work-space\components\Analytics\BudgetChart.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -7,9 +8,9 @@ export default function BudgetChart() {
   const { analytics, isLoading } = useWorkspace();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  // Гарантуємо, що значення завжди будуть числами, уникаючи вразливості undefined.toFixed()
-  const totalBudget = Number(analytics?.sum_budget) || 0;
-  const avgBudget = Number(analytics?.avg_budget) || 0;
+  // 🔥 ГОЛОВНИЙ ФІКС ТИПІЗАЦІЇ: Перевели розрахунки на нові поля totalBudget та averageCheck
+  const totalBudget = Number(analytics?.totalBudget) || 0;
+  const avgBudget = Number(analytics?.averageCheck) || 0;
 
   // Рахуємо відносні показники для візуального графіка лімітів
   const segments = [
@@ -50,7 +51,7 @@ export default function BudgetChart() {
         
         {/* Фонова інженерна сітка всередині графіка */}
         <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:100%_1.5rem] pointer-events-none" />
-
+        {/* Продовження контейнера інтерактивного SVG-рендерингу... */}
         {segments.map((seg, idx) => {
           const calculatedHeight = isLoading ? 0 : seg.factor * 100;
           const displayValue = totalBudget * seg.factor;
@@ -63,17 +64,17 @@ export default function BudgetChart() {
               onMouseEnter={() => setHoveredIndex(idx)}
               onMouseLeave={() => setHoveredIndex(null)}
             >
-              {/* Інтерактивна SVG-Колонка ліміту */}
+              {/* Інтерактивна SVG-Колонка ліміту токенів */}
               <svg className="w-full overflow-visible transition-all duration-300" style={{ height: `${calculatedHeight}%` }}>
                 <defs>
-                  {/* Динамічний градієнт для кожної кривої */}
+                  {/* Динамічний градієнт для кожної кривої графіка */}
                   <linearGradient id={`grad-${idx}`} x1="0%" y1="0%" x2="0%" y2="100%">
                     <stop offset="0%" stopColor={seg.color} stopOpacity={0.8} />
                     <stop offset="100%" stopColor={seg.color} stopOpacity={0.1} />
                   </linearGradient>
                 </defs>
                 
-                {/* Рендеринг кривої ліміту */}
+                {/* Рендеринг кривої ліміту через нативний прямокутник */}
                 <rect
                   x="0"
                   y="0"
@@ -97,7 +98,7 @@ export default function BudgetChart() {
                 {seg.name}
               </span>
 
-              {/* 🔥 ПРЕМІАЛЬНА АНІМОВАНА СПЛИВАЮЧА ПІДКАЗКА (TOOLTIP) */}
+              {/* 🔥 ПРЕМІАЛЬНА АНІМOВАНА СПЛИВАЮЧА ПІДКАЗКА (TOOLTIP) */}
               <div 
                 className={`absolute -top-10 left-1/2 -translate-x-1/2 bg-neutral-900 border font-mono text-[9px] px-2 py-1 rounded-lg text-white shadow-2xl transition-all duration-350 pointer-events-none z-30 whitespace-nowrap ${
                   isHovered 
