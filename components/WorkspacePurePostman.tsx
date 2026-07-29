@@ -10,6 +10,7 @@ interface WorkspacePurePostmanProps {
 }
 
 export default function WorkspacePurePostman({ isOpen, onCloseAction }: WorkspacePurePostmanProps) {
+  // Витягуємо необхідні методи та стейти з нашої єдиної шини контексту
   const { webhooks, refreshWorkspace } = useWorkspace();
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -29,6 +30,7 @@ export default function WorkspacePurePostman({ isOpen, onCloseAction }: Workspac
   };
 
   const handleCopyToClipboard = (id: string, url: string) => {
+    if (!url) return;
     navigator.clipboard.writeText(url);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -66,6 +68,7 @@ export default function WorkspacePurePostman({ isOpen, onCloseAction }: Workspac
             <div
               key={wh.id}
               className="p-3.5 bg-black/40 rounded-xl border border-neutral-800 flex items-center justify-between text-sm font-mono gap-3 hover:border-neutral-700 transition"
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="truncate flex-1 text-left">
                 <div className="flex items-center gap-2">

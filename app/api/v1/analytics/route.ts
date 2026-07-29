@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+// C:\Users\Admin\Documents\my-unified-work-space\app\api\v1\analytics\route.ts
 
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma"; // Твій нативний синглтон
+import { auth } from "@/lib/auth"; // Твоя сесія
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ export async function GET() {
 
     const userId = session.user.id;
 
+    // Твоя залізна та перевірена NoSQL-агрегація через пул Promise.all
     const [budgetAggregation, activeCount, totalProjects] = await Promise.all([
       prisma.project.aggregate({
         where: { userId },
@@ -29,6 +31,7 @@ export async function GET() {
       })
     ]);
 
+    // Повертаємо масив метрик, адаптований під WorkspaceContext розробника
     return NextResponse.json({
       success: true,
       metrics: {

@@ -1,0 +1,149 @@
+my - unified - work - space /
+│
+├── config /                          # ⚙️ Налаштування та стейт - менеджмент
+│   ├── localization /                # Мовні пакети
+│   │   ├── en.ts                    # Англійський словник технічних ключів
+│   │   └── ua.ts                    # Український словник технічних ключів[ЗМІНЕНО - типізація]
+│   └── store.ts                     # Zustand - стейт(мови, модалки, сесії)
+│
+├── constants /                       # 📌 Статичні дані системи
+│   └── index.ts                     # Контакти платформи та адреса Умань[ПЕРЕЙМЕНОВАНО / ВИПРАВЛЕНО]
+│
+├── lib /                             # 🛠️ Синглтони драйверів баз даних
+│   ├── prisma.ts                    # Singleton Prisma Client для MongoDB Atlas Cloud
+│   └── auth.ts                      # Конфігурація авторизації Auth.js v5 JWT
+│
+├── lib / servers /                     # 🧠 АВТOНОМНЕ СЕРВЕРНЕ ЯДРО(НОВА ПАПКА)
+│   ├── GoogleSearchServer.ts        # Нативний безбібліотечний веб - пошукач контексту в інтернет
+│   ├── AiOrchestratorServer.ts      # Головний мозок ШІ, RAG - склейка та генератор валідного SSE
+│   └── FinOpsController.ts          # Центральний контролер статистики кластера MongoDB Atlas
+│
+├── app /                             # 🌐 Головне ядро App Router(Next.js 15)
+│   ├── (landing) /                   # 🚀 Публічна частина сайту
+│   │   ├── blog / page.tsx            # Стрічка публікацій статей розробників
+│   │   ├── docs / page.tsx            # Інтерактивна технічна документація API
+│   │   └── page.tsx                 # Головна сторінка SPA з блоками аналітики
+│   │
+│   ├── (nextops) /                   # 🔐 Захищена адмін - панель
+│   │   └── admin / [[...slug]] / page.tsx # 4 - віконна матрична сітка з Cyber - Glass ефектом
+│   │
+│   ├── api /                         # 📡 Серверний бекенд - шар(REST / Web Stream API)
+│   │   ├── auth / [...nextauth] / route.ts # Стабілізований Turbopack хендлер сесій Node.js
+│   │   ├── dev / proxy / route.ts       # Secure Node.js Relayer(Обхід CORS із захистом від SSRF)
+│   │   └── v1 /                      # Комерційні ендпоінти версії 2.0
+│   │       ├── ai / route.ts          # Потоковий шлюз ШІ[ЗМІНЕНО - підключення серверного ядра]
+│   │       ├── analytics / route.ts   # Швидка FinOps - агрегація сум через Promise.all
+│   │       ├── billing /             # Платіжна система
+│   │       │   ├── checkout / route.ts # Шлюз ініціалізації сесій[ВИПРАВЛЕНО - бойовий хост Stripe]
+│   │       │   └── webhook / route.ts # Обробник Stripe Webhooks Guard[НОВИЙ ФАЙЛ - авто - PRO]
+│   │       ├── user / profile / route.ts # Мутація профілю інженера[НОВИЙ ФАЙЛ - логін / аватар]
+│   │       ├── projects / route.ts    # Менеджер проєктів із тригером Zapier - style вебхуків
+│   │       ├── reviews / route.ts     # Стрім відгуків(GET - читання та POST - запис з бази)
+│   │       ├── users / route.ts       # Список унікальних інженерів системи(Map - дедуплікація)
+│   │       └── webhooks / route.ts    # CRUD(GET, POST, PUT - Toggle активності) для вікон №2 та №3
+│   │
+│   ├── globals.css                  # Глобальні стили системи Tailwind CSS v4.0
+│   └── layout.tsx                   # Глобальний рутовий леяут: ініціалізація шрифтів Rubik
+│
+├── components /                      # 🧩 Шар багаторазових UI / UX компонентів
+│   ├── Analytics / BudgetChart.tsx    # Динамічний SVG - графік спалювання токен - лімітів
+│   ├── Billing / CreditCardForm.tsx   # Платіжна картка з числовими захисними масками введення
+│   ├── Helper / Logo.tsx              # Преміальний анімований логотип матричного хабу
+│   ├── Home /                        # Компоненти головного екрану лендінгу
+│   │   ├── Navbar.tsx               # Меню з плавним SPA - кролом до тарифів / статей та мовами
+│   │   ├── Footer.tsx               # Автономний підвал з нативними SVG - іконками брендів
+│   │   ├── BlogStream.tsx           # Клієнтський вивід публікацій статей з бази
+│   │   ├── ReviewSection.tsx        # Стрім відгуків[ЗМІНЕНО - додано Cyber - Glass форму відправки]
+│   │   ├── TariffGrid.tsx           # Скляна картка тарифу з Stripe індикатором
+│   │   └── UserSlider.tsx           # Вертикальна карусель[ЗМІНЕНО - додано панель налаштувань профілю]
+│   ├── Modals /                      # Шар інтерактивних модальних вікон
+│   │   ├── AuthModal.tsx            # Вікно входу Credentials з логікою Role - Based Guard
+│   │   └── UpgradePlanModal.tsx     # Вікно оплати з фіксом onCloseAction для Next.js 15
+│   ├── WorkspaceProject.tsx         # Вікно №1(AI Manager[ЗМІНЕНО - Чат переведено на SSE стандарт])
+│   ├── WorkspacePostman.tsx         # Вікно №2(Webhook Orchestrator: створення тригерів)
+│   ├── WorkspacePurePostman.tsx     # Вікно №3(Стрічка логів тригерів із кліпбордом та Toggle)
+│   └── WorkspaceDb.tsx              # Вікно №4(NoSQL - термінал: db.status(), db.stats())
+│
+├── package.json                     # Залежності[ВИПРАВЛЕНО - dotenv скрипт для Prisma генератора]
+└── schema.prisma                    # NoSQL моделі MongoDB(User, Project, WebhookConfig, ApiHistory)
+
+
+graph TD
+    %% Шар Клієнта(UI)
+    subgraph UI_Layer[ИНТЕРФЕЙСНА МАТРИЦЯ & ЛЕНДИНГ]
+W1[WorkspaceProject Вікно 1]
+W2[WorkspacePostman Вікно 2]
+W3[WorkspacePurePostman Вікно 3]
+W4[WorkspaceDb Вікно 4]
+Landing[ReviewSection / UserSlider]
+end
+
+    %% Шар Маршрутизації(API)
+    subgraph API_Layer[API ENDPOINTS // Next.js 15]
+AI_Route[api / v1 / ai]
+Auth_Route[api / auth]
+Billing_Route[api / v1 / billing / checkout]
+Stripe_WH[api / v1 / billing / webhook]
+User_Profile[api / v1 / user / profile]
+Stats_Route[api / v1 / analytics]
+end
+
+    %% Нове серверне ядро
+    subgraph Core_Servers[АВТОНОМНЕ СЕРВЕРНЕ ЯДРО]
+AI_Server(AiOrchestratorServer)
+Search_Server(GoogleSearchServer)
+FinOps_Server(FinOpsController)
+end
+
+    %% Сховище даних
+    subgraph DB_Layer[ДАНІ]
+Prisma[Prisma ORM single pool]
+Mongo[(MongoDB Atlas Cluster)]
+end
+
+    %% Зв'язки потоків
+W1-- >| POST: Повідомлення | AI_Route
+AI_Route-- > AI_Server
+AI_Server < -->| Нативний fetch | Search_Server
+AI_Server-- >| SSE stream: data | W1
+
+W2 & W3-- >| CRUD / Toggle | User_Profile
+W4 & Landing-- >| Request Stats | Stats_Route
+Stats_Route-- > FinOps_Server
+FinOps_Server-- > Prisma
+
+Landing-- >| CreditCard PAY | Billing_Route
+Billing_Route-- >| Stripe REST API | Stripe_WH
+Stripe_WH-- >| Auto - update plan: PRO | Prisma
+
+Prisma-- > Mongo
+Короткий інженерний опис доданих та змінених файлів1.
+Нова папка серверного ядра(lib / servers /)GoogleSearchServer.ts: Безбібліотечний пошуковий двигун.
+Через нативний fetch витягує свіжі дані з DuckDuckGo HTML API,
+    очищає їх від тегів та формує текстовий зріз знань для RAG.AiOrchestratorServer.ts: Головний ШІ - процесор додатка.
+Аналізує запити, автоматично підключає інтернет - пошук,
+    склеює системні промпти з NoSQL - інструкціями з бази та стрімить відповідь
+у суворому SSE стандарту.FinOpsController.ts: Центральний синглтон - модуль збору аналітики.
+Виконує глибокі математичні NoSQL - агрегації по всьому кластеру(LTV, токени, активні плани)
+та передає реальні метрики власнику й на лендинг.2.Змінені та нові
+ API маршрути(app / api /)api / v1 / ai / route.ts: Оновлений шлюз.
+ Замість статичних текстових заглушок емулятора тепер повністю перенаправляє 
+ потоки даних на AiOrchestratorServer.api / v1 / billing / checkout / route.ts: Комерційний фікс.
+ Замінено некоректну адресу Stripe на офіційний
+API - хост https://stripe.com для запуску реального безсерверного чекауту.api/v1/billing/webhook/route.ts:
+   Новий обробник платежів.Безпечно приймає криптографічні сигнали від серверів Stripe,
+    верифікує підпис та автоматично активує plan: PRO в базі даних користувача 
+    на 30 днів.api / v1 / user / profile / route.ts: Новий захищений роут профілю.Дозволяє інженеру або власнику 
+    виконувати мутації NoSQL - документа: оновлювати логін, перезаписувати або повністю прати URL - адресу
+     свого аватара.3.Модернізовані UI компоненти(components /)WorkspaceProject.tsx(Вікно №1):
+Чат - термінал переведено на зчитування та парсинг індустріальних SSE - префіксів data: ,
+    забезпечуючи безперебійний плавний друк літер від реальних LLM.ReviewSection.tsx: 
+      Додано нову Cyber - Glass форму.Дозволяє авторизованому користувачеві обирати зірочки
+рейтингу, вводити коментар та відправляти на POST / api / v1 / reviews, миттєво оновлюючи
+стрічку.UserSlider.tsx: Усередину слайдера(або у вигляді кнопки поруч) інтегровано 
+       панель Profile Settings Panel, яка дозволяє клієнту нативно міняти свій нікнейм,
+    додавати / видаляти фото картинки.constant / conatant.ts → constants / index.ts:
+        Виправлено друкарську помилку в назві папки / файлу, додано строгу
+         TypeScript типізацію для об'єктів мовних ключів.package.json:
+          Виправлено синтаксис скрипту "dotenv -- prisma generate" 
+          на коректний "dotenv prisma generate" для безперешкодного старту збірки.

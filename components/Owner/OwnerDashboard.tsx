@@ -1,6 +1,7 @@
+// C:\Users\Admin\Documents\my-unified-work-space\components\Owner\OwnerDashboard.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAppStore } from "@/config/store";
 import { 
@@ -8,14 +9,21 @@ import {
   ArrowLeft, Check, Trash2, ShieldAlert, Cpu 
 } from "lucide-react";
 
-// Реальні комерційні дані для демонстрації масштабу інвесторам та клієнтам
-const MOCK_FINANCIAL_KPI = {
-  totalRevenue: "$14,850.00",
-  mrr: "$4,250.00",
-  activeProUsers: 87,
-  totalUsersCount: 1240,
-  systemTokenBalance: "845,200 / 1,000,000 Бюджету ШІ",
-};
+interface RealFeedback {
+  id: string;
+  user: string;
+  text: string;
+  rating: number;
+  approved: boolean;
+}
+
+interface LiveKPI {
+  totalRevenue: string;
+  mrr: string;
+  activeProUsers: number;
+  totalUsersCount: number;
+  systemTokenBurn: string;
+}
 
 const INITIAL_REVIEWS = [
   { id: "rev_1", user: "alex_dev", text: "Оркестрація вебхуків через NextOps скоротила витрати на сервер на 40%. Матриця 2х2 — це геніально.", rating: 5, approved: false },
@@ -23,9 +31,45 @@ const INITIAL_REVIEWS = [
 ];
 
 export default function OwnerDashboard() {
-  // Використовуємо сумісну локалізацію, де тип locale є "ua" | "en"
   const { locale, t } = useAppStore();
-  const [reviews, setReviews] = useState(INITIAL_REVIEWS);
+  const [reviews, setReviews] = useState<RealFeedback[]>(INITIAL_REVIEWS);
+  
+  // Живий стейт для фінансових пульсів кластера MongoDB Atlas
+  const [kpi, setKpi] = useState<LiveKPI>({
+    totalRevenue: "$0.00",
+    mrr: "$0.00",
+    activeProUsers: 0,
+    totalUsersCount: 0,
+    systemTokenBurn: "0 / 1,000,000",
+  });
+  const [isKpiLoading, setIsKpiLoading] = useState(true);
+
+  // Синхронізація з новим захищеним REST API шлюзом власника
+  useEffect(() => {
+    const fetchLiveKPI = async () => {
+      try {
+        const res = await fetch("/api/v1/owner/kpi");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.kpi) {
+            setKpi({
+              totalRevenue: `$${data.kpi.totalRevenue.toFixed(2)}`,
+              mrr: `$${data.kpi.mrr.toFixed(2)}`,
+              activeProUsers: data.kpi.activeProUsers,
+              totalUsersCount: data.kpi.totalUsersCount,
+              systemTokenBurn: `${data.kpi.systemTokenBurn.toLocaleString()} / 1,000,000`,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("🚨 Не вдалося завантажити корпоративні KPI:", err);
+      } finally {
+        setIsKpiLoading(false);
+      }
+    };
+
+    fetchLiveKPI();
+  }, []);
 
   const handleApprove = (id: string) => {
     setReviews(prev => prev.map(r => r.id === id ? { ...r, approved: true } : r));
@@ -34,7 +78,6 @@ export default function OwnerDashboard() {
   const handleDelete = (id: string) => {
     setReviews(prev => prev.filter(r => r.id !== id));
   };
-
   return (
     <div className="w-full min-h-screen bg-neutral-950 text-white p-6 sm:p-8 font-sans relative z-10">
       
@@ -66,30 +109,38 @@ export default function OwnerDashboard() {
 
       <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* БЛОК 1: ФІНАНСОВИЙ ПУЛЬС ТА METRICS KPI */}
+        {/* БЛОК 1: ЖИВИЙ ФІНАНСОВИЙ ПУЛЬС ТА METRICS KPI */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-xl shadow-lg relative overflow-hidden group hover:border-emerald-500/20 transition">
             <DollarSign className="absolute top-4 right-4 w-8 h-8 text-neutral-800 group-hover:text-emerald-500/10 transition" />
             <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500">Загальний Обіг (Stripe LTV)</p>
-            <p className="text-2xl font-black text-emerald-400 mt-1">{MOCK_FINANCIAL_KPI.totalRevenue}</p>
+            <p className="text-2xl font-black text-emerald-400 mt-1">
+              {isKpiLoading ? "$..." : kpi.totalRevenue}
+            </p>
           </div>
           
           <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-xl shadow-lg relative overflow-hidden group hover:border-blue-500/20 transition">
             <TrendingUp className="absolute top-4 right-4 w-8 h-8 text-neutral-800 group-hover:text-blue-500/10 transition" />
             <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500">Регулярний Дохід (MRR)</p>
-            <p className="text-2xl font-black text-blue-400 mt-1">{MOCK_FINANCIAL_KPI.mrr}</p>
+            <p className="text-2xl font-black text-blue-400 mt-1">
+              {isKpiLoading ? "$..." : kpi.mrr}
+            </p>
           </div>
 
           <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-xl shadow-lg relative overflow-hidden group hover:border-amber-500/20 transition">
             <ShieldCheck className="absolute top-4 right-4 w-8 h-8 text-neutral-800 group-hover:text-amber-500/10 transition" />
             <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500">Активні Користувачі PRO</p>
-            <p className="text-2xl font-black text-amber-400 mt-1">{MOCK_FINANCIAL_KPI.activeProUsers} / {MOCK_FINANCIAL_KPI.totalUsersCount}</p>
+            <p className="text-2xl font-black text-amber-400 mt-1">
+              {isKpiLoading ? "..." : `${kpi.activeProUsers} / ${kpi.totalUsersCount}`}
+            </p>
           </div>
 
           <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-xl shadow-lg relative overflow-hidden group hover:border-purple-500/20 transition">
             <Cpu className="absolute top-4 right-4 w-8 h-8 text-neutral-800 group-hover:text-purple-500/10 transition" />
             <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500">Баланс Системних Токенів</p>
-            <p className="text-sm font-black text-purple-400 mt-2 truncate">{MOCK_FINANCIAL_KPI.systemTokenBalance}</p>
+            <p className="text-sm font-black text-purple-400 mt-2 truncate">
+              {isKpiLoading ? "SYNCHRONIZING..." : kpi.systemTokenBurn}
+            </p>
           </div>
         </div>
 
@@ -120,7 +171,7 @@ export default function OwnerDashboard() {
                   <div className="flex items-center gap-2 shrink-0 select-none">
                     <button
                       onClick={() => handleApprove(rev.id)}
-                      className="p-2 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded-lg border border-emerald-500/20 transition-all duration-150 cursor-pointer"
+                      className="p-2 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-neutral-950 rounded-lg border border-emerald-500/20 transition-all duration-150 cursor-pointer"
                       title="Схвалити та вивести на лендинг"
                     >
                       <Check className="w-4 h-4" />
