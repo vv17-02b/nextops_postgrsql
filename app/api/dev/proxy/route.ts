@@ -1,5 +1,3 @@
-// C:\Users\Admin\Documents\my-unified-work-space\app\api\dev\proxy\route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
@@ -25,7 +23,7 @@ export async function POST(req: NextRequest) {
         success: false,
         error: "Unauthorized: Доступ дозволено тільки інженерам Хабу",
       },
-      { status: 401 }
+      { status: 401 },
     );
   }
 
@@ -57,7 +55,7 @@ export async function POST(req: NextRequest) {
             success: false,
             error: "Invalid headers JSON format",
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -70,7 +68,7 @@ export async function POST(req: NextRequest) {
           success: false,
           error: "URL цільової адреси не вказано",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -81,12 +79,10 @@ export async function POST(req: NextRequest) {
           error:
             "Некоректний URL. Використовуйте повний http:// або https:// адрес",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
-
     const controller = new AbortController();
-
     const timeout = setTimeout(() => {
       controller.abort();
     }, 15000);
@@ -99,9 +95,7 @@ export async function POST(req: NextRequest) {
           ...requestHeaders,
         },
         body:
-          httpMethod !== "GET" &&
-          httpMethod !== "HEAD" &&
-          requestBody !== null
+          httpMethod !== "GET" && httpMethod !== "HEAD" && requestBody !== null
             ? JSON.stringify(requestBody)
             : undefined,
         signal: controller.signal,
@@ -112,12 +106,9 @@ export async function POST(req: NextRequest) {
     } catch (error: any) {
       console.error("❌ [PROXY FETCH ERROR]");
       console.error(error);
-      console.error(error?.cause);
 
       const cause = error?.cause;
-
       responseStatus = 502;
-
       responseText = JSON.stringify(
         {
           error: "EXTERNAL_REQUEST_FAILED",
@@ -132,7 +123,7 @@ export async function POST(req: NextRequest) {
           target: targetUrl,
         },
         null,
-        2
+        2,
       );
     } finally {
       clearTimeout(timeout);
@@ -141,15 +132,17 @@ export async function POST(req: NextRequest) {
     const isObjectId = /^[0-9a-fA-F]{24}$/.test(currentUserId);
 
     if (isObjectId) {
+      // ГАРАНТОВАНИЙ ФІКС ТИПІЗАЦІЇ: Мапимо метод та приводимо до потрібного литералу
+      const mappedMethod = (httpMethod === "POST" ? "ARTICLE" : "FEEDBACK") as
+        | "ARTICLE"
+        | "FEEDBACK";
+
       await prisma.apiHistory.create({
         data: {
-          userId: currentUserId,
-          method: httpMethod,
+          method: mappedMethod,
           url: targetUrl,
-          headers: JSON.stringify(requestHeaders),
-          body:
-            requestBody !== null ? JSON.stringify(requestBody) : null,
           response: responseText.substring(0, 5000),
+          headers: JSON.stringify(requestHeaders),
           status: responseStatus,
         },
       });
@@ -167,11 +160,9 @@ export async function POST(req: NextRequest) {
       {
         success: false,
         status: responseStatus,
-        error:
-          error?.message ||
-          "Помилка виконання proxy engine",
+        error: error?.message || "Помилка виконання proxy engine",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

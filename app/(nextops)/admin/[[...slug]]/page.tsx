@@ -83,7 +83,7 @@ export default function AdminDashboard() {
       </header>
 
       {/* ==========================================
-         🎛️ ОСНОВНА РОБОЧА ЗОНА 4-ВІКОНННОЇ СІТКИ (2х2)
+          ОСНОВНА РОБОЧА ЗОНА 4-ВІКОНННОЇ СІТКИ (2х2)
          ========================================== */}
       <main className={`flex-1 w-full gap-4 transition-all duration-500 min-h-0 overflow-y-auto lg:overflow-hidden ${
         activeWindow === null ? "grid grid-cols-1 lg:grid-cols-2 lg:h-[calc(100vh-140px)] pb-4 lg:pb-0" : "relative"

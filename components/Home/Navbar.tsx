@@ -1,4 +1,3 @@
-// C:\Users\Admin\Documents\my-unified-work-space\components\Home\Navbar.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -8,9 +7,12 @@ import { useAppStore } from "@/config/store";
 import {
   Cpu, Globe, LogIn, LogOut, LayoutGrid,
   CreditCard, Terminal, Search, Layers,
-  Webhook, FileCode, Landmark, Menu
+  Webhook, FileCode, Landmark, Menu, BookOpen, MessageSquare, PenTool
 } from "lucide-react";
 import NavMobile from "./NavMobile";
+
+// 📡 ПІДКЛЮЧЕННЯ БOЙOВOЇ МOДАЛКI СТВOРЕННЯ КОНТЕНТУ
+import CreateContentModal from "../Modals/CreateContentModal";
 
 export default function Navbar() {
   const { data: session } = useSession();
@@ -24,6 +26,10 @@ export default function Navbar() {
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // 🔐 СТАТУС КЕРУВАННЯ НOВИМИ МOДАЛЬНИМИ ВІКНАМИ БOЙOВOЇ ПЛАТФOРМИ
+  const [isContentModalOpen, setIsContentModalOpen] = useState(false);
+  const [contentModalType, setContentModalType] = useState<"article" | "review" | null>(null);
+
   const categories = [
     { id: "AI_NODES", label: locale === "ua" ? "ШІ Ноди" : "AI Nodes", icon: <Layers className="w-3.5 h-3.5 mr-1.5 text-cyan-400" /> },
     { id: "WEBHOOKS", label: locale === "ua" ? "Вебхуки" : "Webhooks", icon: <Webhook className="w-3.5 h-3.5 mr-1.5 text-violet-400" /> },
@@ -33,21 +39,31 @@ export default function Navbar() {
 
   const currentCategory = categories.find(c => c.id === searchCategory) || categories[0];
 
-  const handleNavClick = (type: "pricing" | "reviews" | "blog") => {
+  // 🔥 СУВОРИЙ B2B SPA-РЕГУЛЯТОР: Більше ніякого скролу вниз для форм! Відкриваємо модалку поверх екрану!
+  const handleNavClick = (type: "pricing" | "reviews" | "blog" | "write_article" | "write_review") => {
+    setIsMobileMenuOpen(false);
+
     if (type === "pricing") {
-      setPricingVisible(!isPricingVisible);
+      setPricingVisible(true);
       setReviewsVisible(false);
+      setTimeout(() => window.scrollTo({ top: 750, behavior: "smooth" }), 100);
     } else if (type === "reviews") {
-      setReviewsVisible(!isReviewsVisible);
+      setReviewsVisible(true);
       setPricingVisible(false);
-    } else {
+      setTimeout(() => window.scrollTo({ top: 1300, behavior: "smooth" }), 100);
+    } else if (type === "blog") {
       setPricingVisible(true);
       setReviewsVisible(true);
+      setTimeout(() => window.scrollTo({ top: 2100, behavior: "smooth" }), 100);
+    } else if (type === "write_article") {
+      // Активуємо модалку створення технічного маніфесту
+      setContentModalType("article");
+      setIsContentModalOpen(true);
+    } else if (type === "write_review") {
+      // Активуємо модалку оцінки зірочок та відгуку
+      setContentModalType("review");
+      setIsContentModalOpen(true);
     }
-
-    setTimeout(() => {
-      window.scrollTo({ top: type === "blog" ? 1800 : 700, behavior: "smooth" });
-    }, 150);
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -60,18 +76,17 @@ export default function Navbar() {
       setAuthModal(true);
     }
   };
-
   return (
     <header className="w-full bg-neutral-950/70 backdrop-blur-xl border-b border-white/5 sticky top-0 z-40 select-none font-mono text-sm">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
 
-        {/* 1. Логотип */}
+        {/* 1. Логотип системи */}
         <Link href="/" className="flex items-center gap-2 group cursor-pointer shrink-0">
           <Cpu className="w-4 h-4 text-blue-500 group-hover:rotate-90 transition duration-500" />
           <span className="font-black tracking-widest text-white text-xs sm:text-sm uppercase">NEXT<span className="text-blue-500">OPS</span></span>
         </Link>
 
-        {/* 2. Пошуковий шлюз */}
+        {/* 2. Пошуковий шлюз (Десктопна версія) */}
         <form onSubmit={handleSearchSubmit} className="hidden lg:block max-w-md xl:max-w-xl flex-1 mx-2 relative overflow-visible">
           <div className="flex bg-neutral-900/40 border border-white/5 rounded-xl p-1 gap-1 items-center">
             <button
@@ -118,23 +133,41 @@ export default function Navbar() {
           </div>
         </form>
 
-        {/* 3. Головна навігація */}
-        <nav className="hidden md:flex items-center gap-4 xl:gap-6 shrink-0">
-          <button onClick={() => handleNavClick("pricing")} className="cursor-pointer transition uppercase tracking-wider text-[11px] xl:text-xs font-bold text-neutral-400 hover:text-white">
+        {/* 3. Головна десктопна навігація з новими B2B-кнопками */}
+        <nav className="hidden md:flex items-center gap-3 xl:gap-5 shrink-0">
+          <button onClick={() => handleNavClick("pricing")} className="cursor-pointer transition uppercase tracking-wider text-[10px] xl:text-xs font-bold text-neutral-400 hover:text-white">
             {locale === "ua" ? "Тарифи" : "Pricing"}
           </button>
-          <button onClick={() => handleNavClick("reviews")} className="cursor-pointer transition uppercase tracking-wider text-[11px] xl:text-xs font-bold text-neutral-400 hover:text-white">
+
+          <button onClick={() => handleNavClick("reviews")} className="cursor-pointer transition uppercase tracking-wider text-[10px] xl:text-xs font-bold text-neutral-400 hover:text-white flex items-center gap-1">
+            <MessageSquare className="w-3 h-3 text-blue-500" />
             {locale === "ua" ? "Відгуки" : "Reviews"}
           </button>
-          <button onClick={() => handleNavClick("blog")} className="cursor-pointer transition uppercase tracking-wider text-[11px] xl:text-xs font-bold text-neutral-400 hover:text-white">
+
+          <button onClick={() => handleNavClick("blog")} className="cursor-pointer transition uppercase tracking-wider text-[10px] xl:text-xs font-bold text-neutral-400 hover:text-white flex items-center gap-1">
+            <BookOpen className="w-3 h-3 text-violet-500" />
             {locale === "ua" ? "Статті" : "Articles"}
           </button>
-          <Link href="/docs" className="text-neutral-400 hover:text-white transition uppercase tracking-wider text-[11px] xl:text-xs font-bold">Docs</Link>
-        </nav>
 
-        {/* 4. Керуючі системні кнопки */}
+          {/* ПРЕМІАЛЬНІ КНOПКИ ВИКЛИКУ МOДАЛOК СТВOРЕННЯ: Доступні тільки при наявності сесії */}
+          {session && (
+            <>
+              <button onClick={() => handleNavClick("write_review")} className="cursor-pointer transition uppercase tracking-wider text-[10px] xl:text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
+                <PenTool className="w-3 h-3" />
+                {locale === "ua" ? "+Відгук" : "+Review"}
+              </button>
+              <button onClick={() => handleNavClick("write_article")} className="cursor-pointer transition uppercase tracking-wider text-[10px] xl:text-xs font-bold text-fuchsia-400 hover:text-fuchsia-300 flex items-center gap-1">
+                <BookOpen className="w-3 h-3" />
+                {locale === "ua" ? "+Стаття" : "+Article"}
+              </button>
+            </>
+          )}
+
+          <Link href="/docs" className="text-neutral-400 hover:text-white transition uppercase tracking-wider text-[10px] xl:text-xs font-bold">Docs</Link>
+        </nav>
+        {/* 4. Системні керуючі кнопки кабінету розробника */}
         <div className="hidden md:flex items-center gap-1.5 xl:gap-2 shrink-0">
-          <button onClick={() => setLocale(locale === "ua" ? "en" : "ua")} className="px-2 py-1.5 rounded-xl bg-neutral-900/60 border border-white/5 text-neutral-400 hover:text-white transition flex items-center gap-1 font-bold text-[11px]">
+          <button onClick={() => setLocale(locale === "ua" ? "en" : "ua")} className="px-2 py-1.5 rounded-xl bg-neutral-900/60 border border-white/5 text-neutral-400 hover:text-white transition flex items-center gap-1 font-bold text-[11px] cursor-pointer">
             <Globe className="w-3.5 h-3.5 text-blue-500" />
             <span className="uppercase">{locale}</span>
           </button>
@@ -165,17 +198,37 @@ export default function Navbar() {
           )}
         </div>
 
-        {/* Бургер-меню */}
-        <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 rounded-xl bg-neutral-900 border border-white/5 text-neutral-400 hover:text-white transition active:scale-95 cursor-pointer shrink-0">
-          <Menu className="w-4 h-4" />
-        </button>
+        {/* Адаптивне Бургер-меню (Для мобільних екранів) */}
+        <div className="flex items-center gap-2 md:hidden shrink-0">
+          <button onClick={() => setLocale(locale === "ua" ? "en" : "ua")} className="px-2 py-1.5 rounded-xl bg-neutral-900/60 border border-white/5 text-neutral-400 hover:text-white transition text-[11px] font-bold font-mono uppercase">
+            {locale}
+          </button>
+          <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 rounded-xl bg-neutral-900 border border-white/5 text-neutral-400 hover:text-white transition active:scale-95 cursor-pointer">
+            <Menu className="w-4 h-4" />
+          </button>
+        </div>
 
       </div>
 
-      <NavMobile 
-        isOpen={isMobileMenuOpen} 
-        onCloseAction={() => setIsMobileMenuOpen(false)} 
+      {/* Мобільна навігація з правильною передачею бойових пропсів */}
+      <NavMobile
+        isOpen={isMobileMenuOpen}
+        onCloseAction={() => setIsMobileMenuOpen(false)}
         handleNavClickAction={handleNavClick}
+      />
+
+      <CreateContentModal
+        isOpen={isContentModalOpen}
+        type={contentModalType}
+        onCloseAction={() => {
+          setIsContentModalOpen(false);
+          setContentModalType(null);
+        }}
+        onSuccessRefreshAction={() => {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new Event("refresh-active-repositories"));
+          }
+        }}
       />
     </header>
   );

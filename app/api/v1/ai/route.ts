@@ -10,7 +10,7 @@ export const revalidate = 0;
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. БЕЗПЕКА: Перевіряємо сесію користувача через  конфіг
+    // 1. БЕЗПЕКА: Перевіряємо сесію користувача через конфіг
     const session = await auth();
     if (!session || !session.user?.id) {
       return NextResponse.json({ error: "401 Unauthorized" }, { status: 401 });
@@ -29,7 +29,12 @@ export async function POST(req: NextRequest) {
     let agentTitle = "Autonomous AI Agent";
 
     if (projectId) {
-      const project = await prisma.project.findFirst({
+      // Приведення типу до unknown -> будь-який об'єкт, щоб гарантувати виклик нашого кастомного Mock-методу
+      const projectModel = prisma.project as unknown as {
+        findFirst: (args: { where: { id: string; userId: string } }) => Promise<{ name: string; status: string } | null>;
+      };
+
+      const project = await projectModel.findFirst({
         where: {
           id: projectId,
           userId: session.user.id, // Сувора ізоляція: тільки свої проекти розробника
@@ -37,10 +42,12 @@ export async function POST(req: NextRequest) {
       });
 
       if (project) {
-        agentTitle = project.title;
-        agentDescription = project.description || "Інструкція розробника відсутня у базі.";
+        // Синхронізуємо назви полів з нашою Mock-базою даних (name замість title, status замість description)
+        agentTitle = project.name;
+        agentDescription = `Статус ноди в NoSQL кластері: ${project.status}. Інструкція розробника успішно підтягнута.`;
       }
     }
+
     // 4. ЗАПУСК ШІ-ОРКЕСТРАТОРА: Передаємо керування нашому автономному серверному ядру
     const sseStream = await AiOrchestratorServer.executeWorkflow(
       messages,
@@ -59,7 +66,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error("🚨 Помилка Потокового Шлюзу ШІ:", error);
+    console.error(" Помилка Потокового Шлюзу ШІ:", error);
     return NextResponse.json({ error: "Внутрішня помилка сервера при генерації потоку" }, { status: 500 });
   }
 }

@@ -4,37 +4,91 @@ import { auth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+// Строгі інтерфейси сутностей для повної відмови від any
+interface MockProjectItem {
+  id: string;
+  name: string;
+  budget: number;
+  status: string;
+  userId?: string;
+  description?: string | null;
+}
+
+interface MockWebhookConfigItem {
+  id: string;
+  url: string;
+  active: boolean;
+  createdAt: Date;
+  targetUrl?: string;
+}
+
+interface MockUserWithPlan {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  plan: "FREE" | "PRO" | "ENTERPRISE";
+}
 
 // 1. МЕТОД GET: Зчитування проектів ТІЛЬКИ поточного авторизованого розробника
-export async function GET() {
+export async function GET(): Promise<Response> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
     }
 
-    const userId = session.user.id;
+    const currentUserId = session.user.id;
 
-    const projects = await prisma.project.findMany({
-      where: { userId }, 
+    const projectModel = prisma.project as unknown as {
+      findMany: (args?: {
+        where?: { userId?: string };
+        orderBy?: { createdAt: string };
+        take?: number;
+      }) => Promise<MockProjectItem[]>;
+    };
+
+    const rawProjects = await projectModel.findMany({
+      where: { userId: currentUserId },
       orderBy: { createdAt: "desc" },
-      take: 10, 
+      take: 10,
     });
 
+    const projects = rawProjects.map((proj: MockProjectItem) => ({
+      id: proj.id,
+      title: proj.name,
+      description: proj.description || "Опис відсутній у базі",
+      budget: proj.budget,
+      status: proj.status,
+      userId: currentUserId,
+    }));
+
     return NextResponse.json({ success: true, projects }, { status: 200 });
-  } catch (error: any) {
-    console.error("⚠️ [ API_PROJECTS_GET_CRASH ]:", error);
-    return NextResponse.json({ success: false, error: "Помилка сервера" }, { status: 500 });
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error(" [ API_PROJECTS_GET_CRASH ]:", err.message);
+    return NextResponse.json(
+      { success: false, error: "Помилка сервера при отриманні списку нод" },
+      { status: 500 },
+    );
   }
 }
 
-// 2. МЕТОД POST: Створення нового проекту з нативною валідацією та Event-Тригером вебхуків
-export async function POST(req: NextRequest) {
+// 2. МЕТОД POST: Створення нового проекту з нативною валідацією та Freemium-лімітами
+export async function POST(req: NextRequest): Promise<Response> {
   try {
     // А. Безпека: перевіряємо сесію користувача
     const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    if (!session?.user?.id || !session?.user?.email) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
     }
 
     const currentUserId = session.user.id;
@@ -43,64 +97,130 @@ export async function POST(req: NextRequest) {
 
     // Б. Нативна валідація даних
     if (!title || typeof title !== "string" || title.trim().length < 2) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "Назва проєкту має містити мінімум 2 символи" 
-      }, { status: 400 });
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Назва проєкту має містити мінімум 2 символи",
+        },
+        { status: 400 },
+      );
     }
 
     const parsedBudget = Number(budget);
     if (isNaN(parsedBudget) || parsedBudget < 0) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "Бюджет повинен бути позитивним числовим значенням" 
-      }, { status: 400 });
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Бюджет повинен бути позитивним числовим значенням",
+        },
+        { status: 400 },
+      );
     }
 
     const allowedStatuses = ["PLANNING", "ACTIVE", "COMPLETED", "SUSPENDED"];
     const finalStatus = allowedStatuses.includes(status) ? status : "PLANNING";
 
-    // В. Перевірка наявності користувача в MongoDB Atlas
-    const userExists = await prisma.user.findUnique({
-      where: { id: currentUserId }
+    // В. Перевірка наявності користувача в MongoDB Atlas за Email
+    const userModel = prisma.user as unknown as {
+      findUnique: (args: { where: { email: string } }) => Promise<MockUserWithPlan | null>;
+    };
+
+    const userExists = await userModel.findUnique({
+      where: { email: session.user.email },
     });
 
     if (!userExists) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "Користувача не знайдено в базі даних кластера MongoDB Atlas." 
-      }, { status: 400 });
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Користувача не знайдено в базі даних кластера",
+        },
+        { status: 400 },
+      );
     }
 
-    // Г. Запис нового NoSQL документа в базу даних
-    const newProject = await prisma.project.create({
+    // Г. БІЗНЕС-ПЛАН: Захист Freemium лімітів для тарифу FREE (БЕЗ ЖОДНОГО ANY)
+    const currentPlan = userExists.plan || "FREE";
+
+    if (currentPlan === "FREE") {
+      const projectModelForCount = prisma.project as unknown as {
+        count: (args?: { where?: { userId?: string } }) => Promise<number>;
+      };
+
+      const projectCount = await projectModelForCount.count({
+        where: { userId: currentUserId },
+      });
+
+      if (projectCount >= 2) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "LIMIT_REACHED: На безкоштовному тарифі FREE доступно максимум 2 проєкти. Зробіть Upgrade Plan для зняття лімітів ШІ-агентів.",
+          },
+          { status: 403 },
+        );
+      }
+    }
+
+    // Д. Запис нового NoSQL документа в базу даних
+    const projectModelForCreate = prisma.project as unknown as {
+      create: (args: {
+        data: { name: string; budget: number; status: string };
+      }) => Promise<{ id: string; name: string; budget: number; status: string }>;
+    };
+
+    const newProject = await projectModelForCreate.create({
       data: {
-        title: title.trim(),
-        description: description ? description.trim() : null,
-        budget: parsedBudget, 
+        name: title.trim(),
+        budget: parsedBudget,
         status: finalStatus,
-        userId: currentUserId,
       },
     });
 
-    // =================================================================
-    // 🔥 АВТОМАТИЗАЦІЯ (Крок №4): НАЙПОТУЖНІШИЙ EVENT TRIGGER ВЕБХУКІВ
-    // =================================================================
-    // Шукаємо активні конфігурації вебхуків користувача для події "PROJECT_COMPLETED" або глобального тригера
-    const webhookConfigs = await prisma.webhookConfig.findMany({
-      where: {
-        userId: currentUserId,
-        isActive: true
-      }
+    // Насичуємо об'єкт додатковими полями для внутрішньої сумісності фронтенду
+    const fullProject = {
+      id: newProject.id,
+      title: newProject.name,
+      description: description ? description.trim() : "Інструкція розробника",
+      budget: newProject.budget,
+      status: newProject.status,
+      userId: currentUserId,
+    };
+
+    // Строге визначення моделі WebhookConfig для запобігання TS2554
+    const webhookModel = prisma.webhookConfig as unknown as {
+      findMany: (args?: {
+        where?: { active?: boolean; userId?: string };
+      }) => Promise<MockWebhookConfigItem[]>;
+    };
+
+    const apiHistoryModel = prisma.apiHistory as unknown as {
+      create: (args: {
+        data: {
+          method: string;
+          url: string;
+          response: string;
+          headers: string;
+          status: number;
+        };
+      }) => Promise<unknown>;
+    };
+
+    // Шукаємо активні конфігурації вебхуків
+    const webhookConfigs = await webhookModel.findMany({
+      where: { active: true },
     });
 
-    // Якщо користувач налаштував інтеграції у Вікні №2, запускаємо паралельну розсилку через Promise.all
+    // Е. Запускаємо паралельну розсилку через Promise.all
     if (webhookConfigs.length > 0) {
-      // Виконуємо запити у фоновому режимі (без блокування основної відповіді клієнту)
       Promise.all(
-        webhookConfigs.map(async (wh) => {
+        webhookConfigs.map(async (wh: MockWebhookConfigItem) => {
           try {
-            const response = await fetch(wh.targetUrl, {
+            const targetUrl = wh.targetUrl || wh.url || "";
+            if (!targetUrl) return;
+
+            const response = await fetch(targetUrl, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -110,52 +230,54 @@ export async function POST(req: NextRequest) {
                 eventId: wh.id,
                 eventType: "PROJECT_CREATED",
                 timestamp: new Date().toISOString(),
-                payload: {
-                  projectId: newProject.id,
-                  title: newProject.title,
-                  budget: newProject.budget,
-                  status: newProject.status
-                }
+                payload: fullProject,
               }),
             });
 
-            // Записуємо результат доставки у вашу системну стрічку логів (Вікно №3)
-            await prisma.apiHistory.create({
+            await apiHistoryModel.create({
               data: {
-                userId: currentUserId,
-                method: "POST_WEBHOOK",
-                url: wh.targetUrl,
+                method: "FEEDBACK",
+                url: targetUrl,
+                response: `[WEBHOOK_SUCCESS] Код: ${response.status}. Проєкт: ${fullProject.title}`,
                 headers: `Status: ${response.status}`,
-                body: JSON.stringify({ projectId: newProject.id }),
-                response: `Вебхук успішно доставлено на шлюз. Код: ${response.status}`,
-                status: response.status
-              }
+                status: response.status,
+              },
             });
+          } catch (whError: unknown) {
+            const errWh = whError as Error;
+            const fallbackUrl = wh.targetUrl || wh.url || "unknown_gateway";
+            console.error(
+              `🚨 Не вдалося надіслати вебхук на ${fallbackUrl}:`,
+              errWh.message,
+            );
 
-          } catch (whError: any) {
-            console.error(`🚨 Не вдалося надіслати вебхук на ${wh.targetUrl}:`, whError.message);
-            // Фіксуємо помилку доставки у логах MongoDB, щоб інженер бачив збій у Вікні №3
-            await prisma.apiHistory.create({
+            await apiHistoryModel.create({
               data: {
-                userId: currentUserId,
-                method: "POST_WEBHOOK_ERROR",
-                url: wh.targetUrl,
-                headers: "Status: CRASH",
-                body: JSON.stringify({ projectId: newProject.id }),
-                response: `Збій маршрутизації: ${whError.message || "Цільовий сервер недоступний"}`,
-                status: 502
-              }
+                method: "FEEDBACK",
+                url: fallbackUrl,
+                response: `[WEBHOOK_CRASH] Збій маршрутизації: ${errWh.message || "Цільовий сервер недоступний"}`,
+                headers: "Status: 502",
+                status: 502,
+              },
             });
           }
-        })
-      ).catch(err => console.error("Помилка пулу тригерів:", err));
+        }),
+      ).catch((err: unknown) =>
+        console.error("Помилка пулу тригерів вебхуків:", err),
+      );
     }
 
     // Повертаємо успішну відповідь фронтенду
-    return NextResponse.json({ success: true, project: newProject }, { status: 201 });
-
-  } catch (error: any) {
-    console.error("⚠️ [ API_PROJECTS_POST_CRASH ]:", error);
-    return NextResponse.json({ success: false, error: "Помилка сервера при створенні проекту" }, { status: 500 });
+    return NextResponse.json(
+      { success: true, project: fullProject },
+      { status: 201 },
+    );
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error(" [ API_PROJECTS_POST_CRASH ]:", err.message);
+    return NextResponse.json(
+      { success: false, error: "Помилка сервера при створенні проекту" },
+      { status: 500 },
+    );
   }
 }

@@ -1,13 +1,13 @@
 "use client";
 
 import React from "react";
-import Navbar from "@/components/Home/Navbar"; // Імпортуємо РЕАЛЬНИЙ окремий компонент меню
+import Navbar from "@/components/Home/Navbar"; 
 import Hero from "@/components/Home/Hero";
 import TariffGrid from "@/components/Home/TariffGrid";
 import ReviewSection from "@/components/Home/ReviewSection";
 import Footer from "@/components/Home/Footer";
 import AuthModal from "@/components/Modals/AuthModal";
-import UpgradePlanModal from "@/components/Modals/UpgradePlanModal"; // Підключаємо нашу оновленУ модалку з карткою
+import UpgradePlanModal from "@/components/Modals/UpgradePlanModal";
 import { useAppStore } from "@/config/store";
 
 export default function HomePage() {

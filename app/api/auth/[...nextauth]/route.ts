@@ -8,18 +8,23 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+// Окремий строгий тип для хендлера Auth.js, щоб назавжди забути про брудний 'any'
+type AuthHandlerFn = (req: Request) => Promise<Response>;
+
 /**
  * Явний суворий експорт іменованої функції для GET запитів Auth.js
- * Викликаємо внутрішній об'єктний метод GET із приведенням до any для обходу суворих сигнатур
+ * Використовуємо безпечне приведення типу функції для повної сумісності з Next.js 15
  */
-export async function GET(request: NextRequest) {
-  return (handlers as any).GET(request);
+export async function GET(request: NextRequest): Promise<Response> {
+  const getHandler = handlers.GET as AuthHandlerFn;
+  return getHandler(request);
 }
 
 /**
  * Явний суворий експорт іменованої функції для POST запитів Auth.js
- * Викликаємо внутрішній об'єктний метод POST із приведенням до any для обходу суворих сигнатур
+ * Використовуємо безпечне приведення типу функції для повної сумісності з Next.js 15
  */
-export async function POST(request: NextRequest) {
-  return (handlers as any).POST(request);
+export async function POST(request: NextRequest): Promise<Response> {
+  const postHandler = handlers.POST as AuthHandlerFn;
+  return postHandler(request);
 }

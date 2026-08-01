@@ -1,13 +1,11 @@
-// C:\Users\Admin\Documents\my-unified-work-space\app\api\v1\analytics\route.ts
-
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma"; // Твій нативний синглтон
-import { auth } from "@/lib/auth"; // Твоя сесія
+import { prisma } from "@/lib/prisma"; 
+import { auth } from "@/lib/auth"; 
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(): Promise<Response> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -16,7 +14,7 @@ export async function GET() {
 
     const userId = session.user.id;
 
-    // Твоя залізна та перевірена NoSQL-агрегація через пул Promise.all
+    // Нативна, повністю типізована NoSQL-агрегація без жодного 'any'
     const [budgetAggregation, activeCount, totalProjects] = await Promise.all([
       prisma.project.aggregate({
         where: { userId },
@@ -31,19 +29,20 @@ export async function GET() {
       })
     ]);
 
-    // Повертаємо масив метрик, адаптований під WorkspaceContext розробника
+    // Повертаємо метрики, де TypeScript суворо знає типи кожного поля
     return NextResponse.json({
       success: true,
       metrics: {
-        totalBudget: budgetAggregation._sum.budget || 0.0,
-        averageCheck: budgetAggregation._avg.budget ? Math.round(budgetAggregation._avg.budget) : 0,
+        totalBudget: budgetAggregation._sum?.budget || 0.0,
+        averageCheck: budgetAggregation._avg?.budget ? Math.round(budgetAggregation._avg.budget) : 0,
         activeProjects: activeCount,
         totalProjects: totalProjects
       }
     }, { status: 200 });
 
-  } catch (error: any) {
-    console.error("📊 [ ANALYTICS_ROUTE_CRASH ]:", error);
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error(" [ ANALYTICS_ROUTE_CRASH ]:", err.message);
     return NextResponse.json({ success: false, error: "Помилка сервера при розрахунку аналітики" }, { status: 500 });
   }
 }

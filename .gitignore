@@ -32,13 +32,23 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+
+# text files (ignore all txt files)
+*.txt
+
+# specific files/folders
 text.txt
+/text/
+
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-node_modules
-.prisma
 
+# node
+node_modules
+
+# prisma
+.prisma

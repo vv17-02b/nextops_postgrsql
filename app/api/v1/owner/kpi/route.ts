@@ -7,7 +7,7 @@ import { FinOpsController } from "@/lib/servers/FinOpsController"; // Наш ц�
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(): Promise<Response> {
   try {
     // 1. БЕЗПЕКА СЕСІЇ: Перевіряємо, чи користувач автентифікований
     const session = await auth();
@@ -16,7 +16,8 @@ export async function GET() {
     }
 
     // 2. ROLE GUARD (OWNER GUARD): Перевіряємо, чи має розробник права адміністратора
-    const userRole = (session.user as any).role || "DEVELOPER";
+    // НА ТИВА ТИПІЗАЦІЯ: Прибираємо 'as any', оскільки роль уже розширена в нашому ядрі auth.ts
+    const userRole = session.user.role || "DEVELOPER";
     const userEmail = session.user.email || "";
 
     // Якщо роль не ADMIN і в email немає слова 'admin', примусово відсікаємо доступ
@@ -27,17 +28,18 @@ export async function GET() {
       }, { status: 403 });
     }
 
-    // 3. ДЕЛЕГАЦІЯ КOМАНД: Викликаємо NoSQL-агрегацію контролера статистики
+    // 3. ДЕЛЕГАЦІЯ КОМАНД: Викликаємо NoSQL-агрегацію контролера статистики
     const kpiData = await FinOpsController.getOwnerKPI();
 
-    // 4. ВІДПOВІДЬ: Повертаємо живі комерційні метрики
+    // 4. ВІДПОВІДЬ: Повертаємо живі комерційні метрики
     return NextResponse.json({
       success: true,
       kpi: kpiData
     }, { status: 200 });
 
-  } catch (error: any) {
-    console.error("🚨 [OWNER_KPI_ROUTE_CRASH]:", error.message);
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error(" [OWNER_KPI_ROUTE_CRASH]:", err.message);
     return NextResponse.json({ 
       success: false, 
       error: "Внутрішня помилка сервера при зборі корпоративної аналітики кластера" 
