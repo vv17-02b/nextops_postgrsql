@@ -1,4 +1,3 @@
-// C:\Users\Admin\Documents\my-unified-work-space\components\Owner\OwnerDashboard.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";

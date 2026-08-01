@@ -219,7 +219,7 @@ export default function UserSlider() {
                     className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2 pl-8 text-white focus:outline-none focus:border-cyan-500 font-mono text-[11px] h-[36px] truncate"
                     placeholder="https://example.com"
                   />
-                  {/* 🔥 ФІКС ALT-TEXT: Замінено іконку Image на FileImage для безпомилкового проходження ESLint */}
+                  
                   <FileImage className="w-3.5 h-3.5 text-neutral-600 absolute left-2.5 top-3" />
                 </div>
                 {session?.user?.image && (

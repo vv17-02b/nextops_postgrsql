@@ -6,7 +6,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// Строгі інтерфейси сутностей для повної відмови від any
 interface MockProjectItem {
   id: string;
   name: string;
@@ -32,7 +31,6 @@ interface MockUserWithPlan {
   plan: "FREE" | "PRO" | "ENTERPRISE";
 }
 
-// 1. МЕТОД GET: Зчитування проектів ТІЛЬКИ поточного авторизованого розробника
 export async function GET(): Promise<Response> {
   try {
     const session = await auth();
@@ -44,7 +42,6 @@ export async function GET(): Promise<Response> {
     }
 
     const currentUserId = session.user.id;
-
     const projectModel = prisma.project as unknown as {
       findMany: (args?: {
         where?: { userId?: string };
@@ -73,16 +70,13 @@ export async function GET(): Promise<Response> {
     const err = error as Error;
     console.error(" [ API_PROJECTS_GET_CRASH ]:", err.message);
     return NextResponse.json(
-      { success: false, error: "Помилка сервера при отриманні списку нод" },
+      { success: false, error: "Помилка сервера" },
       { status: 500 },
     );
   }
 }
-
-// 2. МЕТОД POST: Створення нового проекту з нативною валідацією та Freemium-лімітами
 export async function POST(req: NextRequest): Promise<Response> {
   try {
-    // А. Безпека: перевіряємо сесію користувача
     const session = await auth();
     if (!session?.user?.id || !session?.user?.email) {
       return NextResponse.json(
@@ -95,7 +89,6 @@ export async function POST(req: NextRequest): Promise<Response> {
     const bodyData = await req.json().catch(() => ({}));
     const { title, description, budget, status } = bodyData;
 
-    // Б. Нативна валідація даних
     if (!title || typeof title !== "string" || title.trim().length < 2) {
       return NextResponse.json(
         {
@@ -109,10 +102,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const parsedBudget = Number(budget);
     if (isNaN(parsedBudget) || parsedBudget < 0) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Бюджет повинен бути позитивним числовим значенням",
-        },
+        { success: false, error: "Бюджет повинен бути позитивним числом" },
         { status: 400 },
       );
     }
@@ -120,9 +110,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     const allowedStatuses = ["PLANNING", "ACTIVE", "COMPLETED", "SUSPENDED"];
     const finalStatus = allowedStatuses.includes(status) ? status : "PLANNING";
 
-    // В. Перевірка наявності користувача в MongoDB Atlas за Email
     const userModel = prisma.user as unknown as {
-      findUnique: (args: { where: { email: string } }) => Promise<MockUserWithPlan | null>;
+      findUnique: (args: {
+        where: { email: string };
+      }) => Promise<MockUserWithPlan | null>;
     };
 
     const userExists = await userModel.findUnique({
@@ -131,18 +122,16 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     if (!userExists) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Користувача не знайдено в базі даних кластера",
-        },
+        { success: false, error: "Користувача не знайдено в кластері" },
         { status: 400 },
       );
     }
 
-    // Г. БІЗНЕС-ПЛАН: Захист Freemium лімітів для тарифу FREE (БЕЗ ЖОДНОГО ANY)
     const currentPlan = userExists.plan || "FREE";
+    const currentRole = userExists.role || "DEVELOPER";
 
-    if (currentPlan === "FREE") {
+    // СУВОРІ СЕРВЕРНІ FREEMIUM-БАР'ЄРИ (Для не-адмінів)
+    if (currentPlan === "FREE" && currentRole !== "ADMIN") {
       const projectModelForCount = prisma.project as unknown as {
         count: (args?: { where?: { userId?: string } }) => Promise<number>;
       };
@@ -156,18 +145,32 @@ export async function POST(req: NextRequest): Promise<Response> {
           {
             success: false,
             error:
-              "LIMIT_REACHED: На безкоштовному тарифі FREE доступно максимум 2 проєкти. Зробіть Upgrade Plan для зняття лімітів ШІ-агентів.",
+              "LIMIT_REACHED: На безкоштовному тарифі доступно максимум 2 проєкти. Оновіть план до PRO.",
+          },
+          { status: 403 },
+        );
+      }
+
+      if (parsedBudget > 500) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "LIMIT_REACHED: Комерційний ліміт бюджету для FREE тарифу становить $500. Оновіть план до PRO.",
           },
           { status: 403 },
         );
       }
     }
-
-    // Д. Запис нового NoSQL документа в базу даних
     const projectModelForCreate = prisma.project as unknown as {
       create: (args: {
         data: { name: string; budget: number; status: string };
-      }) => Promise<{ id: string; name: string; budget: number; status: string }>;
+      }) => Promise<{
+        id: string;
+        name: string;
+        budget: number;
+        status: string;
+      }>;
     };
 
     const newProject = await projectModelForCreate.create({
@@ -178,7 +181,6 @@ export async function POST(req: NextRequest): Promise<Response> {
       },
     });
 
-    // Насичуємо об'єкт додатковими полями для внутрішньої сумісності фронтенду
     const fullProject = {
       id: newProject.id,
       title: newProject.name,
@@ -188,7 +190,6 @@ export async function POST(req: NextRequest): Promise<Response> {
       userId: currentUserId,
     };
 
-    // Строге визначення моделі WebhookConfig для запобігання TS2554
     const webhookModel = prisma.webhookConfig as unknown as {
       findMany: (args?: {
         where?: { active?: boolean; userId?: string };
@@ -207,12 +208,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       }) => Promise<unknown>;
     };
 
-    // Шукаємо активні конфігурації вебхуків
     const webhookConfigs = await webhookModel.findMany({
       where: { active: true },
     });
 
-    // Е. Запускаємо паралельну розсилку через Promise.all
     if (webhookConfigs.length > 0) {
       Promise.all(
         webhookConfigs.map(async (wh: MockWebhookConfigItem) => {
@@ -255,19 +254,16 @@ export async function POST(req: NextRequest): Promise<Response> {
               data: {
                 method: "FEEDBACK",
                 url: fallbackUrl,
-                response: `[WEBHOOK_CRASH] Збій маршрутизації: ${errWh.message || "Цільовий сервер недоступний"}`,
+                response: `[WEBHOOK_CRASH] Збій маршрутизації: ${errWh.message || "Сервер недоступний"}`,
                 headers: "Status: 502",
                 status: 502,
               },
             });
           }
         }),
-      ).catch((err: unknown) =>
-        console.error("Помилка пулу тригерів вебхуків:", err),
-      );
+      ).catch((err: unknown) => console.error("Помилка пулу вебхуків:", err));
     }
 
-    // Повертаємо успішну відповідь фронтенду
     return NextResponse.json(
       { success: true, project: fullProject },
       { status: 201 },
@@ -276,7 +272,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const err = error as Error;
     console.error(" [ API_PROJECTS_POST_CRASH ]:", err.message);
     return NextResponse.json(
-      { success: false, error: "Помилка сервера при створенні проекту" },
+      { success: false, error: "Помилка сервера" },
       { status: 500 },
     );
   }

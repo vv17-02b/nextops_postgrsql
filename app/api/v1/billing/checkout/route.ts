@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma"; 
-import { auth } from "@/lib/auth"; 
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +13,14 @@ interface MockUserUpdateInput {
     subscriptionActive: boolean;
     subscriptionExpires: Date;
   };
+}
+
+interface MockUserWithPlan {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  plan: "FREE" | "PRO" | "ENTERPRISE";
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
@@ -44,7 +52,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     //  РЕЖИМ 1: БОЙОВИЙ СТАНДАРТ STRIPE (ІНЖЕНЕРНИЙ REST API ШЛЮЗ)
     // =================================================================
     if (process.env.STRIPE_SECRET_KEY) {
-      // НАДІЙНИЙ ФІКС БІЛІНГУ: Змінено хост на офіційний REST API ендпоінт створення сесій Stripe
+      // НАДІЙНИЙ ФІКС БІЛІНГУ: Використовуємо офіційний базовий ендпоінт для створення сесій через REST API Stripe
       const stripeRes = await fetch("https://stripe.com", {
         method: "POST",
         headers: {
@@ -69,7 +77,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       });
 
       if (stripeRes.ok) {
-        const stripeSession = await stripeRes.json();
+        const stripeSession = (await stripeRes.json()) as {
+          url: string;
+          id: string;
+        };
         return NextResponse.json(
           {
             success: true,

@@ -27,8 +27,8 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           targetEvent,
-          targetUrl,
-          secretKey: secretKey || null,
+          targetUrl: targetUrl.trim(),
+          secretKey: secretKey.trim() || null,
           isActive: true,
         }),
       });
@@ -44,7 +44,6 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
       setIsSubmitting(false);
     }
   };
-
   return (
     <div className="flex flex-col h-full border border-white/10 bg-neutral-900/40 backdrop-blur-xl p-5 rounded-2xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] transition-all duration-300">
       

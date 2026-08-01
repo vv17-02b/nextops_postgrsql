@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 
-// Розширюємо інтерфейси (User, Session, JWT) для сумісності з NextAuth v5
+// Розширюємо інтерфейси (User, Session, JWT) для сумісності з NextAuth v5 без any
 declare module "next-auth" {
   interface User {
     id?: string;
@@ -54,47 +54,69 @@ export const {
         email: { label: "Email", type: "text" },
         name: { label: "Name", type: "text" }
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email) return null;
         const emailStr = credentials.email as string;
         let nameStr = credentials.name as string;
+        
         if (!nameStr) {
           const parts = emailStr.split("@");
           nameStr = parts[0] || "User";
         }
         
-        const ownerEmailFromEnv = process.env.OWNER_EMAIL || "vlad@nextops.io";
-        const targetRole = emailStr.toLowerCase() === ownerEmailFromEnv.toLowerCase() 
-          ? "ADMIN" 
-          : "DEVELOPER";
+        // 1. ДИНАМІЧНЕ ВИЗНАЧЕННЯ ДОМЕНУ ПЛАТФОРМИ (Без .env для пошти)
+        let siteDomain = "nextops.io";
+        
+        if (req instanceof Request) {
+          try {
+            const parsedUrl = new URL(req.url);
+            siteDomain = parsedUrl.hostname.toLowerCase();
+          } catch {
+            const hostHeader = req.headers.get("host") || "";
+            siteDomain = hostHeader.split(":")[0]?.toLowerCase() || "nextops.io";
+          }
+        } else if (req && typeof req === "object" && "headers" in req) {
+          const headersObj = (req as Record<string, unknown>).headers as Record<string, string> | undefined;
+          const hostHeader = headersObj?.host || "";
+          siteDomain = hostHeader.split(":")[0]?.toLowerCase() || "nextops.io";
+        }
+
+        // 2. АВТОМАТИЧНИЙ ГУАРД ВЛАСНИКА ЗА ДОМЕНОМ
+        const userEmailDomain = emailStr.split("@")[1]?.toLowerCase() || "";
+        
+        // Якщо пошта збігається з доменом або локальна розробка для владнання
+        const isOwner = userEmailDomain === siteDomain || 
+                        (siteDomain === "localhost" && emailStr.toLowerCase() === "vlad@nextops.io");
+
+        const targetRole = isOwner ? "ADMIN" : "DEVELOPER";
+        const targetPlan = isOwner ? "ENTERPRISE" : "FREE";
 
         try {
-          // ГАРАНТОВАНИЙ ФІКС: Локально розширюємо типи методів для нашого Mock-клієнта Prisma
+          // Локально розширюємо типи методів для нашого Mock-клієнта Prisma
           const userModel = prisma.user as unknown as {
             findUnique: (args: { where: { email: string } }) => Promise<DatabaseUserResult | null>;
-            create: (args: { data: { email: string; name: string; role: string } }) => Promise<DatabaseUserResult>;
-            update: (args: { where: { email: string }; data: { role: string } }) => Promise<DatabaseUserResult>;
+            create: (args: { data: { email: string; name: string; role: string; plan: string } }) => Promise<DatabaseUserResult>;
+            update: (args: { where: { email: string }; data: { role: string; plan: string } }) => Promise<DatabaseUserResult>;
           };
 
-          // 1. Пошук інженера в NoSQL кластері
+          // Пошук інженера в NoSQL кластері
           let dbUser = await userModel.findUnique({
             where: { email: emailStr }
           });
           
           if (!dbUser) {
-            // 2. Якщо користувача немає — створюємо новий документ (Тепер об'єкт data повністю легальний)
+            // При автоматичній реєстрації відразу виставляємо ліміти
             dbUser = await userModel.create({
-              data: { email: emailStr, name: nameStr, role: targetRole }
+              data: { email: emailStr, name: nameStr, role: targetRole, plan: targetPlan }
             });
           } else {
-            // 3. Якщо користувач є — оновлюємо його роль до актуального статусу
+            // Якщо користувач є — оновлюємо його роль до актуального статусу за доменом
             dbUser = await userModel.update({
               where: { email: emailStr },
-              data: { role: targetRole }
+              data: { role: targetRole, plan: targetPlan }
             });
           }
           
-          // Повертаємо повністю типізований об'єкт, де є і plan, і image
           return {
             id: dbUser.id,
             email: dbUser.email,

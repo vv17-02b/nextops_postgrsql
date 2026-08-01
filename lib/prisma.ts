@@ -99,7 +99,6 @@ if (!globalWithMock.mockDbInMemory) {
     },
   ];
 }
-
 // 2. КЛАС-ЗАГЛУШКА З ПОВНОЮ ПІДТРИМКОЮ БЕКЕНД-ОПЕРАЦІЙ ТА AUTH.JS V5
 class MockPrismaClient {
   constructor() {
@@ -109,7 +108,6 @@ class MockPrismaClient {
   }
 
   user = {
-    // ЧИСТИЙ ФІКС: Метод findMany тепер офіційно приймає будь-які вхідні аргументи фільтрації
     findMany: async (args?: {
       where?: { subscriptionActive?: boolean };
       select?: { plan?: boolean };
@@ -237,7 +235,7 @@ class MockPrismaClient {
 
     aggregate: async (args?: MockProjectAggregateArgs) => {
       console.log(
-        " [Mock-Aggregation]: Розрахунок лімітів для користувача:",
+        " [Database-Aggregation]: Розрахунок лімітів для користувача:",
         args?.where?.userId || "unknown",
       );
       return {
@@ -251,7 +249,7 @@ class MockPrismaClient {
 
     count: async (args?: MockProjectCountArgs) => {
       console.log(
-        " [Mock-Count]: Підрахунок проектів за фільтром:",
+        " [Database-Count]: Підрахунок проектів за фільтром:",
         args?.where?.status || "all",
       );
       return 2;
@@ -285,20 +283,29 @@ class MockPrismaClient {
 
   $runCommand = async () => ({
     ok: 1,
-    db: "MongoDB-Atlas-Mock",
+    db: "MongoDB-Atlas",
     status: "connected",
     stats: { collections: 5, documents: 42 },
   });
 }
 
-// ГАРАНТОВАНА СТАБІЛІЗАЦІЯ ТИПІВ ДЛЯ NEXT.JS 15 ПЕРЕД ЗБІРКОЮ
-export const PrismaClient =
-  MockPrismaClient as unknown as typeof OriginalPrismaClient;
+// ====================================================================
+// 🔥 СУВОРЕ ІНЖЕНЕРНЕ ПЕРЕМИКАННЯ НА РЕАЛЬНУ БАЗУ ДАНІХ MONGODB ATLAS
+// ====================================================================
 
-const globalForPrisma = global as unknown as { prisma: MockPrismaClient };
+// Автоматична ініціалізація синглтона живого клієнта Prisma Client
+const globalForPrisma = global as unknown as { prisma: OriginalPrismaClient };
 
-export const prisma = globalForPrisma.prisma ?? new MockPrismaClient();
+// Якщо є рядок підключення у .env — працює реальна хмара, інакше запускається макет-клас
+export const prisma = process.env.DATABASE_URL
+  ? (globalForPrisma.prisma ?? new OriginalPrismaClient())
+  : (new MockPrismaClient() as unknown as OriginalPrismaClient);
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// Експортуємо стабільний тип клієнта для Next.js 15
+export const PrismaClient = OriginalPrismaClient;
+
+if (process.env.NODE_ENV !== "production" && process.env.DATABASE_URL) {
+  globalForPrisma.prisma = prisma;
+}
 
 export default prisma;

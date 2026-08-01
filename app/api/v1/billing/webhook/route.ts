@@ -1,89 +1,131 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import Stripe from "stripe";
-
+import { auth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-interface MockUserWebhookUpdateInput {
-  where: { id: string };
-  data: {
-    stripeCustomerId: string;
-    plan: "PRO" | "ENTERPRISE";
-    subscriptionActive: boolean;
-    subscriptionExpires: Date;
-  };
+interface MockWebhookConfigInput {
+  id: string;
+  targetEvent: string;
+  targetUrl: string;
+  isActive: boolean;
+  userId: string;
 }
 
-export async function POST(req: NextRequest): Promise<Response> {
-  const signature = req.headers.get("stripe-signature");
-
-  if (!signature) {
-    return NextResponse.json({ error: "Missing signature" }, { status: 400 });
-  }
-
-  // Ініціалізація всередині POST хендлера для стабільності під час yarn build
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-    apiVersion: "2025-02-24.preview" as any, // Фікс сумісності версії API Stripe
-  });
+export async function GET(): Promise<Response> {
   try {
-    const rawBody = await req.text();
-    let event: Stripe.Event;
-
-    try {
-      event = stripe.webhooks.constructEvent(
-        rawBody,
-        signature,
-        process.env.STRIPE_WEBHOOK_SECRET || "",
-      );
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : "Unknown error";
-      console.error(`🚨 [STRIPE_SIGNATURE_ERROR]: ${errorMsg}`);
+    const session = await auth();
+    if (!session?.user?.id) {
       return NextResponse.json(
-        { error: "Verification failed" },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
+    }
+
+    const currentUserId = session.user.id;
+    const webhookModel = prisma.webhookConfig as unknown as {
+      findMany: (args?: {
+        where?: { userId?: string };
+        orderBy?: { createdAt: string };
+      }) => Promise<MockWebhookConfigInput[]>;
+    };
+
+    const webhooks = await webhookModel.findMany({
+      where: { userId: currentUserId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json({ success: true, webhooks }, { status: 200 });
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error(" [ API_WEBHOOKS_GET_CRASH ]:", err.message);
+    return NextResponse.json(
+      { success: false, error: "Помилка сервера" },
+      { status: 500 },
+    );
+  }
+}
+export async function POST(req: NextRequest): Promise<Response> {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
+    }
+
+    const currentUserId = session.user.id;
+    const userPlan = session.user.plan || "FREE";
+    const userRole = session.user.role || "DEVELOPER";
+
+    // Суворий бар'єр: користувачі без ліцензії PRO не можуть створювати нові інструменти автоматизації
+    if (userPlan === "FREE" && userRole !== "ADMIN") {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "ACCESS_DENIED: Створення Вебхук-тригерів заблоковано на тарифі FREE. Будь ласка, оновіть ліцензію до PRO.",
+        },
+        { status: 403 },
+      );
+    }
+
+    const bodyData = await req.json().catch(() => ({}));
+    const { targetEvent, targetUrl, isActive } = bodyData;
+
+    if (
+      !targetUrl ||
+      typeof targetUrl !== "string" ||
+      !targetUrl.startsWith("http")
+    ) {
+      return NextResponse.json(
+        { success: false, error: "Некоректна URL-адреса призначення вебхука" },
         { status: 400 },
       );
     }
 
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
+    const allowedEvents = [
+      "PROJECT_CREATED",
+      "PROJECT_COMPLETED",
+      "AI_TRIGGER",
+      "BUDGET_WARN",
+    ];
+    const finalEvent = allowedEvents.includes(targetEvent)
+      ? targetEvent
+      : "PROJECT_COMPLETED";
 
-      const userId = session.metadata?.userId;
-      const planType =
-        session.metadata?.planType === "ENTERPRISE" ? "ENTERPRISE" : "PRO";
-
-      if (userId) {
-        const expiresDate = new Date();
-        expiresDate.setDate(expiresDate.getDate() + 30);
-
-        // Локальне строге приведення моделі до нашого інтерфейсу (замість брудного any)
-        const userModel = prisma.user as unknown as {
-          update: (args: MockUserWebhookUpdateInput) => Promise<unknown>;
+    const webhookModel = prisma.webhookConfig as unknown as {
+      create: (args: {
+        data: {
+          targetEvent: string;
+          targetUrl: string;
+          isActive: boolean;
+          userId: string;
         };
+      }) => Promise<MockWebhookConfigInput>;
+    };
 
-        await userModel.update({
-          where: { id: userId },
-          data: {
-            stripeCustomerId: (session.customer as string) || session.id,
-            plan: planType,
-            subscriptionActive: true,
-            subscriptionExpires: expiresDate,
-          },
-        });
+    const newWebhook = await webhookModel.create({
+      data: {
+        targetEvent: finalEvent,
+        targetUrl: targetUrl.trim(),
+        isActive: typeof isActive === "boolean" ? isActive : true,
+        userId: currentUserId,
+      },
+    });
 
-        console.log(
-          ` [STRIPE_SUCCESS]: Plan ${planType} activated for user ${userId}`,
-        );
-      }
-    }
-
-    return NextResponse.json({ received: true }, { status: 200 });
+    return NextResponse.json(
+      { success: true, webhook: newWebhook },
+      { status: 201 },
+    );
   } catch (error: unknown) {
     const err = error as Error;
-    console.error(" [ STRIPE_WEBHOOK_ROUTE_CRASH ]:", err.message);
+    console.error(" [ API_WEBHOOKS_POST_CRASH ]:", err.message);
     return NextResponse.json(
-      { error: "Webhook handler crash" },
+      { success: false, error: "Помилка сервера при збереженні шлюзу" },
       { status: 500 },
     );
   }

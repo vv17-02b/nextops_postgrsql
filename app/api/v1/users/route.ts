@@ -80,7 +80,7 @@ export async function GET(): Promise<Response> {
     );
   } catch (error: unknown) {
     const err = error as Error;
-    console.error("⚠️ [ API_USERS_MODERN_STREAM_CRASH ]:", err.message);
+    console.error("[ API_USERS_MODERN_STREAM_CRASH ]:", err.message);
     return NextResponse.json(
       { success: false, error: "Помилка сервера при читанні бази даних" },
       { status: 500 },

@@ -1,8 +1,8 @@
-// C:\Users\Admin\Documents\my-unified-work-space\components\WorkspaceProject.tsx
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
 import { useWorkspace } from "@/context/WorkspaceContext";
+import { useAppStore } from "@/config/store";
 import { Cpu, Plus, Layers, Filter, MessageSquare, Send } from "lucide-react";
 
 interface WorkspaceProjectProps {
@@ -10,28 +10,34 @@ interface WorkspaceProjectProps {
   onCloseAction?: () => void;
 }
 
+interface MockProjectItem {
+  id: string;
+  title: string;
+  description: string;
+  budget: number;
+  status: string;
+  userId: string;
+}
+
 export default function WorkspaceProject({ isOpen, onCloseAction }: WorkspaceProjectProps) {
   const { projects, activeProject, setActiveProject, refreshWorkspace, isLoading } = useWorkspace();
+  const { userPlan, userRole, setUpgradeModal } = useAppStore();
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [budget, setBudget] = useState("0");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
 
-  // ==========================================
-  // СТАН ТА ЛОГІКА ДЛЯ ЖИВОГО ШІ-ЧАТУ
-  // ==========================================
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Автоматичний скрол чату до найсвіжішого повідомлення
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isAiLoading]);
 
-  // Очищення історії чату, якщо користувач перемкнув ШІ-агента
   useEffect(() => {
     setMessages([]);
     setChatInput("");
@@ -41,13 +47,25 @@ export default function WorkspaceProject({ isOpen, onCloseAction }: WorkspacePro
     e.preventDefault();
     if (!title.trim()) return;
 
+    // Клієнтський перехоплювач лімітів Freemium (якщо користувач не є ADMIN)
+    if (userPlan === "FREE" && userRole !== "ADMIN") {
+      if (projects.length >= 2) {
+        setUpgradeModal(true);
+        return;
+      }
+      if (parseFloat(budget) > 500) {
+        setUpgradeModal(true);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/v1/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title,
+          title: title.trim(),
           description: description || null,
           budget: parseFloat(budget) || 0.0,
           status: "PLANNING",
@@ -66,8 +84,6 @@ export default function WorkspaceProject({ isOpen, onCloseAction }: WorkspacePro
       setIsSubmitting(false);
     }
   };
-
-  // 🔥 ОНОВЛЕНЕ КУЛЕНЕПРОБИВНЕ SSE-ЯДРО ЧИТАННЯ ПОТОКУ ТОКЕНІВ (СТАНДАРТ V2.0)
   const handleSendAiMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || isAiLoading || !activeProject) return;
@@ -79,7 +95,7 @@ export default function WorkspaceProject({ isOpen, onCloseAction }: WorkspacePro
     setChatInput("");
     setIsAiLoading(true);
 
-    // Додаємо порожній блок для майбутнього потоку відповіді ШІ
+    // Ініціалізуємо пусту ноду під майбутню відповідь ШІ
     setMessages((prev) => [...prev, { role: "assistant" as const, content: "" }]);
 
     try {
@@ -98,30 +114,24 @@ export default function WorkspaceProject({ isOpen, onCloseAction }: WorkspacePro
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let accumulatedText = "";
-      let buffer = ""; // Буфер для збирання розірваних мережевих пакетів
+      let buffer = "";
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
-        // Декодуємо черговий чанк байтів і додаємо до буфера
         buffer += decoder.decode(value, { stream: true });
-
-        // Розбиваємо буфер на окремі SSE лінії
         const lines = buffer.split("\n");
-        // Залишаємо останній (можливо незавершений) рядок у буфері
         buffer = lines.pop() || "";
 
         for (const line of lines) {
           const trimmedLine = line.trim();
           if (!trimmedLine || trimmedLine.includes("[DONE]")) continue;
 
-          // Перевіряємо відповідність індустріальному стандарту SSE
           if (trimmedLine.startsWith("data: ")) {
             const token = trimmedLine.replace("data: ", "");
             accumulatedText += token;
 
-            // Миттєво оновлюємо інтерфейс (Ефект живого посимвольного друку)
             setMessages((prev) => {
               const newMsgs = [...prev];
               if (newMsgs.length > 0) {
@@ -133,7 +143,6 @@ export default function WorkspaceProject({ isOpen, onCloseAction }: WorkspacePro
         }
       }
 
-      // Обробляємо залишок буфера, якщо він залишився
       if (buffer.trim().startsWith("data: ")) {
         accumulatedText += buffer.trim().replace("data: ", "");
         setMessages((prev) => {
@@ -147,14 +156,15 @@ export default function WorkspaceProject({ isOpen, onCloseAction }: WorkspacePro
 
       await refreshWorkspace();
 
-    } catch (err: any) {
-      console.error(" Помилка клієнтського потоку ШІ:", err);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Невідомий збій";
+      console.error(" Помилка клієнтського потоку ШІ:", errorMsg);
       setMessages((prev) => {
         const newMsgs = [...prev];
         if (newMsgs.length > 0) {
           newMsgs[newMsgs.length - 1] = {
             role: "assistant",
-            content: `[CRASH_ERROR]: Виникла помилка синхронізації з ядром: ${err.message}`
+            content: `[CRASH_ERROR]: Виникла помилка синхронізації з ядром: ${errorMsg}`
           };
         }
         return newMsgs;
@@ -165,7 +175,6 @@ export default function WorkspaceProject({ isOpen, onCloseAction }: WorkspacePro
   };
 
   const filteredProjects = projects.filter(p => filterStatus === "ALL" || p.status === filterStatus);
-
   return (
     <div className="flex flex-col h-full border border-white/10 bg-neutral-900/40 backdrop-blur-xl p-5 rounded-2xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] transition-all duration-300 overflow-hidden">
 
@@ -304,7 +313,6 @@ export default function WorkspaceProject({ isOpen, onCloseAction }: WorkspacePro
               <span>Діалоговий термінал ноди: {activeProject.title}</span>
             </div>
 
-            {/* Зона повідомлень чату */}
             <div className="h-44 overflow-y-auto space-y-2 p-2 rounded-lg bg-black/40 text-xs border border-white/5">
               {messages.length === 0 && (
                 <div className="h-full flex items-center justify-center text-neutral-600 italic select-none">
@@ -322,11 +330,9 @@ export default function WorkspaceProject({ isOpen, onCloseAction }: WorkspacePro
                   <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                 </div>
               ))}
-              {isAiLoading && messages[messages.length - 1]?.content === ""}
               <div ref={chatEndRef} />
             </div>
 
-            {/* Поле введення */}
             <form onSubmit={handleSendAiMessage} className="flex gap-2">
               <input
                 type="text"
@@ -341,7 +347,7 @@ export default function WorkspaceProject({ isOpen, onCloseAction }: WorkspacePro
                 disabled={isAiLoading || !chatInput.trim()}
                 className="px-4 bg-cyan-500 hover:bg-cyan-400 text-neutral-950 font-black rounded-xl transition disabled:opacity-30 flex items-center justify-center cursor-pointer min-w-[44px]"
               >
-                <Send className="w-3.5 h-3.5 stroke-[2.5]" />
+                <Send className="w-3.5 h-3.5" />
               </button>
             </form>
           </div>
