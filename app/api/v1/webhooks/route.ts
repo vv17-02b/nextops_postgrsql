@@ -1,21 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { Prisma, WebhookConfig } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-interface MockWebhookItem {
-  id: string;
-  url: string;
-  active: boolean;
-  createdAt: Date;
-  userId?: string;
-  targetEvent?: string;
-}
-
-// 1. МЕТОД GET: Читання налаштованих вебхуків розробника
+// 1. МЕТОД GET: Читання налаштованих вебхуків розробника з MongoDB Atlas
 export async function GET(): Promise<Response> {
   try {
     const session = await auth();
@@ -28,23 +20,21 @@ export async function GET(): Promise<Response> {
 
     const currentUserId = session.user.id;
 
-    const webhookModel = prisma.webhookConfig as unknown as {
-      findMany: (args?: {
-        where?: { userId?: string };
-        orderBy?: { createdAt: string };
-      }) => Promise<MockWebhookItem[]>;
+    // Використовуємо нативну строгу типізацію аргументів Prisma
+    const queryArgs: Prisma.WebhookConfigFindManyArgs = {
+      where: { userId: currentUserId },
+      orderBy: { createdAt: "desc" }
     };
 
-    const rawWebhooks = await webhookModel.findMany({
-      where: { userId: currentUserId },
-    });
+    const rawWebhooks: WebhookConfig[] = await prisma.webhookConfig.findMany(queryArgs);
 
-    const webhooks = rawWebhooks.map((wh: MockWebhookItem) => ({
+    // Мапимо поля згідно схеми schema.prisma
+    const webhooks = rawWebhooks.map((wh: WebhookConfig) => ({
       id: wh.id,
       userId: currentUserId,
-      targetEvent: wh.targetEvent || "PROJECT_CREATED", // Надійний фолбек
-      targetUrl: wh.url,
-      isActive: wh.active,
+      targetEvent: wh.targetEvent,
+      targetUrl: wh.targetUrl,
+      isActive: wh.isActive,
       createdAt: wh.createdAt,
     }));
 
@@ -53,13 +43,13 @@ export async function GET(): Promise<Response> {
     const err = error as Error;
     console.error(" [ API_WEBHOOKS_GET_CRASH ]:", err.message);
     return NextResponse.json(
-      { success: false, error: "Помилка сервера при читанні правил" },
+      { success: false, error: "Помилка сервера при читанні правил автоматизації" },
       { status: 500 },
     );
   }
 }
 
-// 2. МЕТОД POST: Створення нового правила автоматизації вебхуків з повним збереженням полей
+// 2. МЕТОД POST: Створення нового правила автоматизації з залізобетонним ObjectId зв'язком
 export async function POST(req: NextRequest): Promise<Response> {
   try {
     const session = await auth();
@@ -76,33 +66,31 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     if (!targetEvent || !targetUrl || !String(targetUrl).trim()) {
       return NextResponse.json(
-        { success: false, error: "Подія та цільовий URL є обов'язаковими" },
+        { success: false, error: "Подія та цільовий URL є обов'язковими полями" },
         { status: 400 },
       );
     }
 
-    const webhookModel = prisma.webhookConfig as unknown as {
-      create: (args: {
-        data: { url: string; active: boolean; targetEvent: string; userId: string };
-      }) => Promise<MockWebhookItem>;
+    // Створюємо строго за типами схеми: targetUrl, isActive, targetEvent, user
+    const createArgs: Prisma.WebhookConfigCreateArgs = {
+      data: {
+        targetUrl: String(targetUrl).trim(),
+        isActive: true,
+        targetEvent: String(targetEvent).trim(),
+        user: {
+          connect: { id: currentUserId }
+        }
+      }
     };
 
-    // ФІКС: Записуємо targetEvent та userId безпосередньо в базу даних MongoDB Atlas
-    const rawWebhook = await webhookModel.create({
-      data: {
-        url: String(targetUrl).trim(),
-        active: true,
-        targetEvent: String(targetEvent).trim(),
-        userId: currentUserId,
-      },
-    });
+    const rawWebhook: WebhookConfig = await prisma.webhookConfig.create(createArgs);
 
     const newWebhook = {
       id: rawWebhook.id,
       userId: currentUserId,
-      targetEvent: rawWebhook.targetEvent || String(targetEvent).trim(),
-      targetUrl: rawWebhook.url,
-      isActive: rawWebhook.active,
+      targetEvent: rawWebhook.targetEvent,
+      targetUrl: rawWebhook.targetUrl,
+      isActive: rawWebhook.isActive,
       createdAt: rawWebhook.createdAt,
     };
 
@@ -116,13 +104,13 @@ export async function POST(req: NextRequest): Promise<Response> {
     const err = error as Error;
     console.error(" [ API_WEBHOOKS_POST_CRASH ]:", err.message);
     return NextResponse.json(
-      { success: false, error: "Помилка сервера при створенні тригера" },
+      { success: false, error: "Помилка сервера при створенні тригера автоматизації" },
       { status: 500 },
     );
   }
 }
 
-// 3. МЕТОД PUT: Динамічне увімкнення/вимкнення статусу без втрати типу події
+// 3. МЕТОД PUT: Динамічне перемикання статусу активності вебхука
 export async function PUT(req: NextRequest): Promise<Response> {
   try {
     const session = await auth();
@@ -137,44 +125,40 @@ export async function PUT(req: NextRequest): Promise<Response> {
     const bodyData = await req.json().catch(() => ({}));
     const { id, isActive } = bodyData;
 
-    if (!id) {
+    if (!id || typeof id !== "string") {
       return NextResponse.json(
-        { success: false, error: "Ідентифікатор вебхука (id) обов'язковий" },
+        { success: false, error: "Ідентифікатор вебхука (id) є обов'язковим" },
         { status: 400 },
       );
     }
 
-    const webhookModel = prisma.webhookConfig as unknown as {
-      findMany: () => Promise<MockWebhookItem[]>;
-      update: (args: {
-        where: { id: string };
-        data: { active: boolean };
-      }) => Promise<MockWebhookItem>;
+    // Безпечний пошук конкретного конфігу за ID
+    const findArgs: Prisma.WebhookConfigFindUniqueArgs = {
+      where: { id: id.trim() }
     };
-
-    const allWebhooks = await webhookModel.findMany();
-    const existingWebhook = allWebhooks.find((wh) => wh.id === id);
+    const existingWebhook: WebhookConfig | null = await prisma.webhookConfig.findUnique(findArgs);
 
     if (!existingWebhook) {
       return NextResponse.json(
-        { success: false, error: "Конфігурацію вебхука не знайдено" },
+        { success: false, error: "Конфігурацію вебхука не знайдено в базі даних" },
         { status: 404 },
       );
     }
 
-    const rawUpdatedWebhook = await webhookModel.update({
-      where: { id },
-      data: {
-        active: Boolean(isActive),
-      },
-    });
+    // Оновлюємо поле isActive згідно нашої офіційної схеми
+    const updateArgs: Prisma.WebhookConfigUpdateArgs = {
+      where: { id: id.trim() },
+      data: { isActive: Boolean(isActive) }
+    };
+
+    const rawUpdatedWebhook: WebhookConfig = await prisma.webhookConfig.update(updateArgs);
 
     const updatedWebhook = {
       id: rawUpdatedWebhook.id,
       userId: currentUserId,
-      targetEvent: rawUpdatedWebhook.targetEvent || existingWebhook.targetEvent || "PROJECT_CREATED", // Зберігаємо оригінальну подію тригера
-      targetUrl: rawUpdatedWebhook.url,
-      isActive: rawUpdatedWebhook.active,
+      targetEvent: rawUpdatedWebhook.targetEvent,
+      targetUrl: rawUpdatedWebhook.targetUrl,
+      isActive: rawUpdatedWebhook.isActive,
       createdAt: rawUpdatedWebhook.createdAt,
     };
 
@@ -213,18 +197,16 @@ export async function DELETE(req: NextRequest): Promise<Response> {
       );
     }
 
-    const webhookModel = prisma.webhookConfig as unknown as {
-      delete: (args: { where: { id: string } }) => Promise<MockWebhookItem>;
+    const deleteArgs: Prisma.WebhookConfigDeleteArgs = {
+      where: { id: String(id).trim() }
     };
+    
+    await prisma.webhookConfig.delete(deleteArgs);
 
-    await webhookModel.delete({
-      where: { id },
-    });
-
-    console.log(` [ MongoDB Atlas ]: Конфігурацію вебхука ${id} успішно анігільовано.`);
+    console.log(` [ MongoDB Atlas ]: Конфігурацію вебхука ${id} успішно деінстальовано.`);
 
     return NextResponse.json(
-      { success: true, message: "Правило автоматизації успешно видалено" },
+      { success: true, message: "Правило автоматизації успішно видалено з системи" },
       { status: 200 },
     );
   } catch (error: unknown) {
