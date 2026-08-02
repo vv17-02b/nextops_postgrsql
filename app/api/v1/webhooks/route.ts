@@ -15,6 +15,7 @@ interface MockWebhookItem {
   targetEvent?: string;
 }
 
+// 1. МЕТОД GET: Читання налаштованих вебхуків розробника
 export async function GET(): Promise<Response> {
   try {
     const session = await auth();
@@ -27,7 +28,6 @@ export async function GET(): Promise<Response> {
 
     const currentUserId = session.user.id;
 
-    // Приводимо модель до розширеного типу для сумісності з фільтрами
     const webhookModel = prisma.webhookConfig as unknown as {
       findMany: (args?: {
         where?: { userId?: string };
@@ -39,11 +39,10 @@ export async function GET(): Promise<Response> {
       where: { userId: currentUserId },
     });
 
-    // Мапимо під формат фронтенду платформи NextOps Engine v1.2
     const webhooks = rawWebhooks.map((wh: MockWebhookItem) => ({
       id: wh.id,
       userId: currentUserId,
-      targetEvent: wh.targetEvent || "PROJECT_CREATED",
+      targetEvent: wh.targetEvent || "PROJECT_CREATED", // Надійний фолбек
       targetUrl: wh.url,
       isActive: wh.active,
       createdAt: wh.createdAt,
@@ -59,7 +58,8 @@ export async function GET(): Promise<Response> {
     );
   }
 }
-// 2. МЕТОД POST: Створення нового правила автоматизації вебхуків
+
+// 2. МЕТОД POST: Створення нового правила автоматизації вебхуків з повним збереженням полей
 export async function POST(req: NextRequest): Promise<Response> {
   try {
     const session = await auth();
@@ -81,29 +81,32 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
     }
 
-    // Приводимо модель до розширеного типу для сумісності з кастомним методом create
     const webhookModel = prisma.webhookConfig as unknown as {
       create: (args: {
-        data: { url: string; active: boolean };
+        data: { url: string; active: boolean; targetEvent: string; userId: string };
       }) => Promise<MockWebhookItem>;
     };
 
-    // Синхронізуємо назви полів під наше NoSQL-ядро (url замість targetUrl, active замість isActive)
+    // ФІКС: Записуємо targetEvent та userId безпосередньо в базу даних MongoDB Atlas
     const rawWebhook = await webhookModel.create({
       data: {
         url: String(targetUrl).trim(),
         active: true,
+        targetEvent: String(targetEvent).trim(),
+        userId: currentUserId,
       },
     });
 
     const newWebhook = {
       id: rawWebhook.id,
       userId: currentUserId,
-      targetEvent: String(targetEvent).trim(),
+      targetEvent: rawWebhook.targetEvent || String(targetEvent).trim(),
       targetUrl: rawWebhook.url,
       isActive: rawWebhook.active,
       createdAt: rawWebhook.createdAt,
     };
+
+    console.log(` [ MongoDB Atlas ]: Створено новий вебхук тригер для події: ${targetEvent}`);
 
     return NextResponse.json(
       { success: true, webhook: newWebhook },
@@ -119,7 +122,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 }
 
-// 3. МЕТОД PUT: Динамічне увімкнення/вимкнення (Toggle) активності вебхука з Вікна №2
+// 3. МЕТОД PUT: Динамічне увімкнення/вимкнення статусу без втрати типу події
 export async function PUT(req: NextRequest): Promise<Response> {
   try {
     const session = await auth();
@@ -141,7 +144,6 @@ export async function PUT(req: NextRequest): Promise<Response> {
       );
     }
 
-    // Емулюємо findUnique через findMany, оскільки у нашому Mock-класі немає методу findUnique
     const webhookModel = prisma.webhookConfig as unknown as {
       findMany: () => Promise<MockWebhookItem[]>;
       update: (args: {
@@ -160,7 +162,6 @@ export async function PUT(req: NextRequest): Promise<Response> {
       );
     }
 
-    // Оновлюємо прапорець активності в NoSQL заглушці
     const rawUpdatedWebhook = await webhookModel.update({
       where: { id },
       data: {
@@ -171,7 +172,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
     const updatedWebhook = {
       id: rawUpdatedWebhook.id,
       userId: currentUserId,
-      targetEvent: "PROJECT_CREATED",
+      targetEvent: rawUpdatedWebhook.targetEvent || existingWebhook.targetEvent || "PROJECT_CREATED", // Зберігаємо оригінальну подію тригера
       targetUrl: rawUpdatedWebhook.url,
       isActive: rawUpdatedWebhook.active,
       createdAt: rawUpdatedWebhook.createdAt,
@@ -185,10 +186,52 @@ export async function PUT(req: NextRequest): Promise<Response> {
     const err = error as Error;
     console.error(" [ API_WEBHOOKS_PUT_CRASH ]:", err.message);
     return NextResponse.json(
-      {
-        success: false,
-        error: "Помилка сервера при оновленні статусу вебхука",
-      },
+      { success: false, error: "Помилка сервера при оновленні статусу вебхука" },
+      { status: 500 },
+    );
+  }
+}
+
+// 4. МЕТОД DELETE: Повне безпечне видалення правил автоматизації
+export async function DELETE(req: NextRequest): Promise<Response> {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "Ідентифікатор (id) обов'язковий для видалення" },
+        { status: 400 },
+      );
+    }
+
+    const webhookModel = prisma.webhookConfig as unknown as {
+      delete: (args: { where: { id: string } }) => Promise<MockWebhookItem>;
+    };
+
+    await webhookModel.delete({
+      where: { id },
+    });
+
+    console.log(` [ MongoDB Atlas ]: Конфігурацію вебхука ${id} успішно анігільовано.`);
+
+    return NextResponse.json(
+      { success: true, message: "Правило автоматизації успешно видалено" },
+      { status: 200 },
+    );
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error(" [ API_WEBHOOKS_DELETE_CRASH ]:", err.message);
+    return NextResponse.json(
+      { success: false, error: "Помилка сервера при видаленні вебхука" },
       { status: 500 },
     );
   }

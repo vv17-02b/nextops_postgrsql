@@ -1,4 +1,4 @@
-import { PrismaClient as OriginalPrismaClient } from "@prisma/client";
+import { PrismaClient as OriginalPrismaClient, Plan } from "@prisma/client";
 
 // СТРОГІ ИНТЕРФЕЙСИ ДЛЯ СТАТЕЙ ТА ВІДГУКІВ В ПАМ'ЯТІ (Збережено для зворотньої сумісності)
 interface MockDbItem {
@@ -73,29 +73,67 @@ class RealPrismaHub {
   }
 
   user = {
-    findMany: async (args?: any) => {
+    findMany: async (args?: import("@prisma/client").Prisma.UserFindManyArgs): Promise<import("@prisma/client").User[]> => {
       return await realPrisma.user.findMany(args);
     },
-    findUnique: async (args?: any) => {
+    findUnique: async (args: import("@prisma/client").Prisma.UserFindUniqueArgs): Promise<import("@prisma/client").User | null> => {
       return await realPrisma.user.findUnique(args);
     },
-    findFirst: async (args?: any) => {
+    findFirst: async (args?: import("@prisma/client").Prisma.UserFindFirstArgs): Promise<import("@prisma/client").User | null> => {
       return await realPrisma.user.findFirst(args);
     },
-    create: async ({ data }: { data: UserDataPayload }) => {
+    create: async ({ data }: { data: UserDataPayload }): Promise<import("@prisma/client").User> => {
       return await realPrisma.user.create({
         data: {
           email: data.email,
           name: data.name,
           role: data.role,
-          plan: "FREE" // Значення за замовчуванням з enum Plan
+          plan: Plan.FREE 
         }
       });
     },
-    update: async (args: any) => {
-      console.log(" [MongoDB Atlas]: Оновлення профілю розробника:", args?.where?.email || "current");
-      return await realPrisma.user.update(args);
+      update: async (args: import("@prisma/client").Prisma.UserUpdateArgs): Promise<import("@prisma/client").User> => {
+      const updatePayload: import("@prisma/client").Prisma.UserUpdateInput = args.data;
+      
+      try {
+        console.log(" [MongoDB Atlas]: Перехоплення мутації профілю адаптером...");
+        
+        const targetId = args.where.id;
+        const targetEmail = args.where.email;
+
+        // Безпечний пошук користувача, щоб обійти помилку BSON ObjectId
+        if (targetId && typeof targetId === "string") {
+          const dbUser: import("@prisma/client").User | null = await realPrisma.user.findFirst({
+            where: { OR: [{ id: targetId }, { name: targetId }] }
+          });
+          
+          if (dbUser?.email) {
+            return await realPrisma.user.update({
+              where: { email: dbUser.email },
+              data: updatePayload
+            });
+          }
+        } 
+        
+        if (targetEmail) {
+          return await realPrisma.user.update({
+            where: { email: targetEmail },
+            data: updatePayload
+          });
+        }
+
+        return await realPrisma.user.update(args);
+      } catch (prismaErr: unknown) {
+        const err = prismaErr as Error;
+        console.error(" [ NextOps CRITICAL ERROR ]: MongoDB Atlas відхилила запис:", err.message);
+        throw err;
+      }
     },
+
+    delete: async (args: import("@prisma/client").Prisma.UserDeleteArgs): Promise<import("@prisma/client").User> => {
+      console.log(" [MongoDB Atlas]: Видалення ноди користувача:", args.where.id || "unknown");
+      return await realPrisma.user.delete(args);
+    }
   };
 
   apiHistory = {
@@ -174,7 +212,6 @@ class RealPrismaHub {
         status: record.status
       };
     },
-
     aggregate: async (args?: MockProjectAggregateArgs) => {
       console.log(" [Database-Aggregation]: Розрахунок реальних лімітів для користувача:", args?.where?.userId || "all");
       return await realPrisma.project.aggregate({
@@ -237,6 +274,11 @@ class RealPrismaHub {
         active: record.isActive
       };
     },
+    // ВИПРАВЛЕНО: Додано метод delete для анігіляції тригера з MongoDB Atlas
+    delete: async (args: any) => {
+      console.log(" [MongoDB Atlas]: Видалення конфігурації вебхука з бази:", args?.where?.id || "unknown");
+      return await realPrisma.webhookConfig.delete(args);
+    }
   };
 
   $runCommand = async (command: any) => {

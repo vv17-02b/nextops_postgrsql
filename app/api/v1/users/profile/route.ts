@@ -1,23 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma"; // Наш очищений реальний NoSQL хаб
-import { auth } from "@/lib/auth"; // Нативна система сесій Auth.js v5
+import { prisma } from "@/lib/prisma"; 
+import { auth } from "@/lib/auth"; 
+import { Prisma, Plan, User } from "@prisma/client"; 
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-interface ProfileUpdatePayload {
-  name: string;
-}
-
-// МЕТОД PUT: Динамічне оновлення профілю розробника в MongoDB Atlas
 export async function PUT(req: NextRequest): Promise<Response> {
   try {
-    // 1. БЕЗПЕКА: Доступ дозволено виключно автентифікованим користувачам
     const session = await auth();
-    if (!session?.user?.id || !session?.user?.email) {
+    if (!session?.user?.email) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
+        { success: false, error: "Unauthorized. No active session email found." },
         { status: 401 },
       );
     }
@@ -25,55 +20,61 @@ export async function PUT(req: NextRequest): Promise<Response> {
     const bodyData = await req.json().catch(() => ({}));
     const { name, image } = bodyData;
 
-    // 2. ВАЛІДАЦІЯ: Перевіряємо формат імені
-    if (
-      name !== undefined &&
-      (typeof name !== "string" || name.trim().length < 2)
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Системний нікнейм має містити мінімум 2 символи",
-        },
-        { status: 400 },
-      );
-    }
+    const targetName: string = typeof name === "string" && name.trim().length >= 2 
+      ? name.trim() 
+      : (session.user.name || "Developer");
+      
+    const targetImage: string | null = typeof image === "string" && image.trim() !== "" 
+      ? image.trim() 
+      : null;
 
-    // Чистий, строго типізований об'єкт мутації NoSQL-документа
-    const updateData: Partial<ProfileUpdatePayload> & {
-      image?: string | null;
-    } = {};
-
-    if (name !== undefined) {
-      updateData.name = name.trim();
-    }
-
-    // Якщо image передано (будь-який URL аватарки з інтернету чи CDN) — записуємо його динамічно
-    if (image !== undefined) {
-      updateData.image = image && image.trim() !== "" ? image.trim() : null;
-    }
-
-    // 3. МУТАЦІЯ: Оновлюємо документ користувача безпосередньо в MongoDB Atlas за його Email
-    // RealPrismaHub виконає цей запис у реальну базу даних повністю автоматично
-    const updatedUser = await prisma.user.update({
-      where: { email: session.user.email },
-      data: updateData,
+    console.log(` [ NextOps Pipeline ]: Синхронізація профілю для ${session.user.email}...`);
+    
+    const existingUser: User | null = await prisma.user.findUnique({
+      where: { email: session.user.email }
     });
 
-    // Мапимо результат для повної фронтенд-сумісності з WorkspaceContext додатка
+    let updatedUser: User;
+
+    if (!existingUser) {
+      console.log(` [ MongoDB Atlas ]: Користувача не знайдено в кластері. Авто-ініціалізація ноди...`);
+      
+      const createData: Prisma.UserCreateInput = {
+        email: session.user.email,
+        name: targetName,
+        image: targetImage,
+        role: session.user.role || "DEVELOPER",
+        plan: (session.user.plan === "PRO" ? Plan.PRO : session.user.plan === "ENTERPRISE" ? Plan.ENTERPRISE : Plan.FREE)
+      };
+
+      updatedUser = await prisma.user.create({
+        data: createData
+      });
+    } else {
+      console.log(` [ MongoDB Atlas ]: Ноду знайдено. Виконується безпосередня мутація документів...`);
+      
+      const updateData: Prisma.UserUpdateInput = {
+        name: targetName,
+        image: targetImage
+      };
+
+      updatedUser = await prisma.user.update({
+        where: { email: session.user.email },
+        data: updateData
+      });
+    }
+
     const finalFormattedUser = {
       id: updatedUser.id,
       name: updatedUser.name,
-      image: updatedUser.image || "/images/incognita.jpg",
+      image: updatedUser.image || "/images/incognita.jpg", 
       plan: updatedUser.plan || "FREE",
     };
-
-    console.log(` [ MongoDB Atlas ]: Профіль користувача ${session.user.email} успішно оновлено.`);
 
     return NextResponse.json(
       {
         success: true,
-        message: "Профіль розробника успішно синхронізовано з MongoDB Atlas",
+        message: "Профіль успішно синхронізовано з MongoDB Atlas",
         user: finalFormattedUser,
       },
       { status: 200 },
@@ -84,7 +85,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
     return NextResponse.json(
       {
         success: false,
-        error: "Помилка сервера при оновленні профілю користувача",
+        error: `Помилка сервера: ${err.message}`,
       },
       { status: 500 },
     );

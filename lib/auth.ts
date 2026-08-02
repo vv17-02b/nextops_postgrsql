@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
+import { Plan } from "@prisma/client"; // Нативний енум для суворої типізації
 
 // Розширюємо інтерфейси (User, Session, JWT) для сумісності з NextAuth v5 без any
 declare module "next-auth" {
@@ -110,11 +111,14 @@ export const {
               data: { email: emailStr, name: nameStr, role: targetRole, plan: targetPlan }
             });
           } else {
-            // Якщо користувач є — оновлюємо його роль до актуального статусу за доменом
-            dbUser = await userModel.update({
-              where: { email: emailStr },
-              data: { role: targetRole, plan: targetPlan }
-            });
+            // ПРОДАКШЕН ФІКС: Оновлюємо роль і план ТІЛЬКИ якщо вони реально змінилися в системі,
+            // щоб не затирати поточні name та image, які користувач змінив через профіль
+            if (dbUser.role !== targetRole || dbUser.plan !== targetPlan) {
+              dbUser = await userModel.update({
+                where: { email: emailStr },
+                data: { role: targetRole, plan: targetPlan }
+              });
+            }
           }
           
           return {
@@ -135,7 +139,8 @@ export const {
   session: { strategy: "jwt" },
   trustHost: true,
   callbacks: {
-    async jwt({ token, user }) {
+    // ПРОДАКШЕН ФІКС: Додано строгу обробку тригера оновлення токена (trigger та session)
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         token.name = user.name ?? undefined;
@@ -143,6 +148,13 @@ export const {
         token.plan = user.plan || "FREE";
         token.image = user.image || "/images/incognita.jpg";
       }
+
+      // Перехоплюємо сигнал оновлення профілю з фронтенду та перезаписуємо токен сесії
+      if (trigger === "update" && session) {
+        if (session.name !== undefined) token.name = String(session.name);
+        if (session.image !== undefined) token.image = session.image ? String(session.image) : null;
+      }
+
       return token;
     },
     async session({ session, token }) {

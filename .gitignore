@@ -33,12 +33,12 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# text files (ignore all txt files)
+# TEXT FILES GUARD (Глобальне занесення .txt в ігнор)
 *.txt
-
-# specific files/folders
+**/*.txt
 text.txt
-/text/
+/text.txt
+components/text.txt
 
 # vercel
 .vercel
@@ -52,3 +52,4 @@ node_modules
 
 # prisma
 .prisma
+node_modules/.prisma

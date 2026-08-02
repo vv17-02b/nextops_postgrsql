@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from "react";
 import { useSession } from "next-auth/react"; // Динамічне оновлення сесії без перезавантаження
 import { motion } from "framer-motion";
-import { Settings, FileImage, Trash2, UserPlus, ShieldCheck } from "lucide-react"; // Замінено Image на FileImage для фіксу alt-text
+import { Settings, FileImage, Trash2, UserPlus, ShieldCheck } from "lucide-react";
+import { useAppStore } from "@/config/store"; // Синхронізація із глобальним Zustand-стором
 
 interface StreamUser {
   id: string;
@@ -15,6 +16,8 @@ interface StreamUser {
 
 export default function UserSlider() {
   const { data: session, update: updateSession } = useSession();
+  const setUserSession = useAppStore((state) => state.setUserSession); // Метод запису в Zustand
+
   const [users, setUsers] = useState<StreamUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -27,6 +30,15 @@ export default function UserSlider() {
 
   const currentUserRole = session?.user?.role || "DEVELOPER";
   const isAdmin = currentUserRole === "ADMIN";
+
+  // 🔥 СИНХРОНІЗАЦІЯ З ЗУСТАНДОМ: Як тільки змінюється сесія — оновлюємо глобальний стор платформи
+  useEffect(() => {
+    if (session?.user) {
+      const role = (session.user.role === "ADMIN" ? "ADMIN" : "DEVELOPER") as "DEVELOPER" | "ADMIN";
+      const plan = (session.user.plan || "FREE") as "FREE" | "PRO" | "ENTERPRISE";
+      setUserSession(role, plan);
+    }
+  }, [session, setUserSession]);
 
   // Завантаження живого потоку унікальних інженерів
   const fetchStreamUsers = async () => {
@@ -54,18 +66,21 @@ export default function UserSlider() {
       setNewImage(session.user.image || "");
     }
   }, [session]);
-
   // Хендлер відправки оновлених даних на мутаційний API-шлюз профілю
-  const handleUpdateProfile = async (e: React.FormEvent, shouldDeleteImage = false) => {
-    if (e) e.preventDefault();
-    if (!newName.trim()) return;
+  const handleUpdateProfile = async (e: React.BaseSyntheticEvent, shouldDeleteImage = false) => {
+    // СУВОРЕ БЛОКУВАННЯ: Зупиняємо дефолтну HTML-поведінку форми та перезапуск браузера
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
 
     setIsUpdating(true);
     setProfileError(null);
     const targetImgValue = shouldDeleteImage ? "" : newImage;
 
     try {
-      const res = await fetch("/api/v1/user/profile", {
+      // Запит йде строго на уніфікований роут профілю
+      const res = await fetch("/api/v1/users/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newName, image: targetImgValue }),
@@ -75,9 +90,28 @@ export default function UserSlider() {
 
       if (res.ok && result.success) {
         if (shouldDeleteImage) setNewImage("");
-        // Поновлюємо клієнтську сесію, щоб Навбар моментально відобразив зміни
-        await updateSession({ name: newName, image: targetImgValue });
-        // Перечитуємо стрім з MongoDB Atlas для нескінченної каруселі
+
+        // 1. Оновлюємо куки сесії Next-Auth у фоні (без перезавантаження)
+        await updateSession({
+          name: result.user?.name || newName,
+          image: targetImgValue
+        });
+
+        // 2. Насильно пушимо нові дані у Zustand, щоб Навбар та форми змінилися реактивно
+        const role = (session?.user?.role === "ADMIN" ? "ADMIN" : "DEVELOPER") as "DEVELOPER" | "ADMIN";
+        const plan = (session?.user?.plan || "FREE") as "FREE" | "PRO" | "ENTERPRISE";
+        setUserSession(role, plan);
+
+        // 3. Синхронізуємо картку користувача в поточному скрол-стрімі каруселі
+        setUsers((prevUsers) =>
+          prevUsers.map((u) =>
+            u.id === session?.user?.id
+              ? { ...u, name: result.user?.name || newName, image: targetImgValue || null }
+              : u
+          )
+        );
+
+        // Перечитуємо потік для підтвердження синхронізації з MongoDB
         await fetchStreamUsers();
         setIsSettingsOpen(false);
       } else {
@@ -96,15 +130,21 @@ export default function UserSlider() {
     if (!confirm("Ви впевнені, що хочете видалити цього користувача з системи?")) return;
 
     try {
+      // Оптимістично видаляємо користувача зі стейту React відразу, щоб картка зникла миттєво
+      setUsers((prevUsers) => prevUsers.filter((u) => u.id !== userId));
+
       const res = await fetch(`/api/v1/users?id=${userId}`, {
         method: "DELETE",
       });
-      if (res.ok) {
-        // Миттєво оновлюємо карусель після видалення документа з MongoDB
+
+      if (!res.ok) {
+        // Якщо сервер відхилив запит, повертаємо список назад
         await fetchStreamUsers();
+        console.error("Сервер відхилив видалення ноди.");
       }
     } catch (err) {
       console.error("Помилка видалення користувача:", err);
+      await fetchStreamUsers();
     }
   };
 
@@ -113,7 +153,6 @@ export default function UserSlider() {
     { id: "fallback_core", name: "vlad_engine", role: "SaaS Core Architect", plan: "PRO" as const, image: null }
   ];
   const duplicatedUsers = [...displayUsers, ...displayUsers, ...displayUsers, ...displayUsers];
-
   if (isLoading) {
     return (
       <div className="relative w-full h-[300px] sm:h-[400px] bg-neutral-900/20 border border-neutral-900 rounded-2xl flex items-center justify-center font-mono text-xs text-neutral-500">
@@ -122,6 +161,7 @@ export default function UserSlider() {
       </div>
     );
   }
+
   return (
     <div className="relative w-full bg-neutral-900/20 backdrop-blur-xl border border-white/5 rounded-2xl p-4 overflow-visible shadow-[20px_20px_50px_rgba(0,0,0,0.8)] select-none flex flex-col gap-4">
 
@@ -237,13 +277,12 @@ export default function UserSlider() {
               <label className="block text-[9px] text-neutral-500 uppercase font-black mb-1 select-none">URL-адреса картинки аватара</label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  {/* ФІКС: Змінено тип з 'url' на 'text' для підтримки локальних шляхів /images/ */}
                   <input
                     type="text"
                     value={newImage}
                     onChange={(e) => setNewImage(e.target.value)}
                     className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2 pl-8 text-white focus:outline-none focus:border-cyan-500 font-mono text-[11px] h-[36px] truncate"
-                    placeholder="/images/avatar.jpg або https://example.com"
+                    placeholder="/images/gerel.jpg або https://example.com"
                   />
                   <FileImage className="w-3.5 h-3.5 text-neutral-600 absolute left-2.5 top-3" />
                 </div>
@@ -271,7 +310,7 @@ export default function UserSlider() {
               <button
                 type="button"
                 onClick={() => { setIsSettingsOpen(false); setProfileError(null); }}
-                className="px-3 py-2 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 rounded-lg text-[10px] font-bold uppercase transition cursor-pointer"
+                className="px-3 py-2 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 text-neutral-400 rounded-lg text-[10px] font-bold uppercase transition cursor-pointer"
               >
                 [ ESC ]
               </button>
@@ -287,4 +326,3 @@ export default function UserSlider() {
     </div>
   );
 }
-
