@@ -1,6 +1,6 @@
 import { PrismaClient as OriginalPrismaClient } from "@prisma/client";
 
-// СТРОГІ ИНТЕРФЕЙСИ ДЛЯ СТАТЕЙ ТА ВІДГУКІВ В ПАМ'ЯТІ
+// СТРОГІ ИНТЕРФЕЙСИ ДЛЯ СТАТЕЙ ТА ВІДГУКІВ В ПАМ'ЯТІ (Збережено для зворотньої сумісності)
 interface MockDbItem {
   id: string;
   method: "ARTICLE" | "FEEDBACK";
@@ -25,7 +25,7 @@ interface ApiHistoryCreatePayload {
   status?: number;
 }
 
-// ГАРАНТОВАНІ СУВОРІ ПРОДАКШЕН-ТИПИ ДЛЯ ПРОЕКТІВ (ЗАМІСТЬ ANY ТА UNKNOWN)
+// ГАРАНТОВАНІ СУВОРІ ПРОДАКШЕН-ТИПИ ДЛЯ ПРОЕКТІВ
 interface MockProjectWhereInput {
   id?: string;
   userId?: string;
@@ -54,255 +54,198 @@ interface MockProjectCountArgs {
   where?: MockProjectWhereInput;
 }
 
-// 1. ГЛОБАЛЬНИЙ СТЕРЕЖЕНИЙ СТЕЙТ В ПАМ'ЯТІ (Імітація живої бази даних MongoDB)
-const globalWithMock = global as unknown as { mockDbInMemory: MockDbItem[] };
+// Ініціалізація справжнього клієнта Prisma
+const globalForPrisma = global as unknown as { prisma: OriginalPrismaClient };
+const realPrisma = globalForPrisma.prisma || new OriginalPrismaClient({
+  log: ['error', 'warn']
+});
 
-if (!globalWithMock.mockDbInMemory) {
-  globalWithMock.mockDbInMemory = [
-    {
-      id: "65cb7f4a21de456789abcdef",
-      method: "ARTICLE",
-      url: "Next.js 15 & React 19 в B2B архітектурі",
-      response:
-        "Next.js 15 приносить неймовірну швидкість завдяки оновленому серверному компілятору та повній інтеграції з React 19 Server Actions.",
-      headers: "Vladimir Bessalov",
-      createdAt: new Date(),
-    },
-    {
-      id: "art_2",
-      method: "ARTICLE",
-      url: "Як автоматизувати FinOps для ШІ-агентів",
-      response:
-        "Глибоке NoSQL шліфування агрегаційних запитів дозволяє бачити витрати бюджету та лімітів токенів в реальному часі без блокування потоків.",
-      headers: "System Core",
-      createdAt: new Date(),
-    },
-    {
-      id: "rev_1",
-      method: "FEEDBACK",
-      url: "Олександр К. (Senior Full-Stack)",
-      response:
-        "NextOps Engine заощадив нам тиждень розробки інфраструктури ШІ! Комплектація Boilerplate на вищому рівні, всім рекомендую.",
-      headers: "5 зірок",
-      status: 5,
-      createdAt: new Date(),
-    },
-    {
-      id: "rev_2",
-      method: "FEEDBACK",
-      url: "Марія Д. (AI Co-Founder)",
-      response:
-        "Преміальний дизайн Cyber-Glass виглядає неймовірно. Емулятор Sandbox Postman та інтеграція Stripe пройшла за хвилину.",
-      headers: "5 зірок",
-      status: 5,
-      createdAt: new Date(),
-    },
-  ];
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = realPrisma;
 }
-// 2. КЛАС-ЗАГЛУШКА З ПОВНОЮ ПІДТРИМКОЮ БЕКЕНД-ОПЕРАЦІЙ ТА AUTH.JS V5
-class MockPrismaClient {
+
+// КЛАС-АДАПТЕР, ЯКИЙ НАПРАВЛЯЄ ВСІ ОПЕРАЦІЇ В РЕАЛЬНУ MONGODB ATLAS
+class RealPrismaHub {
   constructor() {
     console.log(
-      "▲ NextOps Engine v1.2: Запущено уніфікований NoSQL Хаб (Аналітика + Статті + Відгуки)",
+      "▲ NextOps Engine v1.2: Запущено уніфікований NoSQL Хаб підключено до MongoDB Atlas ✅",
     );
   }
 
   user = {
-    findMany: async (args?: {
-      where?: { subscriptionActive?: boolean };
-      select?: { plan?: boolean };
-    }) => [
-      {
-        id: "65cb7f4a21de456789abcdef",
-        name: "Vladimir Bessalov",
-        email: "vlad@nextops.io",
-        role: "ADMIN",
-        plan: "PRO",
-        subscriptionActive: true,
-      },
-    ],
-    findUnique: async () => ({
-      id: "65cb7f4a21de456789abcdef",
-      name: "Vladimir Bessalov",
-      email: "vlad@nextops.io",
-      role: "ADMIN",
-      plan: "PRO",
-    }),
-    findFirst: async () => ({
-      id: "65cb7f4a21de456789abcdef",
-      name: "Vladimir Bessalov",
-      email: "vlad@nextops.io",
-      role: "ADMIN",
-      plan: "PRO",
-    }),
-    create: async ({ data }: { data: UserDataPayload }) => ({
-      id: "65cb7f4a21de456789abcdef",
-      ...data,
-    }),
-    update: async (args: {
-      where: { email: string };
-      data: Partial<UserDataPayload>;
-    }) => {
-      console.log(
-        " [Mock-Auth.js]: Оновлення профілю розробника в MongoDB Atlas:",
-        args?.where?.email || "current",
-      );
-      return {
-        id: "65cb7f4a21de456789abcdef",
-        name: "Vladimir Bessalov",
-        email: args.where.email,
-        role: "ADMIN",
-        plan: "PRO",
-        ...args?.data,
-      };
+    findMany: async (args?: any) => {
+      return await realPrisma.user.findMany(args);
+    },
+    findUnique: async (args?: any) => {
+      return await realPrisma.user.findUnique(args);
+    },
+    findFirst: async (args?: any) => {
+      return await realPrisma.user.findFirst(args);
+    },
+    create: async ({ data }: { data: UserDataPayload }) => {
+      return await realPrisma.user.create({
+        data: {
+          email: data.email,
+          name: data.name,
+          role: data.role,
+          plan: "FREE" // Значення за замовчуванням з enum Plan
+        }
+      });
+    },
+    update: async (args: any) => {
+      console.log(" [MongoDB Atlas]: Оновлення профілю розробника:", args?.where?.email || "current");
+      return await realPrisma.user.update(args);
     },
   };
 
   apiHistory = {
-    findMany: async (args?: {
-      where?: { method?: "ARTICLE" | "FEEDBACK" };
-    }) => {
-      const methodFilter = args?.where?.method;
-      const db = globalWithMock.mockDbInMemory;
-      if (methodFilter) {
-        return db.filter((item) => item.method === methodFilter);
-      }
-      return db;
+    findMany: async (args?: { where?: { method?: "ARTICLE" | "FEEDBACK" } }) => {
+      return await realPrisma.apiHistory.findMany({
+        where: args?.where ? { method: args.where.method } : undefined
+      });
     },
     findUnique: async (args: { where: { id: string } }) => {
-      const db = globalWithMock.mockDbInMemory;
-      return db.find((item) => item.id === args?.where?.id) || null;
+      return await realPrisma.apiHistory.findUnique({
+        where: { id: args.where.id }
+      });
     },
     create: async ({ data }: { data: ApiHistoryCreatePayload }) => {
-      const db = globalWithMock.mockDbInMemory;
-      const newRecord: MockDbItem = {
-        id: "mock_" + Math.random().toString(36).substring(2, 11),
-        method: data.method,
-        url: data.url,
-        response: data.response,
-        headers: data.headers,
-        status: data.status || 5,
-        createdAt: new Date(),
-      };
-      db.unshift(newRecord);
-      return newRecord;
+      return await realPrisma.apiHistory.create({
+        data: {
+          method: data.method,
+          url: data.url,
+          response: data.response,
+          headers: data.headers,
+          status: data.status || 200
+        }
+      });
     },
     delete: async (args: { where: { id: string } }) => {
-      const idToDelete = args?.where?.id;
-      const db = globalWithMock.mockDbInMemory;
-      globalWithMock.mockDbInMemory = db.filter(
-        (item) => item.id !== idToDelete,
-      );
-      return { id: idToDelete };
+      return await realPrisma.apiHistory.delete({
+        where: { id: args.where.id }
+      });
     },
   };
+
   project = {
-    findMany: async () => [
-      {
-        id: "prj_1",
-        name: "AI Customer Support",
-        budget: 1500,
-        status: "ACTIVE",
-      },
-      {
-        id: "prj_2",
-        name: "FinOps Tracker Grid",
-        budget: 3200,
-        status: "ACTIVE",
-      },
-    ],
+    findMany: async (args?: any) => {
+      const records = await realPrisma.project.findMany(args);
+      // Мапимо title назад у name для сумісності з вашим фронтендом
+      return records.map((r: any) => ({
+        id: r.id,
+        name: r.title,
+        budget: r.budget,
+        status: r.status,
+        userId: r.userId
+      }));
+    },
 
     findFirst: async (args?: MockProjectFindFirstArgs) => {
-      const targetId = args?.where?.id || "prj_1";
+      const record = await realPrisma.project.findFirst({
+        where: args?.where ? { id: args.where.id, userId: args.where.userId, status: args.where.status } : undefined
+      });
+      if (!record) return null;
       return {
-        id: targetId,
-        name:
-          targetId === "prj_2" ? "FinOps Tracker Grid" : "AI Customer Support",
-        budget: targetId === "prj_2" ? 3200 : 1500,
-        status: "ACTIVE",
-        userId: args?.where?.userId || "65cb7f4a21de456789abcdef",
+        id: record.id,
+        name: record.title,
+        budget: record.budget,
+        status: record.status,
+        userId: record.userId
       };
     },
 
     create: async (args: MockProjectCreateArgs) => {
+      // Отримуємо ADMIN або будь-якого користувача для прив'язки, якщо userId не передано
+      const defaultUser = await realPrisma.user.findFirst();
+      if (!defaultUser) throw new Error("Спочатку створіть користувача (увійдіть через Auth.js) перед створенням проекту!");
+      
+      const record = await realPrisma.project.create({
+        data: {
+          title: args.data.name, // name мапиться в title згідно з schema.prisma
+          budget: Number(args.data.budget),
+          status: args.data.status,
+          userId: defaultUser.id
+        }
+      });
       return {
-        id: "prj_" + Math.random().toString(36).substring(2, 11),
-        name: args.data.name,
-        budget: args.data.budget,
-        status: args.data.status,
+        id: record.id,
+        name: record.title,
+        budget: record.budget,
+        status: record.status
       };
     },
 
     aggregate: async (args?: MockProjectAggregateArgs) => {
-      console.log(
-        " [Database-Aggregation]: Розрахунок лімітів для користувача:",
-        args?.where?.userId || "unknown",
-      );
-      return {
-        _sum: { budget: 4700 },
-        _avg: { budget: 2350 },
-        _count: { _all: 2 },
-        _min: { budget: 1500 },
-        _max: { budget: 3200 },
-      };
+      console.log(" [Database-Aggregation]: Розрахунок реальних лімітів для користувача:", args?.where?.userId || "all");
+      return await realPrisma.project.aggregate({
+        where: args?.where ? { id: args.where.id, userId: args.where.userId, status: args.where.status } : undefined,
+        _sum: { budget: true },
+        _avg: { budget: true },
+        _count: { _all: true },
+        _min: { budget: true },
+        _max: { budget: true }
+      });
     },
 
     count: async (args?: MockProjectCountArgs) => {
-      console.log(
-        " [Database-Count]: Підрахунок проектів за фільтром:",
-        args?.where?.status || "all",
-      );
-      return 2;
+      console.log(" [Database-Count]: Підрахунок реальних проектів за фільтром:", args?.where?.status || "all");
+      return await realPrisma.project.count({
+        where: args?.where ? { id: args.where.id, userId: args.where.userId, status: args.where.status } : undefined
+      });
     },
   };
 
   webhookConfig = {
-    findMany: async () => [
-      {
-        id: "wh_1",
-        url: "https://nextops.engine",
-        active: true,
-        createdAt: new Date(),
-      },
-    ],
-    create: async ({ data }: { data: { url: string; active: boolean } }) => ({
-      id: "wh_" + Math.random().toString(36).substring(2, 11),
-      ...data,
-    }),
-    update: async ({
-      where,
-      data,
-    }: {
-      where: { id: string };
-      data: { url?: string; active?: boolean };
-    }) => ({
-      id: where?.id || "wh_1",
-      ...data,
-    }),
+    findMany: async (args?: any) => {
+      const records = await realPrisma.webhookConfig.findMany(args);
+      return records.map((r: any) => ({
+        id: r.id,
+        url: r.targetUrl,
+        active: r.isActive,
+        createdAt: r.createdAt
+      }));
+    },
+    create: async ({ data }: { data: { url: string; active: boolean } }) => {
+      const defaultUser = await realPrisma.user.findFirst();
+      if (!defaultUser) throw new Error("Необхідний користувач для створення вебхуку!");
+
+      const record = await realPrisma.webhookConfig.create({
+        data: {
+          targetUrl: data.url,      // url -> targetUrl
+          isActive: data.active,    // active -> isActive
+          targetEvent: "AI_TRIGGER", // Дефолтне поле зі схеми
+          userId: defaultUser.id
+        }
+      });
+      return {
+        id: record.id,
+        url: record.targetUrl,
+        active: record.isActive
+      };
+    },
+    update: async ({ where, data }: { where: { id: string }; data: { url?: string; active?: boolean } }) => {
+      const record = await realPrisma.webhookConfig.update({
+        where: { id: where.id },
+        data: {
+          targetUrl: data.url,
+          isActive: data.active
+        }
+      });
+      return {
+        id: record.id,
+        url: record.targetUrl,
+        active: record.isActive
+      };
+    },
   };
 
-  $runCommand = async () => ({
-    ok: 1,
-    db: "MongoDB-Atlas",
-    status: "connected",
-    stats: { collections: 5, documents: 42 },
-  });
+  $runCommand = async (command: any) => {
+    return (realPrisma as any).$runCommand(command);
+  };
 }
 
-// ====================================================================
-//  СУВОРЕ ІНЖЕНЕРНЕ ПЕРЕМИКАННЯ: АВТОНОМНИЙ РЕЖИМ МАКЕТУ У ПАМ'ЯТІ
-// ====================================================================
-
-const globalForPrisma = global as unknown as { prisma: OriginalPrismaClient };
-
-// Примусово вмикаємо наш автономний NoSQL-хаб, щоб обійти помилку SCRAM bad auth
-// Це миттєво розблокує вікна, прибере помилки з терміналу та запустить форми
-export const prisma = new MockPrismaClient() as unknown as OriginalPrismaClient;
-
+// Експортуємо наш адаптер під виглядом оригінального клієнта
+export const prisma = new RealPrismaHub() as unknown as OriginalPrismaClient;
 export const PrismaClient = OriginalPrismaClient;
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
 
 export default prisma;
