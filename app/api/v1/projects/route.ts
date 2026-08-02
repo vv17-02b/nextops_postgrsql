@@ -1,36 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { Prisma, Project, WebhookConfig } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-interface MockProjectItem {
-  id: string;
-  name: string;
-  budget: number;
-  status: string;
-  userId?: string;
-  description?: string | null;
-}
-
-interface MockWebhookConfigItem {
-  id: string;
-  url: string;
-  active: boolean;
-  createdAt: Date;
-  targetUrl?: string;
-}
-
-interface MockUserWithPlan {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  plan: "FREE" | "PRO" | "ENTERPRISE";
-}
-
+// 1. МЕТОД GET: Читання реальних проєктів поточного користувача
 export async function GET(): Promise<Response> {
   try {
     const session = await auth();
@@ -42,23 +19,20 @@ export async function GET(): Promise<Response> {
     }
 
     const currentUserId = session.user.id;
-    const projectModel = prisma.project as unknown as {
-      findMany: (args?: {
-        where?: { userId?: string };
-        orderBy?: { createdAt: string };
-        take?: number;
-      }) => Promise<MockProjectItem[]>;
-    };
 
-    const rawProjects = await projectModel.findMany({
+    // Сувора типізація вибірки з MongoDB Atlas
+    const findArgs: Prisma.ProjectFindManyArgs = {
       where: { userId: currentUserId },
       orderBy: { createdAt: "desc" },
       take: 10,
-    });
+    };
 
-    const projects = rawProjects.map((proj: MockProjectItem) => ({
+    const rawProjects: Project[] = await prisma.project.findMany(findArgs);
+
+    // Мапимо дані під очікування фронтенду воркспейсу
+    const projects = rawProjects.map((proj: Project) => ({
       id: proj.id,
-      title: proj.name,
+      title: proj.title,
       description: proj.description || "Опис відсутній у базі",
       budget: proj.budget,
       status: proj.status,
@@ -70,11 +44,13 @@ export async function GET(): Promise<Response> {
     const err = error as Error;
     console.error(" [ API_PROJECTS_GET_CRASH ]:", err.message);
     return NextResponse.json(
-      { success: false, error: "Помилка сервера" },
+      { success: false, error: "Помилка сервера при отриманні списку проєктів" },
       { status: 500 },
     );
   }
 }
+
+// 2. МЕТОД POST: Безвідмовне створення проєкту з лімітами та тригерами вебхуків
 export async function POST(req: NextRequest): Promise<Response> {
   try {
     const session = await auth();
@@ -91,10 +67,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     if (!title || typeof title !== "string" || title.trim().length < 2) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Назва проєкту має містити мінімум 2 символи",
-        },
+        { success: false, error: "Назва проєкту має містити мінімум 2 символи" },
         { status: 400 },
       );
     }
@@ -110,19 +83,14 @@ export async function POST(req: NextRequest): Promise<Response> {
     const allowedStatuses = ["PLANNING", "ACTIVE", "COMPLETED", "SUSPENDED"];
     const finalStatus = allowedStatuses.includes(status) ? status : "PLANNING";
 
-    const userModel = prisma.user as unknown as {
-      findUnique: (args: {
-        where: { email: string };
-      }) => Promise<MockUserWithPlan | null>;
-    };
-
-    const userExists = await userModel.findUnique({
+    // Шукаємо користувача для перевірки комерційних Freemium лімітів
+    const userExists = await prisma.user.findUnique({
       where: { email: session.user.email },
     });
 
     if (!userExists) {
       return NextResponse.json(
-        { success: false, error: "Користувача не знайдено в кластері" },
+        { success: false, error: "Користувача не знайдено в кластері бази даних" },
         { status: 400 },
       );
     }
@@ -132,20 +100,16 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     // СУВОРІ СЕРВЕРНІ FREEMIUM-БАР'ЄРИ (Для не-адмінів)
     if (currentPlan === "FREE" && currentRole !== "ADMIN") {
-      const projectModelForCount = prisma.project as unknown as {
-        count: (args?: { where?: { userId?: string } }) => Promise<number>;
-      };
-
-      const projectCount = await projectModelForCount.count({
+      const projectCountArgs: Prisma.ProjectCountArgs = {
         where: { userId: currentUserId },
-      });
+      };
+      const projectCount = await prisma.project.count(projectCountArgs);
 
       if (projectCount >= 2) {
         return NextResponse.json(
           {
             success: false,
-            error:
-              "LIMIT_REACHED: На безкоштовному тарифі доступно максимум 2 проєкти. Оновіть план до PRO.",
+            error: "LIMIT_REACHED: На безкоштовному тарифі доступно максимум 2 проєкти. Оновіть план до PRO.",
           },
           { status: 403 },
         );
@@ -155,68 +119,48 @@ export async function POST(req: NextRequest): Promise<Response> {
         return NextResponse.json(
           {
             success: false,
-            error:
-              "LIMIT_REACHED: Комерційний ліміт бюджету для FREE тарифу становить $500. Оновіть план до PRO.",
+            error: "LIMIT_REACHED: Комерційний ліміт бюджету для FREE тарифу становить $500. Оновіть план до PRO.",
           },
           { status: 403 },
         );
       }
     }
-    const projectModelForCreate = prisma.project as unknown as {
-      create: (args: {
-        data: { name: string; budget: number; status: string };
-      }) => Promise<{
-        id: string;
-        name: string;
-        budget: number;
-        status: string;
-      }>;
-    };
 
-    const newProject = await projectModelForCreate.create({
+    // ПРОДАКШЕН ФІКС: Передаємо строго "title", а не "name", та пов'язуємо реляцію ObjectId
+    const createProjectArgs: Prisma.ProjectCreateArgs = {
       data: {
-        name: title.trim(),
+        title: title.trim(),
+        description: description ? description.trim() : "Інструкція розробника",
         budget: parsedBudget,
         status: finalStatus,
-      },
-    });
+        user: {
+          connect: { id: currentUserId }
+        }
+      }
+    };
+
+    const newProject: Project = await prisma.project.create(createProjectArgs);
 
     const fullProject = {
       id: newProject.id,
-      title: newProject.name,
-      description: description ? description.trim() : "Інструкція розробника",
+      title: newProject.title,
+      description: newProject.description || "Інструкція розробника",
       budget: newProject.budget,
       status: newProject.status,
       userId: currentUserId,
     };
 
-    const webhookModel = prisma.webhookConfig as unknown as {
-      findMany: (args?: {
-        where?: { active?: boolean; userId?: string };
-      }) => Promise<MockWebhookConfigItem[]>;
+    // Зчитуємо активні конфіги вебхуків згідно правильних назв полей у схемі
+    const webhookQueryArgs: Prisma.WebhookConfigFindManyArgs = {
+      where: { userId: currentUserId, isActive: true }
     };
-
-    const apiHistoryModel = prisma.apiHistory as unknown as {
-      create: (args: {
-        data: {
-          method: string;
-          url: string;
-          response: string;
-          headers: string;
-          status: number;
-        };
-      }) => Promise<unknown>;
-    };
-
-    const webhookConfigs = await webhookModel.findMany({
-      where: { active: true },
-    });
+    const webhookConfigs: WebhookConfig[] = await prisma.webhookConfig.findMany(webhookQueryArgs);
 
     if (webhookConfigs.length > 0) {
       Promise.all(
-        webhookConfigs.map(async (wh: MockWebhookConfigItem) => {
+        webhookConfigs.map(async (wh: WebhookConfig) => {
           try {
-            const targetUrl = wh.targetUrl || wh.url || "";
+            const targetUrl = wh.targetUrl;
             if (!targetUrl) return;
 
             const response = await fetch(targetUrl, {
@@ -233,31 +177,28 @@ export async function POST(req: NextRequest): Promise<Response> {
               }),
             });
 
-            await apiHistoryModel.create({
+            await prisma.apiHistory.create({
               data: {
                 method: "FEEDBACK",
                 url: targetUrl,
                 response: `[WEBHOOK_SUCCESS] Код: ${response.status}. Проєкт: ${fullProject.title}`,
                 headers: `Status: ${response.status}`,
                 status: response.status,
-              },
+              }
             });
           } catch (whError: unknown) {
             const errWh = whError as Error;
-            const fallbackUrl = wh.targetUrl || wh.url || "unknown_gateway";
-            console.error(
-              `🚨 Не вдалося надіслати вебхук на ${fallbackUrl}:`,
-              errWh.message,
-            );
+            const fallbackUrl = wh.targetUrl || "unknown_gateway";
+            console.error(`🚨 Не вдалося надіслати вебхук на ${fallbackUrl}:`, errWh.message);
 
-            await apiHistoryModel.create({
+            await prisma.apiHistory.create({
               data: {
                 method: "FEEDBACK",
                 url: fallbackUrl,
                 response: `[WEBHOOK_CRASH] Збій маршрутизації: ${errWh.message || "Сервер недоступний"}`,
                 headers: "Status: 502",
                 status: 502,
-              },
+              }
             });
           }
         }),
@@ -272,7 +213,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const err = error as Error;
     console.error(" [ API_PROJECTS_POST_CRASH ]:", err.message);
     return NextResponse.json(
-      { success: false, error: "Помилка сервера" },
+      { success: false, error: "Внутрішня помилка сервера при створенні проєкту" },
       { status: 500 },
     );
   }
