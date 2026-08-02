@@ -1,8 +1,7 @@
-// C:\Users\Admin\Documents\my-unified-work-space\components\Home\UserSlider.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useSession } from "next-auth/react"; // Для динамічного оновлення сесії без перезавантаження
+import { useSession } from "next-auth/react"; // Динамічне оновлення сесії без перезавантаження
 import { motion } from "framer-motion";
 import { Settings, FileImage, Trash2, UserPlus, ShieldCheck } from "lucide-react"; // Замінено Image на FileImage для фіксу alt-text
 
@@ -25,6 +24,9 @@ export default function UserSlider() {
   const [newImage, setNewImage] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+
+  const currentUserRole = session?.user?.role || "DEVELOPER";
+  const isAdmin = currentUserRole === "ADMIN";
 
   // Завантаження живого потоку унікальних інженерів
   const fetchStreamUsers = async () => {
@@ -52,7 +54,6 @@ export default function UserSlider() {
       setNewImage(session.user.image || "");
     }
   }, [session]);
-
   // Хендлер відправки оновлених даних на мутаційний API-шлюз профілю
   const handleUpdateProfile = async (e: React.FormEvent, shouldDeleteImage = false) => {
     if (e) e.preventDefault();
@@ -87,7 +88,24 @@ export default function UserSlider() {
       setIsUpdating(false);
     }
   };
-// Продовження файлу C:\Users\Admin\Documents\my-unified-work-space\components\Home\UserSlider.tsx
+
+  // 🗑️ ХЕНДЛЕР АДМІНСЬКОГО ВИДАЛЕННЯ КОРИСТУВАЧА ЗІ СЛАЙДЕРА
+  const handleDeleteUser = async (userId: string) => {
+    if (!isAdmin) return;
+    if (!confirm("Ви впевнені, що хочете видалити цього користувача з системи?")) return;
+
+    try {
+      const res = await fetch(`/api/v1/users?id=${userId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        // Миттєво оновлюємо карусель після видалення документа з MongoDB
+        await fetchStreamUsers();
+      }
+    } catch (err) {
+      console.error("Помилка видалення користувача:", err);
+    }
+  };
 
   // Дублюємо масив для створення ефекту безшовного нескінченного скролу
   const displayUsers = users.length > 0 ? users : [
@@ -103,10 +121,9 @@ export default function UserSlider() {
       </div>
     );
   }
-
   return (
     <div className="relative w-full bg-neutral-900/20 backdrop-blur-xl border border-white/5 rounded-2xl p-4 overflow-visible shadow-[20px_20px_50px_rgba(0,0,0,0.8)] select-none flex flex-col gap-4">
-      
+
       {/* Шапка та кнопка виклику панелі кастомізації */}
       <div className="flex justify-between items-center border-b border-neutral-900 pb-2 select-none font-mono text-xs">
         <span className="text-neutral-400 font-bold uppercase tracking-wider">// PLATFORM_LIVE_STREAM</span>
@@ -127,7 +144,7 @@ export default function UserSlider() {
         <div className="absolute top-0 left-0 w-full h-10 bg-gradient-to-b from-neutral-950 to-transparent z-10 pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-full h-10 bg-gradient-to-t from-neutral-950 to-transparent z-10 pointer-events-none" />
 
-        <motion.div 
+        <motion.div
           className="flex flex-col gap-3"
           animate={{ y: [0, -450] }}
           transition={{
@@ -137,7 +154,6 @@ export default function UserSlider() {
           }}
         >
           {duplicatedUsers.map((user, idx) => {
-            // 🔥 ФІКС 404: Нативно використовуємо твій файл man.jpg як базове джерело
             let avatarSrc = "/images/man.jpg";
 
             if (user.image && user.image.trim() !== "") {
@@ -145,33 +161,43 @@ export default function UserSlider() {
             }
 
             return (
-              <div 
+              <div
                 key={`${user.id}-${idx}`}
-                className="flex items-center gap-3 bg-neutral-900/40 border border-neutral-800/60 p-3.5 rounded-xl hover:border-blue-500/20 transition-all duration-300 text-left"
+                className="flex items-center gap-3 bg-neutral-900/40 border border-neutral-800/60 p-3.5 rounded-xl hover:border-blue-500/20 transition-all duration-300 text-left relative group overflow-hidden"
               >
                 {/* Аватар розробника */}
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neutral-950 to-neutral-900 border border-neutral-800 flex items-center justify-center text-xs font-black uppercase text-blue-500 shrink-0 font-mono overflow-hidden">
-                  <img 
-                    src={avatarSrc} 
-                    alt={user.name ? `${user.name} profile node` : "Platform engineer avatar"} 
-                    className="w-full h-full object-cover object-center brightness-95" 
-                    // 🔥 ФІКС КРАШУ КOНСOЛІ: Якщо зовнішнє посилання б'є помилку 404, моментально підміняємо на man.jpg
+                  <img
+                    src={avatarSrc}
+                    alt={user.name ? `${user.name} profile node` : "Platform engineer avatar"}
+                    className="w-full h-full object-cover object-center brightness-95"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = "/images/man.jpg";
                     }}
                   />
                 </div>
-                
+
                 <div className="flex flex-col min-w-0 flex-1">
                   <span className="text-xs font-black text-neutral-200 font-mono truncate">@{user.name || "anonymous"}</span>
                   <span className="text-[10px] text-neutral-500 font-sans mt-0.5 truncate">{user.role || "Platform Engineer"}</span>
                 </div>
 
-                <span className={`text-[9px] font-black tracking-widest uppercase px-2 py-0.5 rounded-md border shrink-0 font-mono ${
-                  user.plan === "PRO" || user.plan === "ENTERPRISE"
-                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.05)]" 
+                {/* Адмінська кнопка миттєвого видалення ноди користувача */}
+                {isAdmin && user.id !== "fallback_core" && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleDeleteUser(user.id); }}
+                    className="mr-2 p-1.5 bg-red-500/10 hover:bg-red-500 border border-red-500/20 hover:border-red-500 text-red-400 hover:text-white rounded-lg transition-all duration-200 cursor-pointer opacity-0 group-hover:opacity-100 shadow-md shrink-0 active:scale-90"
+                    title="Видалити користувача з системи"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+
+                <span className={`text-[9px] font-black tracking-widest uppercase px-2 py-0.5 rounded-md border shrink-0 font-mono ${user.plan === "PRO" || user.plan === "ENTERPRISE"
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.05)]"
                     : "bg-neutral-950 text-neutral-500 border-neutral-850"
-                }`}>
+                  }`}>
                   {user.plan}
                 </span>
               </div>
@@ -180,9 +206,7 @@ export default function UserSlider() {
         </motion.div>
       </div>
 
-      {/* =================================================================
-               🎨 ІНТЕРАКТИВНА ЦИФРОВА ПАНЕЛЬ НАЛАШТУВАНЬ (CYBER-GLASS ФOРМА)
-         ================================================================= */}
+      {/* Панель налаштувань профілю (Cyber-Glass форма) */}
       {isSettingsOpen && (
         <div className="absolute top-10 inset-x-0 bg-neutral-950/95 border border-cyan-500/30 p-4 rounded-xl shadow-2xl z-40 animate-fadeIn font-mono text-xs">
           <h4 className="text-neutral-300 font-bold uppercase tracking-wider mb-3 flex items-center gap-1.5 text-[11px] border-b border-neutral-900 pb-1.5 select-none">
@@ -198,9 +222,9 @@ export default function UserSlider() {
           <form onSubmit={(e) => handleUpdateProfile(e, false)} className="space-y-3 text-left">
             <div>
               <label className="block text-[9px] text-neutral-500 uppercase font-black mb-1 select-none">Новий системний нікнейм</label>
-              <input 
-                type="text" 
-                value={newName} 
+              <input
+                type="text"
+                value={newName}
                 onChange={(e) => setNewName(e.target.value.replace(/\s+/g, ""))}
                 className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2 text-white focus:outline-none focus:border-cyan-500 font-mono h-[36px]"
                 required
@@ -212,14 +236,13 @@ export default function UserSlider() {
               <label className="block text-[9px] text-neutral-500 uppercase font-black mb-1 select-none">URL-адреса картинки аватара</label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <input 
-                    type="url" 
-                    value={newImage} 
+                  <input
+                    type="url"
+                    value={newImage}
                     onChange={(e) => setNewImage(e.target.value)}
                     className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2 pl-8 text-white focus:outline-none focus:border-cyan-500 font-mono text-[11px] h-[36px] truncate"
                     placeholder="https://example.com"
                   />
-                  
                   <FileImage className="w-3.5 h-3.5 text-neutral-600 absolute left-2.5 top-3" />
                 </div>
                 {session?.user?.image && (
@@ -259,7 +282,6 @@ export default function UserSlider() {
           </div>
         </div>
       )}
-
     </div>
   );
 }
