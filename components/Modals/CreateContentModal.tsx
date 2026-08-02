@@ -85,7 +85,7 @@ export default function CreateContentModal({ isOpen, type, onCloseAction, onSucc
   };
   return (
     // ФІКС ПОЗИЦІОНУВАННЯ: Додано фіксований оверлей fixed inset-0 та z-[999] для абсолютного центру поверх Навбара
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-neutral-950/80 backdrop-blur-xl p-4 animate-fadeIn select-none">
+    <div className="relatev  inset-0 z-[999] flex items-center justify-center bg-neutral-950/80 backdrop-blur-xl p-4 animate-fadeIn select-none">
       
       {/* Клієнтська Cyber-Glass картка вікна */}
       <div className="relative w-full max-w-lg bg-neutral-900/90 border border-white/10 rounded-2xl p-6 shadow-[0_30px_100px_rgba(0,0,0,0.8)] flex flex-col max-h-[90vh] overflow-y-auto text-white transition-all duration-300">

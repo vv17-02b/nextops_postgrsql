@@ -54,6 +54,7 @@ export default function UserSlider() {
       setNewImage(session.user.image || "");
     }
   }, [session]);
+
   // Хендлер відправки оновлених даних на мутаційний API-шлюз профілю
   const handleUpdateProfile = async (e: React.FormEvent, shouldDeleteImage = false) => {
     if (e) e.preventDefault();
@@ -195,8 +196,8 @@ export default function UserSlider() {
                 )}
 
                 <span className={`text-[9px] font-black tracking-widest uppercase px-2 py-0.5 rounded-md border shrink-0 font-mono ${user.plan === "PRO" || user.plan === "ENTERPRISE"
-                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.05)]"
-                    : "bg-neutral-950 text-neutral-500 border-neutral-850"
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.05)]"
+                  : "bg-neutral-950 text-neutral-500 border-neutral-850"
                   }`}>
                   {user.plan}
                 </span>
@@ -236,12 +237,13 @@ export default function UserSlider() {
               <label className="block text-[9px] text-neutral-500 uppercase font-black mb-1 select-none">URL-адреса картинки аватара</label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
+                  {/* ФІКС: Змінено тип з 'url' на 'text' для підтримки локальних шляхів /images/ */}
                   <input
-                    type="url"
+                    type="text"
                     value={newImage}
                     onChange={(e) => setNewImage(e.target.value)}
                     className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2 pl-8 text-white focus:outline-none focus:border-cyan-500 font-mono text-[11px] h-[36px] truncate"
-                    placeholder="https://example.com"
+                    placeholder="/images/avatar.jpg або https://example.com"
                   />
                   <FileImage className="w-3.5 h-3.5 text-neutral-600 absolute left-2.5 top-3" />
                 </div>
@@ -285,3 +287,4 @@ export default function UserSlider() {
     </div>
   );
 }
+

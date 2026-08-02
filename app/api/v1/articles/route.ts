@@ -18,7 +18,6 @@ interface MockArticleDbItem {
 // 1. МЕТОД GET: Зчитування та правильне мапування статей з хмари MongoDB Atlas
 export async function GET(): Promise<Response> {
   try {
-    // Приводимо модель до розширеного типу, щоб обійти жорсткі обмеження Mock-клієнта Prisma на orderBy/take
     const historyModel = prisma.apiHistory as unknown as {
       findMany: (args?: {
         where?: { method?: "ARTICLE" | "FEEDBACK" };
@@ -33,7 +32,6 @@ export async function GET(): Promise<Response> {
       take: 10,
     });
 
-    // ЧИСТИЙ ФІКС ТИПІЗАЦІЇ: Використовуємо строгий інтерфейс замість 'any'
     const formattedArticles = articles.map((art: MockArticleDbItem) => ({
       id: art.id,
       title: art.url || "Our path to perfection",
@@ -55,21 +53,33 @@ export async function GET(): Promise<Response> {
     );
   }
 }
-// 2. МЕТОД POST: Публікація нових маніфестів
+
+// 2. МЕТОД POST: Публікація нових маніфестів з розумною адаптацією полів
 export async function POST(req: NextRequest): Promise<Response> {
   try {
     const bodyData = await req.json().catch(() => ({}));
-    const { title, content, author } = bodyData;
+    
+    // Логування для точного аналізу вхідних даних із CreateContentModal
+    console.log(" [ API_ARTICLES_POST_INPUT ]:", bodyData);
 
+    // Розумний мапінг на випадок, якщо фронтенд надсилає альтернативні назви полів (name, text, etc.)
+    const title = bodyData.title || bodyData.name || bodyData.url;
+    const content = bodyData.content || bodyData.text || bodyData.response;
+    const author = bodyData.author || bodyData.headers || bodyData.user || "System Core";
+
+    // Перевірка наявності всіх обов'язкових компонентів після мапінгу
     if (!title || !content || !author) {
+      console.warn(" ⚠️ [ API_ARTICLES_POST_400 ]: Валідація провалена. Відсутні обов'язкові поля.", { title, content, author });
       return NextResponse.json(
-        { success: false, error: "Всі поля обов'язакові" },
+        { 
+          success: false, 
+          error: "Всі поля (title, content, author) обов'язкові для заповнення!" 
+        },
         { status: 400 },
       );
     }
 
-    // Синхронізація: Передаємо тільки ті поля, які суворо прописані в нашому 
-    // ApiHistoryCreatePayload
+    // Запис у реальну колекцію ApiHistory в MongoDB Atlas
     const newArticle = await prisma.apiHistory.create({
       data: {
         method: "ARTICLE",
@@ -79,6 +89,8 @@ export async function POST(req: NextRequest): Promise<Response> {
         status: 201,
       },
     });
+
+    console.log(" [ API_ARTICLES_POST_SUCCESS ]: Статтю успішно збережено в MongoDB Atlas.");
 
     return NextResponse.json(
       {
@@ -116,11 +128,8 @@ export async function DELETE(req: NextRequest): Promise<Response> {
       );
     }
 
-    // Приводимо модель до розширеного типу для сумісності з пошуком findUnique
     const historyModel = prisma.apiHistory as unknown as {
-      findUnique: (args: {
-        where: { id: string };
-      }) => Promise<MockArticleDbItem | null>;
+      findUnique: (args: { where: { id: string }; }) => Promise<MockArticleDbItem | null>;
       delete: (args: { where: { id: string } }) => Promise<{ id: string }>;
     };
 

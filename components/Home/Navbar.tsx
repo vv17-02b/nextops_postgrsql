@@ -77,7 +77,8 @@ export default function Navbar() {
     }
   };
   return (
-    <header className="w-full bg-neutral-950/70 backdrop-blur-xl border-b border-white/5 sticky top-0 z-40 select-none font-mono text-sm">
+    <header className="relatev w-full bg-neutral-950/70 backdrop-blur-xl border-b
+     border-white/5 sticky top-0 z-40 select-none font-mono text-sm">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
 
         {/* 1. Логотип системи */}
