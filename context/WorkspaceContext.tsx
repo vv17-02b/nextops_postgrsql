@@ -1,4 +1,3 @@
-// C:\Users\Admin\Documents\my-unified-work-space\context\WorkspaceContext.tsx
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, Suspense } from "react";
@@ -59,10 +58,13 @@ function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Витягуємо стабільний ID користувача для запобігання ре-рендерів у useCallback
+  const currentUserId = session?.user?.id;
+
   // Головна функція синхронізації 4-х інженерних вікон матриці
   const refreshWorkspace = useCallback(async () => {
     // ЗАХИСТ СЕСІЇ: Блокуємо передчасні запити 401 до API під час завантаження куків
-    if (status !== "authenticated" || !session?.user?.id) {
+    if (status !== "authenticated" || !currentUserId) {
       return;
     }
 
@@ -117,7 +119,7 @@ function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
         if (fetchedProjects.length > 0) {
           setActiveProject((prev) => {
             const stillExists = fetchedProjects.find((p: Project) => p.id === prev?.id);
-            return stillExists || fetchedProjects[0]; // Виправлено: беремо перший індекс [0] замість усього масиву
+            return stillExists || fetchedProjects[0];
           });
         } else {
           setActiveProject(null);
@@ -128,7 +130,8 @@ function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [status, session, searchQuery, searchTarget]);
+  // ФІКС 2026: Замінено весь об'єкт session на примітив currentUserId для стабілізації посилання функції
+  }, [status, currentUserId, searchQuery, searchTarget]);
 
   // Запускаємо фетч тільки після підтвердження авторизації, уникаючи дублювання та Race Condition
   useEffect(() => {
@@ -157,7 +160,7 @@ function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
 }
 
 // =================================================================
-// 🛡️ РУТОВИЙ ПРОВАЙДЕР З КУЛЕНЕПРОБИВНОЮ ОГОРТКОЮ SUSPENSE (ФІКС ДЛЯ YARN BUILD)
+//  РУТОВИЙ ПРОВАЙДЕР З КУЛЕНЕПРОБИВНОЮ ОГОРТКОЮ SUSPENSE (ФІКС ДЛЯ YARN BUILD)
 // =================================================================
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   return (

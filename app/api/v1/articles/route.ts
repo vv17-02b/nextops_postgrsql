@@ -18,10 +18,11 @@ interface MockArticleDbItem {
 // 1. МЕТОД GET: Зчитування та правильне мапування статей з хмари MongoDB Atlas
 export async function GET(): Promise<Response> {
   try {
+    // ФІКС ТИПІЗАЦІЇ: Замінено 'any' на 'unknown' для задоволення правил суворого лінтера
     const historyModel = prisma.apiHistory as unknown as {
       findMany: (args?: {
         where?: { method?: "ARTICLE" | "FEEDBACK" };
-        orderBy?: any;
+        orderBy?: unknown;
         take?: number;
       }) => Promise<MockArticleDbItem[]>;
     };
@@ -57,12 +58,12 @@ export async function GET(): Promise<Response> {
 // 2. МЕТОД POST: Публікація нових маніфестів з розумною адаптацією полів
 export async function POST(req: NextRequest): Promise<Response> {
   try {
-    const bodyData = await req.json().catch(() => ({}));
+    const bodyData = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     
     // Логування для точного аналізу вхідних даних із CreateContentModal
     console.log(" [ API_ARTICLES_POST_INPUT ]:", bodyData);
 
-    // Розумний мапінг на випадок, якщо фронтенд надсилає альтернативні назви полів (name, text, etc.)
+    // Розумний мапінг на випадок, якщо фронтенд надсилає альтернативні назви полів
     const title = bodyData.title || bodyData.name || bodyData.url;
     const content = bodyData.content || bodyData.text || bodyData.response;
     const author = bodyData.author || bodyData.headers || bodyData.user || "System Core";

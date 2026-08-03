@@ -97,6 +97,7 @@ model Project {
   updatedAt   DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, status])
 }
 
 // 3. НОВА МОДЕЛЬ ДЛЯ АВТОМАТИЗАЦІЇ ТА ВЕБХУКІВ (Вікно №2)
