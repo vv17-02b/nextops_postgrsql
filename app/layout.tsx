@@ -5,7 +5,6 @@ import "./globals.css";
 import SessionProvider from "@/components/SessionProvider";
 import { WorkspaceProvider } from "@/context/WorkspaceContext";
 
-// Ініціалізація преміальних інженерних шрифтів Rubik з ефектом swap для прискорення LCP метрики Google
 const rubik = localFont({
   src: [
     { path: "../public/fonts/Rubik-Regular.woff2", weight: "400", style: "normal" },
@@ -64,9 +63,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    // ФІКС ЛOКАЛІЗАЦІЇ: suppressHydrationWarning захищає від конфліктів Zustand мовних пакетів
     <html lang="uk" suppressHydrationWarning>
-      <body className={`${rubik.className} antialiased min-h-screen flex flex-col bg-neutral-950 text-white`}>
+      <body className={`${rubik.className} antialiased min-h-screen
+       flex flex-col bg-neutral-950 text-white`}>
         <SessionProvider>
           <WorkspaceProvider>
             {children}

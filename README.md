@@ -1,4 +1,4 @@
-# 🚀 NextOps Engine v1.2 // Unified SaaS Hub & AI Orchestrator
+#  NextOps Engine v1.2 // Unified SaaS Hub & AI Orchestrator
 
 Преміальна B2B SaaS-екосистема промислового рівня для керування автономними ШІ-агентами, автоматизованого тестування HTTP-запитів та низькорівневої оркестрації багатомаршрутних Zapier-style вебхуків з інтегрованою FinOps-аналітикою бюджетів у реальному часі.
 

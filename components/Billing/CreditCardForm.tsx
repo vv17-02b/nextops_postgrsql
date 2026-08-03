@@ -87,15 +87,18 @@ export default function CreditCardForm({ planType, price, onSuccess }: CreditCar
     } catch (error: unknown) {
       // ФІКС БІЛДY: Знищено тип 'any', замінено на суворий TypeScript-стандарт
       const err = error as Error;
-      console.error("🚨 [CreditCardForm Submit Error]:", err.message);
+      console.error(" [CreditCardForm Submit Error]:", err.message);
       setErrorMessage("Не вдалося встановити зв'язок з платіжним сервером.");
       setIsProcessing(false);
     }
   };
 
   return (
-    <div className="w-full bg-neutral-950 p-5 rounded-2xl border border-neutral-900 shadow-2xl relative select-none text-left">
-      <div className="absolute top-3 right-3 text-[9px] font-black uppercase text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+    <div className="w-full bg-neutral-950 p-5 rounded-2xl border border-neutral-900 
+    shadow-2xl relative select-none text-left">
+      <div className="absolute top-3 right-3 text-[9px] font-black 
+      uppercase text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 
+      py-0.5 rounded-full flex items-center gap-1">
         <Sparkles className="w-2.5 h-2.5" /> SECURE_GATEWAY
       </div>
 
@@ -104,7 +107,8 @@ export default function CreditCardForm({ planType, price, onSuccess }: CreditCar
       </h3>
 
       {errorMessage && (
-        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-mono rounded-xl flex items-center gap-2">
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20
+         text-red-400 text-xs font-mono rounded-xl flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{errorMessage}</span>
         </div>
@@ -112,26 +116,32 @@ export default function CreditCardForm({ planType, price, onSuccess }: CreditCar
 
       <form onSubmit={handlePaymentSubmit} className="space-y-3.5 font-mono text-xs">
         <div>
-          <label className="block text-neutral-500 font-bold uppercase mb-1 text-[10px]">Власник карти (ПІБ англійською)</label>
+          <label className="block text-neutral-500 font-bold uppercase mb-1 text-[10px]">
+            Власник карти (ПІБ англійською)
+            </label>
           <input
             type="text"
             placeholder="VLADIMIR UMAN"
             value={name}
             // ФІКС ВАЛІДАЦІЇ: Дозволяємо лише латинські літери та пробіли, обмежуємо довжину
             onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z\s]/g, "").toUpperCase().substring(0, 30))}
-            className="w-full p-3 rounded-xl bg-neutral-900 border border-neutral-800 text-white focus:outline-none focus:border-blue-500 text-xs font-mono h-[44px]"
+            className="w-full p-3 rounded-xl bg-neutral-900 border border-neutral-800
+             text-white focus:outline-none focus:border-blue-500 text-xs font-mono h-[44px]"
             required
           />
         </div>
 
         <div>
-          <label className="block text-neutral-500 font-bold uppercase mb-1 text-[10px]">Номер кредитної карти</label>
+          <label className="block text-neutral-500 font-bold uppercase mb-1 text-[10px]">
+            Номер кредитної карти
+            </label>
           <input
             type="text"
             placeholder="0000 0000 0000 0000"
             value={cardNumber}
             onChange={handleCardChange}
-            className="w-full p-3 rounded-xl bg-neutral-900 border border-neutral-800 text-white focus:outline-none focus:border-blue-500 text-xs font-mono tracking-widest h-[44px]"
+            className="w-full p-3 rounded-xl bg-neutral-900 border border-neutral-800
+             text-white focus:outline-none focus:border-blue-500 text-xs font-mono tracking-widest h-[44px]"
             required
           />
         </div>

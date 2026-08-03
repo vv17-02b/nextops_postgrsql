@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 // Строгий інтерфейс елемента бази даних для повної ліквідації 'any'
 interface MockArticleDbItem {
   id: string;
-  method: "ARTICLE" | "FEEDBACK";
+  method: string;
   url: string;
   response: string;
   headers: string;
@@ -15,13 +15,45 @@ interface MockArticleDbItem {
   createdAt: Date;
 }
 
-// 1. МЕТОД GET: Зчитування та правильне мапування статей з хмари MongoDB Atlas
+/**
+ * 🛡️ ФУНКЦІЯ ОЧИЩЕННЯ ТА ПАРСИНГУ ЛОГІВ POSTMAN
+ * Розпакує сирий JSON із бази даних і витягне людський текст маніфесту
+ */
+function cleanArticleContent(rawContent: string): string {
+  if (!rawContent) return "No content provided";
+  const trimmed = rawContent.trim();
+  
+  // Якщо контент не схожий на JSON-об'єкт, повертаємо як є
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return trimmed;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    
+    // Сценарій А: Всередині логу лежить об'єкт article
+    if (parsed.article && typeof parsed.article === "object") {
+      const nested = parsed.article as Record<string, unknown>;
+      if (nested.content) return String(nested.content);
+    }
+    
+    // Сценарій Б: Об'єкт має пряме поле content або response
+    if (parsed.content) return String(parsed.content);
+    if (parsed.response) return String(parsed.response);
+    if (parsed.message) return String(parsed.message);
+    
+    return trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
+// 1. МЕТОД GET: Зчитування, фільтрація та інтелектуальне очищення логів маніфестів
 export async function GET(): Promise<Response> {
   try {
-    // ФІКС ТИПІЗАЦІЇ: Замінено 'any' на 'unknown' для задоволення правил суворого лінтера
     const historyModel = prisma.apiHistory as unknown as {
       findMany: (args?: {
-        where?: { method?: "ARTICLE" | "FEEDBACK" };
+        where?: { method?: string };
         orderBy?: unknown;
         take?: number;
       }) => Promise<MockArticleDbItem[]>;
@@ -33,13 +65,23 @@ export async function GET(): Promise<Response> {
       take: 10,
     });
 
-    const formattedArticles = articles.map((art: MockArticleDbItem) => ({
-      id: art.id,
-      title: art.url || "Our path to perfection",
-      content: art.response || "No content provided",
-      author: art.headers || "System Core",
-      createdAt: art.createdAt.toISOString(),
-    }));
+    const formattedArticles = articles.map((art: MockArticleDbItem) => {
+      // Очищаємо вміст та автора від можливого шкідливого напливу JSON-структур Postman
+      const safeContent = cleanArticleContent(art.response);
+      let safeAuthor = String(art.headers || "System Core").trim();
+
+      if (safeAuthor.startsWith("{")) {
+        safeAuthor = "Postman Proxy Engine";
+      }
+
+      return {
+        id: art.id,
+        title: art.url && !art.url.startsWith("http") ? art.url : "Маніфест тестування системи NextOps",
+        content: safeContent,
+        author: safeAuthor,
+        createdAt: art.createdAt.toISOString(),
+      };
+    });
 
     return NextResponse.json(
       { success: true, articles: formattedArticles },
@@ -47,7 +89,7 @@ export async function GET(): Promise<Response> {
     );
   } catch (error: unknown) {
     const err = error as Error;
-    console.error(" [ API_ARTICLES_GET_CRASH ]:", err.message);
+    console.error("❌ [ API_ARTICLES_GET_CRASH ]:", err.message);
     return NextResponse.json(
       { success: false, error: "Помилка кластера при читанні статей" },
       { status: 500 },
@@ -59,28 +101,19 @@ export async function GET(): Promise<Response> {
 export async function POST(req: NextRequest): Promise<Response> {
   try {
     const bodyData = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    
-    // Логування для точного аналізу вхідних даних із CreateContentModal
     console.log(" [ API_ARTICLES_POST_INPUT ]:", bodyData);
 
-    // Розумний мапінг на випадок, якщо фронтенд надсилає альтернативні назви полів
     const title = bodyData.title || bodyData.name || bodyData.url;
     const content = bodyData.content || bodyData.text || bodyData.response;
     const author = bodyData.author || bodyData.headers || bodyData.user || "System Core";
 
-    // Перевірка наявності всіх обов'язкових компонентів після мапінгу
     if (!title || !content || !author) {
-      console.warn(" ⚠️ [ API_ARTICLES_POST_400 ]: Валідація провалена. Відсутні обов'язкові поля.", { title, content, author });
       return NextResponse.json(
-        { 
-          success: false, 
-          error: "Всі поля (title, content, author) обов'язкові для заповнення!" 
-        },
+        { success: false, error: "Всі поля (title, content, author) обов'язкові!" },
         { status: 400 },
       );
     }
 
-    // Запис у реальну колекцію ApiHistory в MongoDB Atlas
     const newArticle = await prisma.apiHistory.create({
       data: {
         method: "ARTICLE",
@@ -108,11 +141,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   } catch (error: unknown) {
     const err = error as Error;
-    console.error(" [ API_ARTICLES_POST_CRASH ]:", err.message);
-    return NextResponse.json(
-      { success: false, error: "Помилка сервера при публікації" },
-      { status: 500 },
-    );
+    console.error("❌ [ API_ARTICLES_POST_CRASH ]:", err.message);
+    return NextResponse.json({ success: false, error: "Помилка сервера при публікації" }, { status: 500 });
   }
 }
 
@@ -123,10 +153,7 @@ export async function DELETE(req: NextRequest): Promise<Response> {
     const id = searchParams.get("id");
 
     if (!id) {
-      return NextResponse.json(
-        { success: false, error: "Ідентифікатор статті (id) обов'язковий" },
-        { status: 400 },
-      );
+      return NextResponse.json({ success: false, error: "Ідентифікатор статті (id) обов'язковий" }, { status: 400 });
     }
 
     const historyModel = prisma.apiHistory as unknown as {
@@ -134,31 +161,18 @@ export async function DELETE(req: NextRequest): Promise<Response> {
       delete: (args: { where: { id: string } }) => Promise<{ id: string }>;
     };
 
-    const existingArticle = await historyModel.findUnique({
-      where: { id },
-    });
+    const existingArticle = await historyModel.findUnique({ where: { id } });
 
     if (!existingArticle) {
-      return NextResponse.json(
-        { success: false, error: "Статтю не знайдено у хмарному кластері" },
-        { status: 404 },
-      );
+      return NextResponse.json({ success: false, error: "Статтю не знайдено у хмарному кластері" }, { status: 404 });
     }
 
-    await historyModel.delete({
-      where: { id },
-    });
+    await historyModel.delete({ where: { id } });
 
-    return NextResponse.json(
-      { success: true, message: "Статтю успішно стерто з репозиторію" },
-      { status: 200 },
-    );
+    return NextResponse.json({ success: true, message: "Статтю успішно стерто з репозиторію" }, { status: 200 });
   } catch (error: unknown) {
     const err = error as Error;
-    console.error(" [ API_ARTICLES_DELETE_CRASH ]:", err.message);
-    return NextResponse.json(
-      { success: false, error: "Помилка сервера при видаленні статті" },
-      { status: 500 },
-    );
+    console.error("❌ [ API_ARTICLES_DELETE_CRASH ]:", err.message);
+    return NextResponse.json({ success: false, error: "Помилка сервера при видаленні статті" }, { status: 500 });
   }
 }

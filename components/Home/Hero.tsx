@@ -7,10 +7,10 @@ import UserSlider from "./UserSlider";
 import PlatformPreview from "./PlatformPreview";
 
 export default function Hero() {
-  const { t } = useAppStore(); // Глобальний переклад для всього блоку
-
+  const { t } = useAppStore();
   return (
-    <section className="w-full max-w-7xl mx-auto px-4 sm:px-8 pt-4 pb-12 flex flex-col space-y-10 overflow-hidden relative">
+    <section className="w-full max-w-7xl mx-auto px-4 sm:px-8 pt-4 pb-12 flex 
+    flex-col space-y-10 overflow-hidden relative">
       
       {/* КАРТИНКА ПЛАТФОРМИ coding.jpg СУВОРO ПІД НАВБАРОМ НА ВСЮ ШИРИНУ */}
       <div className="w-full relative z-10">
@@ -19,7 +19,7 @@ export default function Hero() {
 
       {/* НИЖНЯ СІТКА ЕКРАНУ */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start relative z-10 pt-2">
-        
+   
         {/* ЛІВА СТОРОНА: Тексти та кнопки */}
         <div className="lg:col-span-7 w-full space-y-4">
           <HeroContent />

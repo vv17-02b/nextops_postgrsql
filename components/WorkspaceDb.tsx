@@ -49,13 +49,17 @@ export default function WorkspaceDb({ isOpen, onCloseAction }: WorkspaceDbProps)
   };
 
   return (
-    <div className="flex flex-col h-full border border-white/10 bg-neutral-900/40 backdrop-blur-xl p-5 rounded-2xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] transition-all duration-300">
+    <div className="flex flex-col h-full border border-white/10
+     bg-neutral-900/40 backdrop-blur-xl p-5 rounded-2xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] 
+     transition-all duration-300">
       
       {/* Шапка вікна */}
       <div className="flex justify-between items-center border-b border-neutral-800 pb-3 mb-4 select-none">
         <div className="flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-amber-500" />
-          <span className="text-sm font-mono text-amber-500 font-black tracking-wider">📊 COLLECTION_LIMIT_METRICS</span>
+          <span className="text-sm font-mono text-amber-500 font-black tracking-wider">
+             COLLECTION_LIMIT_METRICS
+             </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono text-amber-600/70 font-bold flex items-center gap-1">
@@ -65,7 +69,8 @@ export default function WorkspaceDb({ isOpen, onCloseAction }: WorkspaceDbProps)
             <button 
               type="button"
               onClick={(e) => { e.stopPropagation(); onCloseAction(); }}
-              className="text-xs font-mono font-bold bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-1 rounded-lg hover:bg-red-500 hover:text-white transition cursor-pointer"
+              className="text-xs font-mono font-bold bg-red-500/10 text-red-400 border
+               border-red-500/20 px-2 py-1 rounded-lg hover:bg-red-500 hover:text-white transition cursor-pointer"
             >
               [ × CLOSE ]
             </button>
@@ -90,21 +95,25 @@ export default function WorkspaceDb({ isOpen, onCloseAction }: WorkspaceDbProps)
       </div>
 
       {/* Інтерактивний NoSQL Термінал Клустера */}
-      <div className="flex-1 flex flex-col bg-neutral-950/90 rounded-xl border border-neutral-800 p-3 overflow-hidden shadow-inner">
-        <div className="flex-1 overflow-y-auto font-mono text-xs text-amber-400/90 space-y-1.5 mb-3 pr-1">
+      <div className="flex-1 flex flex-col bg-neutral-950/90 rounded-xl border border-neutral-800 
+      p-3 overflow-hidden shadow-inner">
+        <div className="flex-1 overflow-y-auto font-mono text-xs text-amber-400/90 
+        space-y-1.5 mb-3 pr-1">
           {logs.map((log, idx) => (
             <p key={idx} className="whitespace-pre-wrap leading-relaxed">{log}</p>
           ))}
         </div>
 
-        <form onSubmit={handleCommand} className="flex gap-2 border-t border-neutral-900 pt-2.5 items-center">
+        <form onSubmit={handleCommand} className="flex gap-2 border-t border-neutral-900 
+        pt-2.5 items-center">
           <ChevronRight className="w-4 h-4 text-amber-500 shrink-0 stroke-[3]" />
           <input
             type="text"
             placeholder="Введіть 'db.status()', 'db.stats()' або 'clear'..."
             value={terminalCmd}
             onChange={(e) => setTerminalCmd(e.target.value)}
-            className="flex-1 bg-transparent text-white font-mono text-sm focus:outline-none placeholder-neutral-700"
+            className="flex-1 bg-transparent text-white font-mono text-sm 
+            focus:outline-none placeholder-neutral-700"
           />
         </form>
       </div>

@@ -49,7 +49,7 @@ export class GoogleSearchServer {
       return extractedContext.trim() || "Свіжої інформації за цим запитом в індексі не виявлено.";
     } catch (error: unknown) {
       const err = error as Error;
-      console.error("🚨 Помилка автономного пошукового двигуна:", err.message);
+      console.error(" Помилка автономного пошукового двигуна:", err.message);
       return `[SEARCH_CRASH]: Не вдалося отримати дані з мережі: ${err.message}`;
     }
   }

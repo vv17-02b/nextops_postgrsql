@@ -15,7 +15,7 @@ export default function HeroContent() {
       font-bold uppercase tracking-widest bg-blue-500/10
        text-blue-400 border border-blue-500/20 rounded-full 
        shadow-[0_0_15px_rgba(59,130,246,0.1)]">
-        ✨ Enterprise Release v1.0
+         Enterprise Release v1.0
       </div>
 
       {/* Головний промисловий заголовок */}
