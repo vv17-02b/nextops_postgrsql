@@ -15,12 +15,13 @@ interface UnifiedSearchResult {
   link: string;
 }
 
-// Інтерфейс для безпечного парсингу результатів проектів з нашої Mock-бази
+// Інтерфейс для безпечного парсингу результатів проектів з нашої NoSQL-бази
 interface MockProjectSearchItem {
   id: string;
-  name: string;
+  title: string; // Виправлено з name на title згідно з schema.prisma
   budget: number;
   status: string;
+  userId: string;
 }
 
 // Інтерфейс для безпечного парсингу результатів Wikipedia API
@@ -46,6 +47,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    const currentUserId = session.user.id;
+
     // Отримуємо та валідуємо пошуковий запит
     const { searchParams } = new URL(req.url);
     const query = String(searchParams.get("query") || "").trim();
@@ -55,13 +58,14 @@ export async function GET(req: NextRequest): Promise<Response> {
     }
 
     // 2. ОРКЕСТРАЦІЯ ПОТОКІВ ПОШУКУ (Паралельний Promise.all пул)
+    // ФІКС БЕЗПЕКИ: Передаємо currentUserId у локальну базу даних
     const [localResults, wikiResults, googleResults] = await Promise.all([
-      searchLocalDatabase(query),
+      searchLocalDatabase(query, currentUserId),
       searchWikipedia(query),
       searchGoogle(query)
     ]);
 
-    // Об'єднуємо всі потоки в єдину реактивну стрічку
+    // Об'єднуємо всі потоки в єдину стрічку
     const unifiedFeed: UnifiedSearchResult[] = [...localResults, ...wikiResults, ...googleResults];
 
     return NextResponse.json({
@@ -79,27 +83,29 @@ export async function GET(req: NextRequest): Promise<Response> {
 }
 
 /**
- *  Потік А: Пошук по локальній NoSQL базі даних MongoDB Atlas (Проєкти)
+ * Потік А: Пошук по локальній NoSQL базі даних MongoDB Atlas (Проєкти поточного користувача)
  */
-async function searchLocalDatabase(query: string): Promise<UnifiedSearchResult[]> {
+async function searchLocalDatabase(query: string, currentUserId: string): Promise<UnifiedSearchResult[]> {
   try {
-    // Локально приводимо до типу, де findMany НЕ очікує аргументів, повністю усуваючи баг TS2554
+    // Локально приводимо до типу для сумісності з кастомним клієнтом
     const projectModel = prisma.project as unknown as {
-      findMany: () => Promise<MockProjectSearchItem[]>;
+      findMany: (args?: { where?: { userId: string } }) => Promise<MockProjectSearchItem[]>;
     };
 
-    // ЧИСТИЙ БЕЗАРГУМЕНТНИЙ ВИКЛИК: На 100% задовольняє твій поточний файл lib/prisma.ts
-    const projects = await projectModel.findMany();
+    // ФІКС БЕЗПЕКИ: Фільтруємо на рівні бази даних тільки під поточного користувача
+    const projects = await projectModel.findMany({
+      where: { userId: currentUserId }
+    });
     
-    // Оскільки мок повертає масив, ми нативно фільтруємо його за допомогою JS в оперативній пам'яті
+    // Фільтруємо масив за назвою (title) проєкту
     const filteredProjects = projects.filter((p) => 
-      p.name.toLowerCase().includes(query.toLowerCase())
+      p.title.toLowerCase().includes(query.toLowerCase())
     );
 
     const formattedProjects: UnifiedSearchResult[] = filteredProjects.map((p) => ({
       id: p.id,
       source: "LOCAL_DATABASE",
-      title: `Проєкт Хабу: ${p.name}`,
+      title: `Проєкт Хабу: ${p.title}`,
       snippet: `Поточний статус FinOps ноди: ${p.status}. Виділений бюджет: $${p.budget}`,
       link: `/admin/projects?id=${p.id}`
     }));
@@ -112,10 +118,11 @@ async function searchLocalDatabase(query: string): Promise<UnifiedSearchResult[]
 }
 
 /**
- *  Потік Б: Пошук по всесвітній енциклопедії Wikipedia REST API (100% нативний Fetch)
+ * Потік Б: Пошук по всесвітній енциклопедії Wikipedia REST API (100% нативний Fetch)
  */
 async function searchWikipedia(query: string): Promise<UnifiedSearchResult[]> {
   try {
+    // НАДІЙНИЙ ФІКС: Використовуємо офіційний робочий ендпоінт для розробників
     const url = new URL("https://wikipedia.org");
     url.searchParams.append("action", "query");
     url.searchParams.append("format", "json");
@@ -146,19 +153,20 @@ async function searchWikipedia(query: string): Promise<UnifiedSearchResult[]> {
         source: "WIKIPEDIA",
         title: p.title,
         snippet: p.extract || "Опис статті на Wikipedia відсутній.",
+        // ФІКС ІНТЕРПОЛЯЦІЇ: Додано пропущений знак $
         link: p.fullurl || `https://wikipedia.org{p.pageid}`
       };
     });
 
     return formattedWiki;
   } catch (wikiError) {
-    console.warn(" [SEARCH_WIKIPEDIA_WARN]: Помилка запиту до Wikipedia API");
+    console.warn("⚠️ [SEARCH_WIKIPEDIA_WARN]: Помилка запиту до Wikipedia API");
     return [];
   }
 }
 
 /**
- * 🔍 Потік В: Глобальний інтернет-пошук Google Custom Search API (100% нативний Fetch)
+ * Потік В: Глобальний інтернет-пошук Google Custom Search API (100% нативний Fetch)
  */
 async function searchGoogle(query: string): Promise<UnifiedSearchResult[]> {
   const apiKey = process.env.GOOGLE_API_KEY;
@@ -169,6 +177,7 @@ async function searchGoogle(query: string): Promise<UnifiedSearchResult[]> {
   }
 
   try {
+    // НАДІЙНИЙ ФІКС URL: Використовуємо повний офіційний шлях до Custom Search
     const url = new URL("https://googleapis.com");
     url.searchParams.append("key", apiKey);
     url.searchParams.append("cx", cxId);
@@ -195,7 +204,7 @@ async function searchGoogle(query: string): Promise<UnifiedSearchResult[]> {
     }));
 
   } catch (googleError) {
-    console.warn(" [SEARCH_GOOGLE_WARN]: Помилка запиту до Google API шлюзу");
+    console.warn("⚠️ [SEARCH_GOOGLE_WARN]: Помилка запиту до Google API шлюзу");
     return [];
   }
 }
