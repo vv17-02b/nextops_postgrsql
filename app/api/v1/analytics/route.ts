@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth"; 
-import { FinOpsController } from "@/lib/servers/FinOpsController";
+import { prisma } from "@/lib/prisma"; // Пряме підключення оптимізованого клієнта
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,18 +26,41 @@ export async function GET(): Promise<Response> {
       }, { status: 400 });
     }
 
-    // 3. Делегування розрахунків єдиному центру бізнес-логіки (FinOpsController)
-    // Це автоматично захищає від дублювання коду та усуває Race Condition
-    const metrics = await FinOpsController.getUserMetrics(userId);
+    // 3. ПРЯМИЙ ВИСОКОПРОДУКТИВНИЙ РОЗРАХУНОК МЕТРИК ЧЕРЕЗ PRISMA (Заміна FinOpsController)
+    // Використовуємо Promise.all для паралельного виконання запитів у MongoDB Atlas
+    const [activeProjectsCount, totalProjectsCount, budgetAggregation] = await Promise.all([
+      // Лічильник активних проектів (використовує наш індекс @@index([userId, status]))
+      prisma.project.count({
+        where: { userId, status: "ACTIVE" }
+      }),
+      // Лічильник взагалі всіх проектів користувача
+      prisma.project.count({
+        where: { userId }
+      }),
+      // Агрегація суми бюджетів та середнього чеку
+      prisma.project.aggregate({
+        where: { userId },
+        _sum: {
+          budget: true
+        },
+        _avg: {
+          budget: true
+        }
+      })
+    ]);
+
+    // Витягуємо чисті математичні значення з об'єкта агрегації
+    const totalBudget = budgetAggregation._sum.budget || 0.0;
+    const averageCheck = budgetAggregation._avg.budget ? Math.round(budgetAggregation._avg.budget * 100) / 100 : 0.0;
 
     // 4. Повертаємо метрики, які ідеально збігаються з очікуваннями WorkspaceContext.tsx
     return NextResponse.json({
       success: true,
       metrics: {
-        totalBudget: metrics.totalBudget,
-        averageCheck: metrics.averageCheck,
-        activeProjects: metrics.activeProjects,
-        totalProjects: metrics.totalProjects
+        totalBudget,
+        averageCheck,
+        activeProjects: activeProjectsCount,
+        totalProjects: totalProjectsCount
       }
     }, { status: 200 });
 
