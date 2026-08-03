@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import { useAppStore } from "@/config/store";
+import { useWorkspace } from "@/context/WorkspaceContext";
 import {
   Cpu, Globe, LogIn, LogOut, LayoutGrid,
   CreditCard, Terminal, Search, Layers,
@@ -16,9 +17,12 @@ import CreateContentModal from "../Modals/CreateContentModal";
 
 export default function Navbar() {
   const { data: session } = useSession();
+  const { refreshWorkspace } = useWorkspace(); // Витягуємо пряму шину оновлення з контексту
+
   const {
     locale, t, setLocale, setAuthModal, setUpgradeModal,
-    setPricingVisible, setReviewsVisible, isPricingVisible, isReviewsVisible
+    setPricingVisible, setReviewsVisible, isPricingVisible, isReviewsVisible,
+    initLanguage, isHydrated
   } = useAppStore();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -26,9 +30,14 @@ export default function Navbar() {
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 🔐 СТАТУС КЕРУВАННЯ НOВИМИ МOДАЛЬНИМИ ВІКНАМИ БOЙOВOЇ ПЛАТФOРМИ
+  // СТАТУС КЕРУВАННЯ НOВИМИ МOДАЛЬНИМИ ВІКНАМИ БOЙOВOЇ ПЛАТФOРМИ
   const [isContentModalOpen, setIsContentModalOpen] = useState(false);
   const [contentModalType, setContentModalType] = useState<"article" | "review" | null>(null);
+
+  // Безпечний запуск ініціалізації мови на клієнті для запобігання Hydration Mismatch
+  useEffect(() => {
+    initLanguage();
+  }, [initLanguage]);
 
   const categories = [
     { id: "AI_NODES", label: locale === "ua" ? "ШІ Ноди" : "AI Nodes", icon: <Layers className="w-3.5 h-3.5 mr-1.5 text-cyan-400" /> },
@@ -39,7 +48,6 @@ export default function Navbar() {
 
   const currentCategory = categories.find(c => c.id === searchCategory) || categories[0];
 
-  // 🔥 СУВОРИЙ B2B SPA-РЕГУЛЯТОР: Більше ніякого скролу вниз для форм! Відкриваємо модалку поверх екрану!
   const handleNavClick = (type: "pricing" | "reviews" | "blog" | "write_article" | "write_review") => {
     setIsMobileMenuOpen(false);
 
@@ -56,11 +64,9 @@ export default function Navbar() {
       setReviewsVisible(true);
       setTimeout(() => window.scrollTo({ top: 2100, behavior: "smooth" }), 100);
     } else if (type === "write_article") {
-      // Активуємо модалку створення технічного маніфесту
       setContentModalType("article");
       setIsContentModalOpen(true);
     } else if (type === "write_review") {
-      // Активуємо модалку оцінки зірочок та відгуку
       setContentModalType("review");
       setIsContentModalOpen(true);
     }
@@ -76,9 +82,14 @@ export default function Navbar() {
       setAuthModal(true);
     }
   };
+
+  // Захист гідратації: показуємо порожній каркас, поки клієнт не прочитає localStorage
+  if (!isHydrated) {
+    return <header className="w-full h-16 bg-neutral-950/70 border-b border-white/5 sticky top-0 z-40" />;
+  }
   return (
-    <header className="relatev w-full bg-neutral-950/70 backdrop-blur-xl border-b
-     border-white/5 sticky top-0 z-40 select-none font-mono text-sm">
+   <header className="w-full bg-neutral-950/70 backdrop-blur-xl border-b border-white/5 sticky 
+   top-0 z-40 select-none font-mono text-sm">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
 
         {/* 1. Логотип системи */}
@@ -133,8 +144,7 @@ export default function Navbar() {
             </button>
           </div>
         </form>
-
-        {/* 3. Головна десктопна навігація з новими B2B-кнопками */}
+        {/* 3. Головна десктопна навігація */}
         <nav className="hidden md:flex items-center gap-3 xl:gap-5 shrink-0">
           <button onClick={() => handleNavClick("pricing")} className="cursor-pointer transition uppercase tracking-wider text-[10px] xl:text-xs font-bold text-neutral-400 hover:text-white">
             {locale === "ua" ? "Тарифи" : "Pricing"}
@@ -150,7 +160,6 @@ export default function Navbar() {
             {locale === "ua" ? "Статті" : "Articles"}
           </button>
 
-          {/* ПРЕМІАЛЬНІ КНOПКИ ВИКЛИКУ МOДАЛOК СТВOРЕННЯ: Доступні тільки при наявності сесії */}
           {session && (
             <>
               <button onClick={() => handleNavClick("write_review")} className="cursor-pointer transition uppercase tracking-wider text-[10px] xl:text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
@@ -166,6 +175,7 @@ export default function Navbar() {
 
           <Link href="/docs" className="text-neutral-400 hover:text-white transition uppercase tracking-wider text-[10px] xl:text-xs font-bold">Docs</Link>
         </nav>
+
         {/* 4. Системні керуючі кнопки кабінету розробника */}
         <div className="hidden md:flex items-center gap-1.5 xl:gap-2 shrink-0">
           <button onClick={() => setLocale(locale === "ua" ? "en" : "ua")} className="px-2 py-1.5 rounded-xl bg-neutral-900/60 border border-white/5 text-neutral-400 hover:text-white transition flex items-center gap-1 font-bold text-[11px] cursor-pointer">
@@ -211,7 +221,7 @@ export default function Navbar() {
 
       </div>
 
-      {/* Мобільна навігація з правильною передачею бойових пропсів */}
+      {/* Мобільна навігація */}
       <NavMobile
         isOpen={isMobileMenuOpen}
         onCloseAction={() => setIsMobileMenuOpen(false)}
@@ -225,10 +235,10 @@ export default function Navbar() {
           setIsContentModalOpen(false);
           setContentModalType(null);
         }}
-        onSuccessRefreshAction={() => {
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new Event("refresh-active-repositories"));
-          }
+        onSuccessRefreshAction={async () => {
+          // НАДІЙНИЙ ФІКС: Замість ніде не прослуховуваної браузерної події
+          // викликаємо пряму реактивну синхронізацію NoSQL-ядра
+          await refreshWorkspace();
         }}
       />
     </header>

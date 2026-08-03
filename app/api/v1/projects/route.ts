@@ -7,6 +7,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+// Регулярний вираз для валідації ідентифікаторів MongoDB ObjectId
+const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
+
 // 1. МЕТОД GET: Читання реальних проєктів поточного користувача
 export async function GET(): Promise<Response> {
   try {
@@ -18,18 +21,23 @@ export async function GET(): Promise<Response> {
       );
     }
 
-    const currentUserId = session.user.id;
+    const currentUserId = session.user.id.trim();
 
-    // Сувора типізація вибірки з MongoDB Atlas
+    if (!OBJECT_ID_REGEX.test(currentUserId)) {
+      return NextResponse.json(
+        { success: false, error: "Некоректний формат ідентифікатора сесії" },
+        { status: 400 },
+      );
+    }
+
     const findArgs: Prisma.ProjectFindManyArgs = {
       where: { userId: currentUserId },
       orderBy: { createdAt: "desc" },
-      take: 10,
+      take: 15, // Розширено ліміт вибірки для зручності у воркспейсі
     };
 
     const rawProjects: Project[] = await prisma.project.findMany(findArgs);
 
-    // Мапимо дані під очікування фронтенду воркспейсу
     const projects = rawProjects.map((proj: Project) => ({
       id: proj.id,
       title: proj.title,
@@ -42,9 +50,12 @@ export async function GET(): Promise<Response> {
     return NextResponse.json({ success: true, projects }, { status: 200 });
   } catch (error: unknown) {
     const err = error as Error;
-    console.error(" [ API_PROJECTS_GET_CRASH ]:", err.message);
+    console.error("  [ API_PROJECTS_GET_CRASH ]:", err.message);
     return NextResponse.json(
-      { success: false, error: "Помилка сервера при отриманні списку проєктів" },
+      {
+        success: false,
+        error: "Помилка сервера при отриманні списку проєктів",
+      },
       { status: 500 },
     );
   }
@@ -61,13 +72,30 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
     }
 
-    const currentUserId = session.user.id;
-    const bodyData = await req.json().catch(() => ({}));
+    const currentUserId = session.user.id.trim();
+
+    if (!OBJECT_ID_REGEX.test(currentUserId)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Некоректний формат сесії для запису ресурсу",
+        },
+        { status: 400 },
+      );
+    }
+
+    const bodyData = (await req.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
     const { title, description, budget, status } = bodyData;
 
     if (!title || typeof title !== "string" || title.trim().length < 2) {
       return NextResponse.json(
-        { success: false, error: "Назва проєкту має містити мінімум 2 символи" },
+        {
+          success: false,
+          error: "Назва проєкту має містити мінімум 2 символи",
+        },
         { status: 400 },
       );
     }
@@ -81,16 +109,20 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
 
     const allowedStatuses = ["PLANNING", "ACTIVE", "COMPLETED", "SUSPENDED"];
-    const finalStatus = allowedStatuses.includes(status) ? status : "PLANNING";
+    const finalStatus = allowedStatuses.includes(String(status))
+      ? String(status)
+      : "PLANNING";
 
-    // Шукаємо користувача для перевірки комерційних Freemium лімітів
     const userExists = await prisma.user.findUnique({
       where: { email: session.user.email },
     });
 
     if (!userExists) {
       return NextResponse.json(
-        { success: false, error: "Користувача не знайдено в кластері бази даних" },
+        {
+          success: false,
+          error: "Користувача не знайдено в кластері бази даних",
+        },
         { status: 400 },
       );
     }
@@ -98,48 +130,77 @@ export async function POST(req: NextRequest): Promise<Response> {
     const currentPlan = userExists.plan || "FREE";
     const currentRole = userExists.role || "DEVELOPER";
 
-    // СУВОРІ СЕРВЕРНІ FREEMIUM-БАР'ЄРИ (Для не-адмінів)
-    if (currentPlan === "FREE" && currentRole !== "ADMIN") {
-      const projectCountArgs: Prisma.ProjectCountArgs = {
+    // =================================================================
+    //  СУВОРІ СЕРВЕРНІ FREEMIUM / COMMERCIAL БАР'ЄРИ (Для не-адмінів)
+    // =================================================================
+    if (currentRole !== "ADMIN") {
+      const projectCount = await prisma.project.count({
         where: { userId: currentUserId },
-      };
-      const projectCount = await prisma.project.count(projectCountArgs);
+      });
 
-      if (projectCount >= 2) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "LIMIT_REACHED: На безкоштовному тарифі доступно максимум 2 проєкти. Оновіть план до PRO.",
-          },
-          { status: 403 },
-        );
+      // Гуард для безкоштовного тарифу (FREE)
+      if (currentPlan === "FREE") {
+        if (projectCount >= 2) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "LIMIT_REACHED: На безкоштовному тарифі доступно максимум 2 проєкти. Оновіть план до PRO.",
+            },
+            { status: 403 },
+          );
+        }
+        if (parsedBudget > 500) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "LIMIT_REACHED: Комерційний ліміт бюджету для FREE тарифу становить $500. Оновіть план до PRO.",
+            },
+            { status: 403 },
+          );
+        }
       }
 
-      if (parsedBudget > 500) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "LIMIT_REACHED: Комерційний ліміт бюджету для FREE тарифу становить $500. Оновіть план до PRO.",
-          },
-          { status: 403 },
-        );
+      // ФІКС БІЛІНГУ: Гуард для преміального тарифу (PRO)
+      if (currentPlan === "PRO") {
+        if (projectCount >= 10) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "LIMIT_REACHED: На тарифі PRO доступно максимум 10 проєктів. Оновіть план до ENTERPRISE.",
+            },
+            { status: 403 },
+          );
+        }
+        if (parsedBudget > 10000) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "LIMIT_REACHED: Максимальний ліміт бюджету однієї ноди для PRO тарифу становить $10,000.",
+            },
+            { status: 403 },
+          );
+        }
       }
     }
 
-    // ПРОДАКШЕН ФІКС: Передаємо строго "title", а не "name", та пов'язуємо реляцію ObjectId
-    const createProjectArgs: Prisma.ProjectCreateArgs = {
+    // Створення суворої реляції проєкту
+    const newProject: Project = await prisma.project.create({
       data: {
         title: title.trim(),
-        description: description ? description.trim() : "Інструкція розробника",
+        description: description
+          ? String(description).trim()
+          : "Інструкція розробника",
         budget: parsedBudget,
         status: finalStatus,
         user: {
-          connect: { id: currentUserId }
-        }
-      }
-    };
-
-    const newProject: Project = await prisma.project.create(createProjectArgs);
+          connect: { id: currentUserId },
+        },
+      },
+    });
 
     const fullProject = {
       id: newProject.id,
@@ -150,19 +211,34 @@ export async function POST(req: NextRequest): Promise<Response> {
       userId: currentUserId,
     };
 
-    // Зчитуємо активні конфіги вебхуків згідно правильних назв полей у схемі
-    const webhookQueryArgs: Prisma.WebhookConfigFindManyArgs = {
-      where: { userId: currentUserId, isActive: true }
-    };
-    const webhookConfigs: WebhookConfig[] = await prisma.webhookConfig.findMany(webhookQueryArgs);
+    // Записуємо створення проєкту в головну NoSQL-історію для утилізації токенів
+    await prisma.apiHistory.create({
+      data: {
+        userId: currentUserId,
+        method: "POST",
+        url: req.nextUrl.pathname,
+        status: 201,
+        body: JSON.stringify({ title: title.trim(), budget: parsedBudget }),
+        response: JSON.stringify({ success: true, project: fullProject }),
+      },
+    });
+
+    // Читання та безпечне виконання підключених шлюзів автоматизації (Вебхуків)
+    const webhookConfigs: WebhookConfig[] = await prisma.webhookConfig.findMany(
+      {
+        where: { userId: currentUserId, isActive: true },
+      },
+    );
 
     if (webhookConfigs.length > 0) {
-      Promise.all(
+      // НАДІЙНИЙ ФІКС: використовуємо await для Promise.all, щоб Next.js
+      // гарантовано завершив надсилання запитів стороннім сервісам до закриття з'єднання
+      await Promise.all(
         webhookConfigs.map(async (wh: WebhookConfig) => {
-          try {
-            const targetUrl = wh.targetUrl;
-            if (!targetUrl) return;
+          const targetUrl = wh.targetUrl;
+          if (!targetUrl) return;
 
+          try {
             const response = await fetch(targetUrl, {
               method: "POST",
               headers: {
@@ -177,33 +253,42 @@ export async function POST(req: NextRequest): Promise<Response> {
               }),
             });
 
+            // ФІКС ТИПІЗАЦІЇ: Обов'язково передаємо currentUserId для коректного FinOps-обліку
             await prisma.apiHistory.create({
               data: {
+                userId: currentUserId,
                 method: "FEEDBACK",
                 url: targetUrl,
                 response: `[WEBHOOK_SUCCESS] Код: ${response.status}. Проєкт: ${fullProject.title}`,
                 headers: `Status: ${response.status}`,
                 status: response.status,
-              }
+              },
             });
           } catch (whError: unknown) {
             const errWh = whError as Error;
-            const fallbackUrl = wh.targetUrl || "unknown_gateway";
-            console.error(`🚨 Не вдалося надіслати вебхук на ${fallbackUrl}:`, errWh.message);
+            console.error(
+              `🚨 Не вдалося надіслати вебхук на ${targetUrl}:`,
+              errWh.message,
+            );
 
             await prisma.apiHistory.create({
               data: {
+                userId: currentUserId,
                 method: "FEEDBACK",
-                url: fallbackUrl,
+                url: targetUrl,
                 response: `[WEBHOOK_CRASH] Збій маршрутизації: ${errWh.message || "Сервер недоступний"}`,
                 headers: "Status: 502",
                 status: 502,
-              }
+              },
             });
           }
         }),
       ).catch((err: unknown) => console.error("Помилка пулу вебхуків:", err));
     }
+
+    console.log(
+      ` [ MongoDB Atlas ]: Створено ШІ-ноду проєкту: ${fullProject.title}`,
+    );
 
     return NextResponse.json(
       { success: true, project: fullProject },
@@ -211,9 +296,12 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   } catch (error: unknown) {
     const err = error as Error;
-    console.error(" [ API_PROJECTS_POST_CRASH ]:", err.message);
+    console.error("  [ API_PROJECTS_POST_CRASH ]:", err.message);
     return NextResponse.json(
-      { success: false, error: "Внутрішня помилка сервера при створенні проєкту" },
+      {
+        success: false,
+        error: "Внутрішня помилка сервера при створенні проєкту",
+      },
       { status: 500 },
     );
   }

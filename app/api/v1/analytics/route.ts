@@ -1,48 +1,52 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma"; 
 import { auth } from "@/lib/auth"; 
+import { FinOpsController } from "@/lib/servers/FinOpsController";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Регулярний вираз для перевірки валідності MongoDB ObjectId
+const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
+
 export async function GET(): Promise<Response> {
   try {
+    // 1. Серверний захист сесії через Auth.js v5
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = session.user.id;
+    const userId = session.user.id.trim();
 
-    // Нативна, повністю типізована NoSQL-агрегація без жодного 'any'
-    const [budgetAggregation, activeCount, totalProjects] = await Promise.all([
-      prisma.project.aggregate({
-        where: { userId },
-        _sum: { budget: true },
-        _avg: { budget: true }
-      }),
-      prisma.project.count({
-        where: { userId, status: "ACTIVE" }
-      }),
-      prisma.project.count({
-        where: { userId }
-      })
-    ]);
+    // 2. ЗАХИСТ ВІД КРАШУ БД: Валідація ObjectId
+    if (!OBJECT_ID_REGEX.test(userId)) {
+      return NextResponse.json({ 
+        success: false, 
+        error: "Некоректний формат ідентифікатора користувача для аналітики" 
+      }, { status: 400 });
+    }
 
-    // Повертаємо метрики, де TypeScript суворо знає типи кожного поля
+    // 3. Делегування розрахунків єдиному центру бізнес-логіки (FinOpsController)
+    // Це автоматично захищає від дублювання коду та усуває Race Condition
+    const metrics = await FinOpsController.getUserMetrics(userId);
+
+    // 4. Повертаємо метрики, які ідеально збігаються з очікуваннями WorkspaceContext.tsx
     return NextResponse.json({
       success: true,
       metrics: {
-        totalBudget: budgetAggregation._sum?.budget || 0.0,
-        averageCheck: budgetAggregation._avg?.budget ? Math.round(budgetAggregation._avg.budget) : 0,
-        activeProjects: activeCount,
-        totalProjects: totalProjects
+        totalBudget: metrics.totalBudget,
+        averageCheck: metrics.averageCheck,
+        activeProjects: metrics.activeProjects,
+        totalProjects: metrics.totalProjects
       }
     }, { status: 200 });
 
   } catch (error: unknown) {
     const err = error as Error;
-    console.error(" [ ANALYTICS_ROUTE_CRASH ]:", err.message);
-    return NextResponse.json({ success: false, error: "Помилка сервера при розрахунку аналітики" }, { status: 500 });
+    console.error(" 🚨 [ ANALYTICS_ROUTE_CRASH ]:", err.message);
+    return NextResponse.json({ 
+      success: false, 
+      error: "Помилка сервера при розрахунку аналітики" 
+    }, { status: 500 });
   }
 }

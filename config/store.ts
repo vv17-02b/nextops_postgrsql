@@ -4,10 +4,14 @@ import { en } from "./localization/en";
 
 export type Locale = "ua" | "en"; 
 
+// Створюємо єдиний гнучкий тип для словника, який покриває обидві локалізації
+export type Dictionary = typeof ua & typeof en;
+
 interface AppState {
   // --- ЛОКАЛІЗАЦІЯ ---
   locale: Locale;
-  t: typeof ua; 
+  t: typeof ua; // Використовуємо базову структуру як еталон
+  isHydrated: boolean; // Прапорець завершення гідратації на клієнті
   setLocale: (locale: Locale) => void;
   initLanguage: () => void; 
 
@@ -33,12 +37,11 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  // Початковий стан змінено на "ua" та об'єкт ua
   locale: "ua",
   t: ua,
+  isHydrated: false, // Спочатку сервер і клієнт стартують в однаковому стані
   
   setLocale: (locale) => {
-    // Порівняння та присвоєння змінено на валідний об'єкт ua
     const translations = locale === "ua" ? ua : en;
     set({ locale, t: translations });
     if (typeof window !== "undefined") {
@@ -49,11 +52,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   initLanguage: () => {
     if (typeof window !== "undefined") {
       const savedLang = localStorage.getItem("nextops_lang") as Locale;
-      // Усі перевірки адаптовано під типи "ua" або "en"
       if (savedLang === "ua" || savedLang === "en") {
         const translations = savedLang === "ua" ? ua : en;
-        set({ locale: savedLang, t: translations });
+        set({ locale: savedLang, t: translations, isHydrated: true });
+        return;
       }
+      set({ isHydrated: true }); // Якщо мови в localStorage немає, гідратація все одно завершена
     }
   },
 
@@ -71,6 +75,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   userRole: "DEVELOPER",
   userPlan: "FREE",
+  
+  // ПРИМІТКА ПРОДАКШЕНУ: Використовувати ВИКЛЮЧНО для синхронізації UI-елементів лендінгу.
+  // Головним сервером правди для захищених роутів залишається NextAuth (auth() / useSession())
   setUserSession: (role, plan) => set({ userRole: role, userPlan: plan }),
 
   isOwnerBypass: () => get().userRole === "ADMIN",

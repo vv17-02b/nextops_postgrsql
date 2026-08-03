@@ -20,7 +20,7 @@ export default function CreditCardForm({ planType, price, onSuccess }: CreditCar
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // 🔥 ГОЛОВНИЙ ФІКС ТИПІЗАЦІЇ: безпечна та сумісна з TypeScript маска номера картки
+  // Маска номера картки: безпечна та сумісна з TypeScript
   const handleCardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, "").substring(0, 16);
     const parts = [];
@@ -32,10 +32,23 @@ export default function CreditCardForm({ planType, price, onSuccess }: CreditCar
     setCardNumber(parts.length > 0 ? parts.join(" ").trim() : value);
   };
 
+  // ФІКС МАСКИ ДАТИ: Забезпечує коректне видалення символів через Backspace
   const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, "").substring(0, 4);
-    if (value.length >= 2) {
+    const input = e.target.value;
+    
+    // Якщо користувач видаляє символ і рядок закінчується на слеш — видаляємо і слеш, і попередню цифру
+    if (expiry.endsWith("/") && input.length < expiry.length) {
+      setExpiry(input.substring(0, input.length - 1));
+      return;
+    }
+
+    const value = input.replace(/\D/g, "").substring(0, 4);
+    
+    if (value.length > 2) {
       setExpiry(`${value.substring(0, 2)}/${value.substring(2, 4)}`);
+    } else if (value.length === 2 && input.length > expiry.length) {
+      // Додаємо слеш автоматично тільки під час введення вперед
+      setExpiry(`${value}/`);
     } else {
       setExpiry(value);
     }
@@ -58,7 +71,7 @@ export default function CreditCardForm({ planType, price, onSuccess }: CreditCar
         body: JSON.stringify({ planType: planType || "PRO" }),
       });
 
-      const result = await res.json();
+      const result = await res.json().catch(() => ({}));
 
       if (res.ok && result.success) {
         setUpgradeModal(false);
@@ -71,7 +84,10 @@ export default function CreditCardForm({ planType, price, onSuccess }: CreditCar
         setErrorMessage(result.error || "Помилка процесингу платіжного шлюзу.");
         setIsProcessing(false);
       }
-    } catch (err: any) {
+    } catch (error: unknown) {
+      // ФІКС БІЛДY: Знищено тип 'any', замінено на суворий TypeScript-стандарт
+      const err = error as Error;
+      console.error("🚨 [CreditCardForm Submit Error]:", err.message);
       setErrorMessage("Не вдалося встановити зв'язок з платіжним сервером.");
       setIsProcessing(false);
     }
@@ -101,7 +117,8 @@ export default function CreditCardForm({ planType, price, onSuccess }: CreditCar
             type="text"
             placeholder="VLADIMIR UMAN"
             value={name}
-            onChange={(e) => setName(e.target.value.toUpperCase())}
+            // ФІКС ВАЛІДАЦІЇ: Дозволяємо лише латинські літери та пробіли, обмежуємо довжину
+            onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z\s]/g, "").toUpperCase().substring(0, 30))}
             className="w-full p-3 rounded-xl bg-neutral-900 border border-neutral-800 text-white focus:outline-none focus:border-blue-500 text-xs font-mono h-[44px]"
             required
           />

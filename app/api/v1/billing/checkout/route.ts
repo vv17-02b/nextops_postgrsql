@@ -15,14 +15,6 @@ interface MockUserUpdateInput {
   };
 }
 
-interface MockUserWithPlan {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  plan: "FREE" | "PRO" | "ENTERPRISE";
-}
-
 export async function POST(req: NextRequest): Promise<Response> {
   try {
     // 1. Серверний захист сесії через Auth.js v5
@@ -36,7 +28,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const userId = session.user.id;
     const userEmail = session.user.email;
-    const bodyData = await req.json().catch(() => ({}));
+    const bodyData = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const { planType } = bodyData;
 
     const requestedPlan = planType === "ENTERPRISE" ? "ENTERPRISE" : "PRO";
@@ -52,7 +44,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     //  РЕЖИМ 1: БОЙОВИЙ СТАНДАРТ STRIPE (ІНЖЕНЕРНИЙ REST API ШЛЮЗ)
     // =================================================================
     if (process.env.STRIPE_SECRET_KEY) {
-      // НАДІЙНИЙ ФІКС БІЛІНГУ: Використовуємо офіційний базовий ендпоінт для створення сесій через REST API Stripe
+      // НАДІЙНИЙ ФІКС БІЛІНГУ: Використовуємо правильний ендпоінт Stripe API
       const stripeRes = await fetch("https://stripe.com", {
         method: "POST",
         headers: {
@@ -81,6 +73,19 @@ export async function POST(req: NextRequest): Promise<Response> {
           url: string;
           id: string;
         };
+
+        // Записуємо успішний запит на оплату в NoSQL-історію для відображення в терміналі
+        await prisma.apiHistory.create({
+          data: {
+            userId: userId,
+            method: "POST",
+            url: req.nextUrl.pathname,
+            status: 200,
+            body: JSON.stringify({ planType: requestedPlan, mode: "STRIPE_LIVE" }),
+            response: JSON.stringify({ success: true, sessionId: stripeSession.id })
+          }
+        });
+
         return NextResponse.json(
           {
             success: true,
@@ -94,6 +99,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         console.error(" Stripe API Response Error:", errorText);
       }
     }
+
     // =================================================================
     //  РЕЖИМ 2: АВТОНОМНИЙ БЕЗКОШТОВНИЙ MOCK-РЕЖИМ (Для тестів розробника)
     // =================================================================
@@ -103,7 +109,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const expiresDate = new Date();
     expiresDate.setDate(expiresDate.getDate() + 30);
 
-    // Локальне строге приведення моделі до нашого інтерфейсу (замість брудного any)
+    // Локальне строге приведення моделі до нашого інтерфейсу (замість any)
     const userModel = prisma.user as unknown as {
       update: (args: MockUserUpdateInput) => Promise<unknown>;
     };
@@ -117,6 +123,18 @@ export async function POST(req: NextRequest): Promise<Response> {
         subscriptionActive: true,
         subscriptionExpires: expiresDate,
       },
+    });
+
+    // Записуємо генерацію тестової підписки в історію
+    await prisma.apiHistory.create({
+      data: {
+        userId: userId,
+        method: "POST",
+        url: req.nextUrl.pathname,
+        status: 200,
+        body: JSON.stringify({ planType: requestedPlan, mode: "MOCK_LOCAL" }),
+        response: JSON.stringify({ success: true, plan: requestedPlan, mockId: mockCheckoutSessionId })
+      }
     });
 
     return NextResponse.json(

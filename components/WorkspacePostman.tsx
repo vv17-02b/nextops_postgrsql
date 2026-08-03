@@ -15,12 +15,15 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
   const [targetUrl, setTargetUrl] = useState("");
   const [secretKey, setSecretKey] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uiError, setUiError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!targetUrl.trim()) return;
 
     setIsSubmitting(true);
+    setUiError(null);
+
     try {
       const res = await fetch("/api/v1/webhooks", {
         method: "POST",
@@ -28,22 +31,29 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
         body: JSON.stringify({
           targetEvent,
           targetUrl: targetUrl.trim(),
+          // ПРИМІТКА ПРОДАКШЕНУ: secretKey передається для сумісності з майбутнім розширенням schema.prisma
           secretKey: secretKey.trim() || null,
           isActive: true,
         }),
       });
 
-      if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
         setTargetUrl("");
         setSecretKey("");
-        await refreshWorkspace();
+        await refreshWorkspace(); // Миттєва ре-синхронізація матриці вікон
+      } else {
+        setUiError(data.error || "Не вдалося зберегти конфігурацію тригера");
       }
     } catch (err) {
-      console.error("Не вдалося зберегти конфігурацію вебхука:", err);
+      console.error("🚨 [WorkspacePostman Submit Error]:", err);
+      setUiError("Помилка мережі при спробі зв'язку з шлюзом");
     } finally {
       setIsSubmitting(false);
     }
   };
+
   return (
     <div className="flex flex-col h-full border border-white/10 bg-neutral-900/40 backdrop-blur-xl p-5 rounded-2xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] transition-all duration-300">
       
@@ -67,6 +77,13 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
         </div>
       </div>
 
+      {/* Сповіщення про помилки валідації або відповіді сервера */}
+      {uiError && (
+        <div className="mb-3 p-3 bg-red-500/10 border border-red-500/20 text-red-400 font-mono text-xs rounded-xl text-left">
+          ⚠️ {uiError}
+        </div>
+      )}
+
       {/* Інженерна форма конфігурації тригерів */}
       <form onSubmit={handleSubmit} className="space-y-4 bg-black/40 p-4 rounded-xl border border-white/5" onClick={(e) => e.stopPropagation()}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -88,7 +105,7 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
             <div className="relative">
               <input
                 type="password"
-                placeholder="••••••••••••••••••••••••••••••••"
+                placeholder={secretKey ? "" : "••••••••••••••••••••••••••••••••"}
                 value={secretKey}
                 onChange={(e) => setSecretKey(e.target.value)}
                 className="w-full text-sm p-3 pl-9 rounded-xl bg-neutral-950 border border-neutral-800 text-white font-mono focus:outline-none focus:border-violet-500 h-[46px]"
@@ -117,7 +134,7 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
               className="px-6 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:brightness-110 text-white font-black text-sm rounded-xl transition font-mono disabled:opacity-40 flex items-center gap-1.5 cursor-pointer shadow-lg shadow-violet-500/10 h-[46px]"
             >
               <Save className="w-4 h-4 shrink-0" />
-              <span>ЗБЕРЕГТИ</span>
+              <span>{isSubmitting ? "ЗБЕРЕЖЕННЯ..." : "ЗБЕРЕГТИ"}</span>
             </button>
           </div>
         </div>
