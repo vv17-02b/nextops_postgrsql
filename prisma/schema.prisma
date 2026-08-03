@@ -1,6 +1,6 @@
 datasource db {
   provider = "mongodb"
-   url      = env("MONGO_URL")
+  url      = env("MONGO_URL")
 }
 
 generator client {
@@ -36,9 +36,10 @@ model User {
   webhooks WebhookConfig[]
 }
 
+// МОДЕРНІЗОВАНА МОДЕЛЬ ДЛЯ ЛОГУВАННЯ ІСТОРІЇ API (Вікно №3)
 model ApiHistory {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String?   @db.ObjectId
+  userId    String?  @db.ObjectId
   method    String
   url       String
   headers   String?
@@ -46,6 +47,9 @@ model ApiHistory {
   response  String?
   status    Int
   createdAt DateTime @default(now())
+
+  // ФІКС ОПТИМІЗАЦІЇ: Індекс для миттєвого виведення історії запитів конкретного інженера
+  @@index([userId, createdAt])
 }
 
 model Account {
@@ -110,4 +114,7 @@ model WebhookConfig {
   createdAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // ФІКС ОПТИМІЗАЦІЇ: Індекс для швидкої вибірки активних вебхуків (Вікно №2)
+  @@index([userId, isActive])
 }
