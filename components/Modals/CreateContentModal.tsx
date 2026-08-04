@@ -4,18 +4,16 @@ import React, { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { X, FileText, MessageSquare, PlusCircle, ShieldAlert, ShieldCheck } from "lucide-react";
 
-// ФІКС ТИПІВ: Оновлено інтерфейс, додано необов'язкове поле 'type' під конфігурацію Навбару
 interface CreateContentModalProps {
   isOpen: boolean;
   type?: "article" | "review" | null;
   onCloseAction: () => void;
-  onSuccessRefreshAction?: () => void; // Синхронізація назви колбеку з Навбаром
+  onSuccessRefreshAction?: () => void;
 }
 
 export default function CreateContentModal({ isOpen, type, onCloseAction, onSuccessRefreshAction }: CreateContentModalProps) {
   const { data: session } = useSession();
 
-  // Клієнтські стейти для збору NoSQL контенту
   const [contentType, setContentType] = useState<"ARTICLE" | "FEEDBACK">("ARTICLE");
   const [title, setTitle] = useState("");
   const [authorOrHeader, setAuthorOrHeader] = useState("");
@@ -25,7 +23,6 @@ export default function CreateContentModal({ isOpen, type, onCloseAction, onSucc
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // СИНХРOНІЗАЦІЯ З НАВБАРOМ: Автоматично перемикаємо стани форми при відкритті вікна
   useEffect(() => {
     if (isOpen && type) {
       setContentType(type === "article" ? "ARTICLE" : "FEEDBACK");
@@ -84,8 +81,8 @@ export default function CreateContentModal({ isOpen, type, onCloseAction, onSucc
     }
   };
   return (
-    // ФІКС ПОЗИЦІОНУВАННЯ: Додано фіксований оверлей fixed inset-0 та z-[999] для абсолютного центру поверх Навбара
-    <div className="relatev  inset-0 z-[999] flex items-center justify-center bg-neutral-950/80 backdrop-blur-xl p-4 animate-fadeIn select-none">
+    // ЗАЛІЗОБЕТОННИЙ ФІКС ЦЕНТРУВАННЯ: top-0 left-0 w-screen h-screen повністю ігнорують межі хедера сторінки
+    <div className="fixed top-0 left-0 w-screen h-screen z-[999] flex items-center justify-center bg-neutral-950/80 backdrop-blur-xl p-4 animate-fadeIn select-none">
       
       {/* Клієнтська Cyber-Glass картка вікна */}
       <div className="relative w-full max-w-lg bg-neutral-900/90 border border-white/10 rounded-2xl p-6 shadow-[0_30px_100px_rgba(0,0,0,0.8)] flex flex-col max-h-[90vh] overflow-y-auto text-white transition-all duration-300">
@@ -154,7 +151,6 @@ export default function CreateContentModal({ isOpen, type, onCloseAction, onSucc
                 </button>
               </div>
             </div>
-
             {/* Динамічні інпути збору даних */}
             <div>
               <label className="block text-[9px] text-neutral-500 uppercase font-black mb-1 select-none tracking-wider">
@@ -198,7 +194,6 @@ export default function CreateContentModal({ isOpen, type, onCloseAction, onSucc
                 </select>
               </div>
             )}
-
             {/* Поле введення контенту */}
             <div>
               <label className="block text-[9px] text-neutral-500 uppercase font-black mb-1 select-none tracking-wider">Основний Payload (Текст контенту)</label>

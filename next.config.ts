@@ -6,14 +6,25 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "://unsplash.com",
+        hostname: "images.unsplash.com",
+        port: "",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "unsplash.com",
         port: "",
         pathname: "/**",
       },
     ],
   },
 
-  /* Твоя Wasm-сумісність для Prisma 7 та MongoDB Atlas */
+  experimental: {
+    turbo: {
+    },
+  },
+
+  /* Wasm-сумісність для Prisma та MongoDB Atlas під Webpack */
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.experiments = {
