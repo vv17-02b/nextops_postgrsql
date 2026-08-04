@@ -19,9 +19,9 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  experimental: {
-    turbo: {
-    },
+  /* Оновлений параметр конфігурації для стабільного Turbopack */
+  turbopack: {
+    // Ваші специфічні налаштування для Turbopack (якщо потрібні) можна писати сюди
   },
 
   /* Wasm-сумісність для Prisma та MongoDB Atlas під Webpack */
