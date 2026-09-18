@@ -1,0 +1,18 @@
+1 node super-script/super-script-backend/generator.js
+2 node super-script/super-script-backend/generate-env.js
+3 node super-script/super-script-backend/generate-env.js
+4 node super-script/super-script-backend/super-script-backend.js
+
+
+6 node super-script/super-script-backend/ix-circular.js
+7 node super-script/super-script-backend/fix-app-module.js
+
+cd nextops-backend
+yarn install
+yarn prisma generate
+cd ..
+cd nextops-backend
+yarn start:dev
+
+
+

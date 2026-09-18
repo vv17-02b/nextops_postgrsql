@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "name": "nextops",
+  "version": "1.0.0",
+  "scripts": {
+    "backend": "cd nextops-backend && yarn start:dev",
+    "frontend": "cd nextops-frontend && yarn dev",
+    "start:dev": "concurrently \"yarn backend\" \"yarn frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

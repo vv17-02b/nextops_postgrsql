@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* Базовий клас для фонової картинки з розширеними ефектами */
+.bg-custom-way {
+  position: relative;
+  background-image: url('http://localhost:3001/uploads/images/way.jpg');
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  z-index: 0; 
+}
+
+
+.bg-custom-way::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.3); 
+  backdrop-filter: blur(2px); 
+  z-index: -1; 
+}
