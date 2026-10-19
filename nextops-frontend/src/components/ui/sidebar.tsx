@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, Folder, Terminal, Menu, X, Database } from 'lucide-react';
 import WorkspacePostman from '@/components/WorkspacePostman'; 
-import WorkspaceDb from '@/components/WorkspaceDb'; // 🌟 Імпортуємо наш NoSQL термінал
+import WorkspaceDb from '@/components/WorkspaceDb'; 
 
 const links = [
     { name: 'Account', href: '/account' },
@@ -27,7 +27,7 @@ const links = [
 export default function Sidebar(): React.JSX.Element {
   const pathname = usePathname();
   const [isPostmanOpen, setIsPostmanOpen] = useState<boolean>(false);
-  const [isTerminalOpen, setIsTerminalOpen] = useState<boolean>(false); // 🌟 Стейт відкриття консолі
+  const [isTerminalOpen, setIsTerminalOpen] = useState<boolean>(false); 
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false); 
 
   return (
@@ -35,21 +35,26 @@ export default function Sidebar(): React.JSX.Element {
       {/* Мобільна кнопка бургер-меню */}
       <button 
         onClick={() => setIsMobileOpen(!isMobileOpen)}
-        className="md:hidden fixed top-4 left-4 z-30 p-2 bg-gray-900 text-white rounded-lg shadow-md border border-gray-800"
+        className="md:hidden fixed top-4 left-4 z-30 p-2 bg-gray-900 text-white rounded-lg 
+        shadow-md border border-gray-800"
       >
         {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </button>
 
       {/* Сайдбар */}
-      <aside className={`w-64 bg-gray-900 text-gray-400 flex flex-col h-screen fixed left-0 top-0 border-r border-gray-800 z-20 font-sans shadow-[6px_0_30px_rgba(0,0,0,0.4)] transition-transform duration-300 md:translate-x-0 ${
+      <aside className={`w-64 bg-gray-900 text-gray-400 flex flex-col h-screen fixed left-0 
+      top-0 border-r border-gray-800 z-20 font-sans shadow-[6px_0_30px_rgba(0,0,0,0.4)] 
+      transition-transform duration-300 md:translate-x-0 ${
         isMobileOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
-        <div className="p-5 border-b border-gray-800 flex items-center gap-3 text-white font-bold h-16 select-none">
+        {/* Шапка сайдбару */}
+        <div className="p-5 border-b border-gray-800 flex items-center gap-3 text-white font-bold h-16 shrink-0 select-none">
           <LayoutDashboard className="h-5 w-5 text-blue-500" />
           <span>NextOps Studio</span>
         </div>
         
-        <nav className="flex-1 overflow-y-auto p-4 space-y-1 pb-32">
+        {/* НАВІГАЦІЯ: Тепер вона коректно займе весь вільний простір і буде скролитись */}
+        <nav className="flex-1 overflow-y-auto p-4 space-y-1 min-h-0">
           <span className="px-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-2 select-none">
             Згенеровані модулі
           </span>
@@ -73,12 +78,14 @@ export default function Sidebar(): React.JSX.Element {
           })}
         </nav>
 
-        {/* 🌟 ФІКС ПАНЕЛІ КНОПОК: Дві елітні Low-Code консолі тепер разом! */}
-        <div className="p-4 border-t border-gray-800 bg-gray-950/60 sticky bottom-0 left-0 right-0 space-y-2">
+        {/* ФІКС ПАНЕЛИ: Замість sticky bottom-0 використовуємо mt-auto і shrink-0 */}
+        <div className="p-4 border-t border-gray-800 bg-gray-950/60 mt-auto shrink-0 space-y-2">
           {/* Фіолетова кнопка Постмана */}
           <button
             onClick={() => { setIsPostmanOpen(true); setIsMobileOpen(false); }}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-mono text-xs font-bold rounded-xl transition hover:brightness-110 shadow-lg shadow-violet-500/15 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r 
+            from-violet-600 to-fuchsia-600 text-white font-mono text-xs font-bold rounded-xl 
+            transition hover:brightness-110 shadow-lg shadow-violet-500/15 cursor-pointer"
           >
             <Terminal className="h-4 w-4 animate-pulse" />
             <span>WEBHOOK ORCHESTRATOR</span>
@@ -87,7 +94,9 @@ export default function Sidebar(): React.JSX.Element {
           {/* Бурштинова кнопка нашого NoSQL Терміналу */}
           <button
             onClick={() => { setIsTerminalOpen(true); setIsMobileOpen(false); }}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-600 to-yellow-600 text-white font-mono text-xs font-bold rounded-xl transition hover:brightness-110 shadow-lg shadow-amber-500/15 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r
+             from-amber-600 to-yellow-600 text-white font-mono text-xs font-bold rounded-xl transition
+              hover:brightness-110 shadow-lg shadow-amber-500/15 cursor-pointer"
           >
             <Database className="h-4 w-4" />
             <span>MONGO_ATLAS_CONSOLE</span>
@@ -103,14 +112,17 @@ export default function Sidebar(): React.JSX.Element {
         />
       )}
 
-      {/* 🔮 МОДАЛКА ОРКЕСТРАТОРА (POSTMAN) */}
+      {/*  МОДАЛКА ОРКЕСТРАТОРА (POSTMAN) */}
       {isPostmanOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-300"
+          className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center
+           justify-center p-4 transition-opacity duration-300"
           onClick={() => setIsPostmanOpen(false)}
         >
           <div 
-            className="w-full max-w-2xl bg-neutral-950 rounded-2xl border border-neutral-800 shadow-[0_0_50px_rgba(139,92,246,0.2)] transform transition-transform duration-300 scale-100 flex flex-col my-auto"
+            className="w-full max-w-2xl bg-neutral-950 rounded-2xl border border-neutral-800
+             shadow-[0_0_50px_rgba(139,92,246,0.2)] transform transition-transform duration-300 
+             scale-100 flex flex-col my-auto"
             onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()} 
           >
             <WorkspacePostman 
@@ -121,14 +133,16 @@ export default function Sidebar(): React.JSX.Element {
         </div>
       )}
 
-      {/* 🌟 🔮 ПРЕМІАЛЬНА МОДАЛКА НO-SQL ТЕРМІНАЛА (WORKSPACE DB) */}
+      {/*  ПРЕМІАЛЬНА МОДАЛКА НO-SQL ТЕРМІНАЛА (WORKSPACE DB) */}
       {isTerminalOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-300"
+          className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center 
+          justify-center p-4 transition-opacity duration-300"
           onClick={() => setIsTerminalOpen(false)}
         >
           <div 
-            className="w-full max-w-2xl h-[480px] rounded-2xl shadow-[0_0_50px_rgba(245,158,11,0.15)] transform transition-transform duration-300 scale-100 flex flex-col my-auto"
+            className="w-full max-w-2xl h-[480px] rounded-2xl shadow-[0_0_50px_rgba(245,158,11,0.15)]
+             transform transition-transform duration-300 scale-100 flex flex-col my-auto"
             onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()} 
           >
             <WorkspaceDb 

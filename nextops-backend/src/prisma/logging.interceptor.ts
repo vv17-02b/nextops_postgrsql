@@ -19,20 +19,20 @@ export class LoggingInterceptor implements NestInterceptor {
     const endpoint = request.url;
     const startTime = performance.now();
 
+    //  СУВОРИЙ ФІКС ЦИКЛУ: Перевіряємо через .includes(), щоб відсікти будь-які query-параметри логів
+    if (endpoint.includes('/api/apihistory') || endpoint.includes('/apihistory')) {
+      return next.handle();
+    }
+
     return next.handle().pipe(
-      tap(async () => {
-        const endTime = performance.now();
-        const durationMs = Math.round(endTime - startTime);
-        const statusCode = response.statusCode;
+      tap({
+        next: () => {
+          const endTime = performance.now();
+          const durationMs = Math.round(endTime - startTime);
+          const statusCode = response.statusCode;
 
-        // 🌟 СУВОРИЙ ФІКС: Ігноруємо ТІЛЬКИ прямі запити на отримання/маніпуляцію логами
-        // Все інше — логіни, реєстрації, товари — ЗАПИСУЄМО БЕЗ ВИНЯТКІВ
-        if (endpoint === '/api/apihistory' || endpoint === '/apihistory') {
-          return;
-        }
-
-        try {
-          await this.prisma.$runCommandRaw({
+          // Запускаємо асинхронний запис у фоні безпечно для RxJS
+          this.prisma.$runCommandRaw({
             insert: 'ApiHistory',
             documents: [
               {
@@ -43,9 +43,29 @@ export class LoggingInterceptor implements NestInterceptor {
                 createdAt: new Date(),
               },
             ],
+          }).catch((error) => {
+            console.error(' [LoggingInterceptor Async Error]:', error);
           });
-        } catch (error) {
-          console.error(' [LoggingInterceptor Error]:', error);
+        },
+        error: (error) => {
+          const endTime = performance.now();
+          const durationMs = Math.round(endTime - startTime);
+          const statusCode = error.status || 500;
+
+          this.prisma.$runCommandRaw({
+            insert: 'ApiHistory',
+            documents: [
+              {
+                endpoint: endpoint || '/unknown',
+                method: method || 'GET',
+                statusCode: statusCode,
+                durationMs: durationMs,
+                createdAt: new Date(),
+              },
+            ],
+          }).catch((dbErr) => {
+            console.error(' [LoggingInterceptor Error on Crash]:', dbErr);
+          });
         }
       })
     );

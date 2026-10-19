@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useProject } from "@/hooks/useProject"; // Кастомний хук проєктів
+import { useProject } from "@/hooks/useProject"; 
 import { BarChart3, Database, ChevronRight } from "lucide-react";
 
 interface WorkspaceDbProps {
@@ -10,13 +10,12 @@ interface WorkspaceDbProps {
 }
 
 export default function WorkspaceDb({ isOpen, onCloseAction }: WorkspaceDbProps): React.JSX.Element {
-  
   const { data: projects, loading } = useProject();
   
   const [logs, setLogs] = useState<string[]>([]);
   const [terminalCmd, setTerminalCmd] = useState<string>("");
+  const [executing, setExecuting] = useState<boolean>(false);
 
-  // Автоматичне наповнення логів при старті системи
   useEffect(() => {
     setLogs([
       "Prisma client v6.19.3 loaded clusters successfully.",
@@ -25,30 +24,65 @@ export default function WorkspaceDb({ isOpen, onCloseAction }: WorkspaceDbProps)
     ]);
   }, []);
 
-  
-  const handleCommand = (e: React.FormEvent<HTMLFormElement>): void => {
-    e.preventDefault();
-    if (!terminalCmd.trim()) return;
+  // Нова універсальна функція для живого фетчингу сутностей з NestJS
+  const fetchCollectionStats = async (route: string): Promise<string> => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/${route}`);
+      if (!res.ok) return `Error: Бекенд повернув статус ${res.status}`;
+      const json = await res.json();
+      const count = Array.isArray(json) ? json.length : 0;
+      return `Collection '${route}' fetch active. Documents found in Atlas: ${count}.`;
+    } catch {
+      return "Error: Не вдалося встановити зв'язок з NestJS сервером.";
+    }
+  };
 
+  const handleCommand = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    e.preventDefault();
+    if (!terminalCmd.trim() || executing) return;
+
+    setExecuting(true);
     const stamp: string = new Date().toLocaleTimeString('uk-UA');
     let response = "Error: Command unrecognized by NextOps engine core.";
     const cmd: string = terminalCmd.toLowerCase().trim();
 
+    // Додаємо лог команди користувача на екран негайно
+    setLogs((prev) => [...prev, `> ${terminalCmd}`]);
+
+    // 1. Стандартні системні команди
     if (cmd === "db.status()") {
       response = "MongoDB ATLAS cluster active. State: CONNECTED // IO_BOUND_THREADS: OK.";
     } else if (cmd === "db.stats()") {
-     
       response = `Collections cached: 15 Core Modules active. Active Projects in Atlas: ${projects.length}.`;
     } else if (cmd === "db.help()") {
-      response = "Available cluster commands: 'db.status()', 'db.stats()', 'clear'.";
+      response = "Available cluster commands:\n - 'db.status()'\n - 'db.stats()'\n - 'db.[entity].findMany()' (напр. db.order.findMany(), db.product.findMany())\n - 'clear'";
     } else if (cmd === "clear") {
       setLogs([]);
       setTerminalCmd("");
+      setExecuting(false);
       return;
+    } 
+    // 2. 🚀 НОВА ФІЧА: Інтелектуальний динамічний парсер NoSQL команд для 15 модулів
+    else if (cmd.startsWith("db.") && cmd.endsWith(".findmany()")) {
+      // Вирізаємо назву сутності з рядка типу "db.orderitem.findMany()"
+      const entity = cmd.substring(3, cmd.length - 11).trim();
+      
+      const validEntities = [
+        "account", "user", "product", "order", "orderitem", "category", 
+        "warehouse", "review", "session", "verificationtoken", 
+        "webhookconfig", "apihistory", "project", "agentknowledgebase", "useraibudget"
+      ];
+
+      if (validEntities.includes(entity)) {
+        response = await fetchCollectionStats(entity);
+      } else {
+        response = `Error: Колекцію '${entity}' не знайдено у схемі NextOps Cores.`;
+      }
     }
 
-    setLogs((prev) => [...prev, `> ${terminalCmd}`, `[${stamp}] ${response}`]);
+    setLogs((prev) => [...prev, `[${stamp}] ${response}`]);
     setTerminalCmd("");
+    setExecuting(false);
   };
 
   return (
@@ -58,7 +92,7 @@ export default function WorkspaceDb({ isOpen, onCloseAction }: WorkspaceDbProps)
       <div className="flex justify-between items-center border-b border-neutral-800 pb-3 mb-4 select-none">
         <div className="flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-amber-500" />
-          <span className="text-sm font-mono text-amber-500 font-black tracking-wider">COLLECTION_LIMIT_METRICS</span>
+          <span className="text-sm font-mono text-amber-500 font-black tracking-wider">LIVE_NOSQL_TERMINAL</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono text-amber-600/70 font-bold flex items-center gap-1">
@@ -102,10 +136,11 @@ export default function WorkspaceDb({ isOpen, onCloseAction }: WorkspaceDbProps)
           <ChevronRight className="w-4 h-4 text-amber-500 shrink-0 stroke-[3]" />
           <input
             type="text"
-            placeholder="Введіть 'db.status()', 'db.stats()' або 'clear'..."
+            placeholder="db.order.findMany(), db.product.findMany() або 'db.help()'..."
             value={terminalCmd}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTerminalCmd(e.target.value)}
-            className="flex-1 bg-transparent text-white font-mono text-sm focus:outline-none placeholder-neutral-700"
+            disabled={executing}
+            className="flex-1 bg-transparent text-white font-mono text-sm focus:outline-none placeholder-neutral-700 disabled:opacity-50"
           />
         </form>
       </div>

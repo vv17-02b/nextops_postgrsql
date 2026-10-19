@@ -11,9 +11,25 @@ export class UserService {
     private readonly prisma: PrismaService
   ) {}
 
-  async create(dto: CreateUserDto): Promise<User> {
-    return this.prisma.user.create({ data: dto });
+   async create(dto: CreateUserDto): Promise<User> {
+   
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Створюємо користувача
+      const newUser = await tx.user.create({ data: dto });
+
+   
+      await tx.userAiBudget.create({
+        data: {
+          userId: newUser.id,
+          monthlyLimit: 10.00, 
+          resetDate: new Date(new Date().setMonth(new Date().getMonth() + 1)), 
+        },
+      });
+
+      return newUser;
+    });
   }
+
 
   async findAll(): Promise<User[]> {
     return this.prisma.user.findMany();

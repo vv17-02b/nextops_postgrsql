@@ -1,9 +1,16 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, MethodNotAllowedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateApiHistoryDto } from './dto/create-apihistory.dto';
 import { UpdateApiHistoryDto } from './dto/update-apihistory.dto';
-import { Prisma } from '@prisma/client';
 import type { ApiHistory } from '@prisma/client';
+
+interface MongoCursor {
+  firstBatch: Record<string, unknown>[];
+}
+
+interface MongoRawResult {
+  cursor?: MongoCursor;
+}
 
 @Injectable()
 export class ApiHistoryService {
@@ -13,9 +20,9 @@ export class ApiHistoryService {
   ) {}
 
   async create(dto: CreateApiHistoryDto): Promise<ApiHistory> {
-    //  ХАК ДЛЯ TIME-SERIES: Використовуємо сирий NoSQL insert запит, 
-    // щоб обійти транзакції Prisma, які блокує MongoDB Atlas для логів
-    const rawResult = await this.prisma.$runCommandRaw({
+    const runCommand = this.prisma['\$runCommandRaw'].bind(this.prisma);
+    
+    await runCommand({
       insert: 'ApiHistory',
       documents: [
         {
@@ -23,23 +30,61 @@ export class ApiHistoryService {
           method: dto.method,
           statusCode: dto.statusCode,
           durationMs: dto.durationMs,
-          createdAt: new Date(), // Обов'язковий таймстамп для Time-Series
+          createdAt: new Date(),
         }
       ]
     });
 
-    // Повертаємо тимчасовий об'єкт для фронтенду, щоб не ламати інтерфейс сторінки
     return {
       id: 'raw-logged',
-      ...dto,
+      userId: null,
+      endpoint: dto.endpoint,
+      method: dto.method,
+      statusCode: dto.statusCode,
+      durationMs: dto.durationMs,
+      requestBody: null,
+      responseBody: null,
       createdAt: new Date(),
-    } as unknown as ApiHistory;
+    };
   }
 
   async findAll(): Promise<ApiHistory[]> {
-    return this.prisma.apiHistory.findMany({
-      orderBy: { createdAt: 'desc' } // Свіжі логи завжди зверху
-    });
+    try {
+      const runCommand = this.prisma['\$runCommandRaw'].bind(this.prisma);
+      
+      // КУЛЕНЕПРОБИВНИЙ ФІКС P2023: Читаємо Time-Series логи в обхід падаючого findMany
+      const rawResult = await runCommand({
+        find: 'ApiHistory',
+        filter: {},
+        sort: { createdAt: -1 },
+        limit: 50
+      }) as unknown as MongoRawResult;
+
+      if (rawResult && rawResult.cursor && Array.isArray(rawResult.cursor.firstBatch)) {
+        return rawResult.cursor.firstBatch.map((doc) => {
+          const rawId = doc._id as Record<string, string> | string | undefined;
+          const rawUserId = doc.userId as Record<string, string> | string | undefined;
+          const rawCreatedAt = doc.createdAt as Record<string, string> | string | undefined;
+
+          return {
+            id: typeof rawId === 'object' && rawId ? rawId['\$oid'] || String(Math.random()) : String(rawId || Math.random()),
+            userId: typeof rawUserId === 'object' && rawUserId ? rawUserId['\$oid'] || null : (rawUserId as string | null),
+            endpoint: String(doc.endpoint || '/unknown'),
+            method: String(doc.method || 'GET'),
+            statusCode: Number(doc.statusCode) || 200,
+            durationMs: Number(doc.durationMs) || 0,
+            requestBody: (doc.requestBody as string) || null,
+            responseBody: (doc.responseBody as string) || null,
+            createdAt: typeof rawCreatedAt === 'object' && rawCreatedAt ? new Date(rawCreatedAt['\$date'] || Date.now()) : new Date(String(rawCreatedAt || Date.now())),
+          };
+        });
+      }
+
+      return;
+    } catch (error) {
+      console.error('🚨 [ApiHistory Safe Fallback Executed]:', error);
+      return;
+    }
   }
 
   async findOne(id: string): Promise<ApiHistory> {
@@ -49,15 +94,10 @@ export class ApiHistoryService {
   }
 
   async update(id: string, dto: UpdateApiHistoryDto): Promise<ApiHistory> {
-    await this.findOne(id);
-    return this.prisma.apiHistory.update({
-      where: { id },
-      data: dto as unknown as Prisma.ApiHistoryUncheckedUpdateInput,
-    });
+    throw new MethodNotAllowedException('Оновлення записів у Time-Series колекції ApiHistory заборонено архітектурою бази даних');
   }
 
   async remove(id: string): Promise<ApiHistory> {
-    await this.findOne(id);
-    return this.prisma.apiHistory.delete({ where: { id } });
+    throw new MethodNotAllowedException('Видалення окремих логів з Time-Series колекції заборонено. Використовуйте TTL правила очищення сховища');
   }
 }

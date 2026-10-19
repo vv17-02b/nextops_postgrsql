@@ -93,7 +93,7 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
     const startTime = performance.now();
 
     try {
-      // 🌟 1. Перевіряємо та зчитуємо збережений JWT токен з пам'яті браузера
+      //  1. Перевіряємо та зчитуємо збережений JWT токен з пам'яті браузера
       const savedToken = typeof window !== "undefined" ? localStorage.getItem("nextops_jwt") : null;
 
       // Конфігурація заголовків та параметрів запиту
@@ -101,7 +101,7 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
         method: httpMethod,
         headers: {
           "Content-Type": "application/json",
-          // 🌟 2. АВТО-ПІДСТАНОВКА: Якщо токен є в пам'яті, прикріплюємо заголовок Bearer для NestJS
+          //  2. АВТО-ПІДСТАНОВКА: Якщо токен є в пам'яті, прикріплюємо заголовок Bearer для NestJS
           ...(savedToken ? { "Authorization": `Bearer ${savedToken}` } : {}),
         },
       };
@@ -128,7 +128,7 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
       try {
         const parsedJson = JSON.parse(text);
 
-        // 🌟 3. АВТО-ЗБЕРЕЖЕННЯ: Якщо це був успішний вхід, зберігаємо JWT токен автоматично
+        // 3. АВТО-ЗБЕРЕЖЕННЯ: Якщо це був успішний вхід, зберігаємо JWT токен автоматично
         if (customEndpoint.includes("/api/auth/login") && res.ok && parsedJson.accessToken) {
           localStorage.setItem("nextops_jwt", parsedJson.accessToken);
           setResponseBody(`// [SUCCESS] Токен успішно перехоплено та збережено в localStorage!\n// Статус: ${res.status} OK | Час: ${duration}ms\n` + JSON.stringify(parsedJson, null, 2));
@@ -189,7 +189,7 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
         </div>
       </div>
 
-      {/* Сповіщення про помилки клієнтської валідації */}
+          {/* Сповіщення про помилки клієнтської валідації */}
       {uiError && (
         <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 font-mono text-xs rounded-xl text-left w-full break-all">
           ⚠️ {uiError}
@@ -203,7 +203,8 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
         <div className="flex flex-col sm:flex-row gap-2 w-full">
           <select
             value={httpMethod}
-            onChange={(e) => setHttpMethod(e.target.value as any)}
+            // ВИПРАВЛЕНО ANY: Суворе приведення типу під допустимі HTTP-методи
+            onChange={(e) => setHttpMethod(e.target.value as "GET" | "POST" | "PATCH" | "DELETE")}
             className="w-full sm:w-32 text-xs p-3 rounded-xl bg-neutral-900 border border-neutral-800 text-blue-400 font-mono font-black focus:outline-none focus:border-blue-500 cursor-pointer"
           >
             <option value="GET">GET</option>
@@ -232,6 +233,7 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
             </button>
           </div>
         </div>
+
         {/* 4. РЕДАКТОР ТІЛА ЗАПИТУ ТА ВІКНО ВІДПОВІДІ (Двоколонна адаптивна панель) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
 
@@ -246,10 +248,11 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
               placeholder="{\n  // Введіть дані для POST/PATCH запиту\n}"
               rows={8}
               disabled={isSubmitting || httpMethod === "GET" || httpMethod === "DELETE"}
-              className={`w-full p-3 rounded-xl bg-neutral-900 border text-xs font-mono focus:outline-none focus:border-blue-500 resize-none min-h-[160px] ${httpMethod === "GET" || httpMethod === "DELETE"
+              className={`w-full p-3 rounded-xl bg-neutral-900 border text-xs font-mono focus:outline-none focus:border-blue-500 resize-none min-h-[160px] ${
+                httpMethod === "GET" || httpMethod === "DELETE"
                   ? "opacity-30 border-neutral-800 text-neutral-600 select-none"
                   : "border-neutral-800 text-emerald-400"
-                }`}
+              }`}
             />
           </div>
 
@@ -262,12 +265,13 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
               readOnly
               value={responseBody || (isSubmitting ? "// Очікування відповіді від NestJS сервера..." : "// Натисніть SEND, щоб виконати запит до API")}
               rows={8}
-              className={`w-full p-3 rounded-xl bg-black border text-xs font-mono resize-none min-h-[160px] focus:outline-none ${responseStatus && responseStatus >= 400
+              className={`w-full p-3 rounded-xl bg-black border text-xs font-mono resize-none min-h-[160px] focus:outline-none ${
+                responseStatus && responseStatus >= 400
                   ? "text-red-400 border-red-900/40"
                   : responseStatus && responseStatus < 400
                     ? "text-blue-400 border-blue-900/40"
                     : "text-neutral-500 border-neutral-800"
-                }`}
+              }`}
             />
           </div>
 
