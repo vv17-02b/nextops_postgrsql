@@ -4,6 +4,22 @@ import { CreateWarehouseDto } from './dto/create-warehouse.dto';
 import { UpdateWarehouseDto } from './dto/update-warehouse.dto';
 import type { Warehouse } from '@prisma/client';
 
+interface MongoBatchDoc {
+  _id?: { "\$oid": string } | string;
+  productId?: string;
+  location?: string;
+  quantity?: number;
+  updatedAt?: string | Date;
+}
+
+interface MongoCursor {
+  firstBatch: MongoBatchDoc[];
+}
+
+interface MongoRawResult {
+  cursor?: MongoCursor;
+}
+
 @Injectable()
 export class WarehouseService {
   constructor(
@@ -12,59 +28,82 @@ export class WarehouseService {
   ) {}
 
   async create(dto: CreateWarehouseDto): Promise<Warehouse> {
-    await this.prisma.$runCommandRaw({
+    const runCommand = this.prisma['\$runCommandRaw'].bind(this.prisma);
+    
+    // Створюємо документ, що повністю відповідає товарній схемі складу
+    const warehouseDoc = {
+      productId: (dto as any).productId || 'unknown-product',
+      location: dto.location,
+      quantity: Number((dto as any).quantity || 0),
+      updatedAt: new Date(),
+    };
+
+    await runCommand({
       insert: 'Warehouse',
-      documents: [
-        {
-          name: dto.name,
-          location: dto.location,
-          description: dto.description || null,
-        }
-      ]
+      documents: [warehouseDoc]
     });
 
-    return {
-      id: 'new-warehouse',
-      name: dto.name,
-      location: dto.location,
-      description: dto.description || null,
-    } as unknown as Warehouse;
+    // Надійно знаходимо створений елемент через офіційний Prisma Client
+    const item = await this.prisma.warehouse.findFirst({
+      where: { location: dto.location, productId: warehouseDoc.productId },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Помилка ініціалізації залишків на складі в MongoDB Atlas');
+    }
+
+    return item;
   }
 
   async findAll(): Promise<Warehouse[]> {
+    const runCommand = this.prisma['\$runCommandRaw'].bind(this.prisma);
   
-    const rawData = await this.prisma.$runCommandRaw({
+    const rawData = await runCommand({
       find: 'Warehouse',
-    }) as any;
+    }) as unknown as MongoRawResult;
 
     if (!rawData || !rawData.cursor || !rawData.cursor.firstBatch) {
       return [];
     }
 
-   
-    return rawData.cursor.firstBatch.map((doc: any) => ({
-      id: doc._id?.$oid || String(doc._id || ''),
-      name: doc.name || doc.location || 'Без назви',
-      location: doc.location || 'Локація не вказана',
-      description: doc.description || null,
-    })) as unknown as Warehouse[];
+    // Відображаємо дані у сувору структуру Warehouse моделі Prisma
+    return rawData.cursor.firstBatch.map((doc: MongoBatchDoc) => {
+      const rawId = doc._id;
+      const cleanId = typeof rawId === 'object' && rawId ? (rawId as any)['\$oid'] : String(rawId || '');
+
+      return {
+        id: cleanId,
+        productId: doc.productId || 'unknown-product',
+        location: doc.location || 'Локація не вказана',
+        quantity: Number(doc.quantity || 0),
+        updatedAt: doc.updatedAt ? new Date(doc.updatedAt) : new Date(),
+      };
+    });
   }
 
   async findOne(id: string): Promise<Warehouse> {
     const list = await this.findAll();
     const item = list.find(w => w.id === id);
-    if (!item) throw new NotFoundException(`Склад з ID ${id} не знайдено`);
+    if (!item) throw new NotFoundException(`Запис складу з ID ${id} не знайдено`);
     return item;
   }
 
   async update(id: string, dto: UpdateWarehouseDto): Promise<Warehouse> {
-    // Для NoSQL гнучкості оновлюємо через сиру команду
-    await this.prisma.$runCommandRaw({
+    const runCommand = this.prisma['\$runCommandRaw'].bind(this.prisma);
+
+    await runCommand({
       update: 'Warehouse',
       updates: [
         {
-          q: { _id: { $oid: id } },
-          u: { $set: { name: dto.name, location: dto.location, description: dto.description } },
+          q: id.length === 24 ? { _id: { "\$oid": id } } : { _id: id },
+          u: { 
+            "\$set": { 
+              location: dto.location,
+              productId: (dto as any).productId,
+              quantity: Number((dto as any).quantity || 0),
+              updatedAt: new Date()
+            } 
+          },
         }
       ]
     });
@@ -72,14 +111,14 @@ export class WarehouseService {
   }
 
   async remove(id: string): Promise<Warehouse> {
+    const runCommand = this.prisma['\$runCommandRaw'].bind(this.prisma);
     const item = await this.findOne(id);
     
-    // Видаляємо документ безпосередньо за його ObjectId
-    await this.prisma.$runCommandRaw({
+    await runCommand({
       delete: 'Warehouse',
       deletes: [
         {
-          q: { _id: id.length === 24 ? { $oid: id } : id },
+          q: id.length === 24 ? { _id: { "\$oid": id } } : { _id: id },
           limit: 1
         }
       ]
