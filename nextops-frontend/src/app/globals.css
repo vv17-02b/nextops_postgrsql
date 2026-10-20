@@ -15,25 +15,28 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   scroll-behavior: smooth;
-  background-color: #030712;
   color: #f3f4f6;            
   overflow-x: hidden;
+
+  /* ВИПРАВЛЕНО: Картинка тепер є глобальним заднім планом для всього браузера */
+  background-color: #030712;
+  background-image: url('http://localhost:3001/uploads/images/neural.jpg');
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-attachment: fixed; /* Фіксує тло, щоб воно не смикалося */
 }
 
-/* КЛАС ДЛЯ КОНТЕЙНЕРА СТОРІНКИ: Зображення завантажується коректно */
+/* КЛАС ДЛЯ КОНТЕЙНЕРА СТОРІНКИ: Тепер повністю прозорий, щоб бачити глобальне тло */
 .bg-custom-way {
   position: relative;
   z-index: 0;
   overflow: hidden; 
   border-radius: 1rem;
-  background-color: #030712;
-  background-image: linear-gradient(to bottom, rgba(3, 7, 18, 0.4), #030712), url('http://localhost:3001/uploads/images/neural.jpg');
-  background-position: top center;
-  background-repeat: no-repeat;
-  background-size: cover;
+  background-color: transparent; /* Прибрали заливку кольором, яка перекривала body */
 }
 
-/* ГЛОБАЛЬНИЙ КІБЕР-СТИЛЬ ДЛЯ ВСІХ ІНПУТІВ ФОРМИ (Фікс видимості тексту) */
+/* ГЛОБАЛЬНИЙ КІБЕР-СТИЛЬ ДЛЯ ВСІХ ІНПУТІВ ФОРМИ */
 input, select, textarea {
   background-color: rgba(3, 7, 18, 0.6) !important;
   color: #ffffff !important;
@@ -44,13 +47,11 @@ input, select, textarea {
   transition: all 0.2s ease-in-out;
 }
 
-/* Фокус на елементі введення для збереження неонового UX */
 input:focus, select:focus, textarea:focus {
   border-color: #3b82f6 !important;
   box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
 }
 
-/* Налаштування кольору плейсхолдерів */
 input::placeholder, textarea::placeholder {
   color: #4b5563 !important;
 }

@@ -6,12 +6,12 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useMemo,
   Suspense
 } from "react";
 import { useSearchParams } from "next/navigation";
 
-// Інтерфейси суворо приведені до вашої schema.prisma (NoSQL MongoDB ObjectId)
-interface Project {
+export interface Project {
   id: string;
   userId: string;
   name: string;      
@@ -20,7 +20,7 @@ interface Project {
   updatedAt: string;
 }
 
-interface WebhookConfig {
+export interface WebhookConfig {
   id: string;
   projectId: string;
   url: string;        
@@ -31,7 +31,7 @@ interface WebhookConfig {
   updatedAt: string;
 }
 
-interface Analytics {
+export interface Analytics {
   totalBudget: number;
   averageCheck: number;
   activeProjects: number;
@@ -53,23 +53,19 @@ interface WorkspaceContextType {
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
-  // Перехоплюємо параметри пошуку з URL Навбару
   const searchParams = useSearchParams();
   const searchTarget = searchParams ? searchParams.get("search_target") : null;
   const searchQuery = searchParams ? searchParams.get("q")?.toLowerCase().trim() : null;
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
+  const [rawProjects, setRawProjects] = useState<Project[]>([]);
+  const [rawWebhooks, setRawWebhooks] = useState<WebhookConfig[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Головна функція синхронізації матриці вікон
   const refreshWorkspace = useCallback(async () => {
     try {
       setIsLoading(true);
-
-      // Запити йдуть безпосередньо до вашого NestJS бекенду
       const [resProjects, resWebhooks, resAnalytics] = await Promise.all([
         fetch("/api/project"),
         fetch("/api/webhookconfig"),
@@ -80,28 +76,12 @@ function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
         const dataProj = await resProjects.json();
         const dataWh = await resWebhooks.json();
 
-        let fetchedProjects: Project[] = Array.isArray(dataProj) ? dataProj : dataProj.projects || [];
-        let fetchedWebhooks: WebhookConfig[] = Array.isArray(dataWh) ? dataWh : dataWh.webhooks || [];
+        const fetchedProjects: Project[] = Array.isArray(dataProj) ? dataProj : dataProj.projects || [];
+        const fetchedWebhooks: WebhookConfig[] = Array.isArray(dataWh) ? dataWh : dataWh.webhooks || [];
 
-        // Жива інтелектуальна фільтрація на основі пошукового рядка Навбару
-        if (searchQuery) {
-          if (searchTarget === "AI_NODES") {
-            fetchedProjects = fetchedProjects.filter((p: Project) =>
-              p.name.toLowerCase().includes(searchQuery) ||
-              (p.description && p.description.toLowerCase().includes(searchQuery))
-            );
-          } else if (searchTarget === "WEBHOOKS") {
-            fetchedWebhooks = fetchedWebhooks.filter((w: WebhookConfig) =>
-              w.events.some(e => e.toLowerCase().includes(searchQuery)) ||
-              w.url.toLowerCase().includes(searchQuery)
-            );
-          }
-        }
+        setRawProjects(fetchedProjects);
+        setRawWebhooks(fetchedWebhooks);
 
-        setProjects(fetchedProjects);
-        setWebhooks(fetchedWebhooks);
-
-        // Синхронізація FinOps метрик
         if (resAnalytics.ok) {
           const dataAnal = await resAnalytics.json();
           if (dataAnal && (dataAnal.metrics || Array.isArray(dataAnal))) {
@@ -117,7 +97,6 @@ function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
           }
         }
 
-        // Автоматично тримаємо фокус на поточному проєкті
         if (fetchedProjects.length > 0) {
           setActiveProject((prev) => {
             const stillExists = fetchedProjects.find((p: Project) => p.id === prev?.id);
@@ -132,9 +111,28 @@ function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery, searchTarget]);
+  }, []);
 
-  // Запускаємо синхронізацію автоматично при завантаженні сторінки
+  const filteredProjects = useMemo(() => {
+    if (searchQuery && searchTarget === "AI_NODES") {
+      return rawProjects.filter((p: Project) =>
+        p.name.toLowerCase().includes(searchQuery) ||
+        (p.description && p.description.toLowerCase().includes(searchQuery))
+      );
+    }
+    return rawProjects;
+  }, [rawProjects, searchQuery, searchTarget]);
+
+  const filteredWebhooks = useMemo(() => {
+    if (searchQuery && searchTarget === "WEBHOOKS") {
+      return rawWebhooks.filter((w: WebhookConfig) =>
+        w.events.some((e: string) => e.toLowerCase().includes(searchQuery)) ||
+        w.url.toLowerCase().includes(searchQuery)
+      );
+    }
+    return rawWebhooks;
+  }, [rawWebhooks, searchQuery, searchTarget]);
+
   useEffect(() => {
     refreshWorkspace();
   }, [refreshWorkspace]);
@@ -142,8 +140,8 @@ function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
   return (
     <WorkspaceContext.Provider
       value={{
-        projects,
-        webhooks,
+        projects: filteredProjects,
+        webhooks: filteredWebhooks,
         analytics,
         activeProject,
         setActiveProject,
@@ -156,11 +154,10 @@ function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
   );
 }
 
-// РУТОВИЙ ПРОВАЙДЕР З КУЛЕНЕПРОБИВНОЮ ОГОРТКОЮ SUSPENSE
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   return (
     <Suspense fallback={
-      <div className="fixed inset-0 bg-neutral-950 flex items-center justify-center font-mono text-xs text-neutral-500 z-50">
+      <div className="fixed inset-0 bg-slate-950 flex items-center justify-center font-mono text-xs text-slate-500 z-50">
         <span className="w-4 h-4 border-2 border-t-transparent border-blue-500 rounded-full animate-spin mr-2"></span>
         <span>CONNECTING_NEXTOPS_CORES...</span>
       </div>

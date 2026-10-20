@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "backend": "cd nextops-backend && yarn start:dev",
-    "frontend": "cd nextops-frontend && yarn dev",
+    "frontend": "cd nextops-frontend && yarn dev -- --turbo",
     "start:dev": "concurrently \"yarn backend\" \"yarn frontend\""
   },
   "devDependencies": {
