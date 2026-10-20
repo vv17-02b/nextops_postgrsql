@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 
-// Чистий інтерфейс моделі відповідно до вашої схеми бази даних MongoDB Atlas
 export interface OrderItem {
   id: string;
   orderId: string;
@@ -9,7 +8,6 @@ export interface OrderItem {
   price: number;
 }
 
-// Безпечний тип для створення нових записів без обов'язкового ID
 export type CreateOrderItemInput = Omit<OrderItem, 'id'>;
 
 interface UseOrderItemReturn {
@@ -24,7 +22,6 @@ export function useOrderItem(): UseOrderItemReturn {
   const [data, setData] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
-  // Використовуємо відносні шляхи Next.js, щоб запити проксувалися автоматично
   const fetchData = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
@@ -41,31 +38,34 @@ export function useOrderItem(): UseOrderItemReturn {
   }, []);
 
   const createItem = async (formData: CreateOrderItemInput): Promise<void> => {
-    try {
-      const res = await fetch('/api/orderitem', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-      if (res.ok) {
-        await fetchData();
-      }
-    } catch (err: unknown) {
-      console.error('Помилка створення:', err);
+    const res = await fetch('/api/orderitem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData),
+    });
+
+    if (!res.ok) {
+      // Якщо сервер відповів 400 або 500, парсимо помилку і викидаємо її для форми
+      const errorData = (await res.json().catch(() => ({}))) as { message?: string | string[] };
+      const errorMessage = Array.isArray(errorData.message) 
+        ? errorData.message.join(', ') 
+        : errorData.message || `Помилка сервера: ${res.status}`;
+      throw new Error(errorMessage);
     }
+
+    await fetchData();
   };
 
   const deleteItem = async (id: string): Promise<void> => {
-    try {
-      const res = await fetch(`/api/orderitem/${id}`, { 
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        await fetchData();
-      }
-    } catch (err: unknown) {
-      console.error('Помилка видалення:', err);
+    const res = await fetch(`/api/orderitem/${id}`, { 
+      method: 'DELETE',
+    });
+
+    if (!res.ok) {
+      throw new Error(`Не вдалося видалити елемент. Статус: ${res.status}`);
     }
+
+    await fetchData();
   };
 
   useEffect(() => { 

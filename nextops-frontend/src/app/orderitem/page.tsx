@@ -1,21 +1,24 @@
 "use client";
 
 import React from 'react';
-import { useOrderItem } from '@/hooks/useOrderItem';
-import OrderItemForm from '@/components/orderitem/orderitem-form';
+import { useOrderItem, OrderItem } from '@/hooks/useOrderItemCore'; // <--- Імпортуємо тип та хук
+import { OrderItemForm } from '@/components/orderitem/orderitem-form';
 import { Trash2 } from 'lucide-react';
 
 export default function OrderItemPage(): React.JSX.Element {
-  const { data, loading, createItem, deleteItem } = useOrderItem();
+  const { data, loading, deleteItem } = useOrderItem();
 
   return (
     <div className="space-y-6 font-sans">
       <div className="bg-white p-6 border rounded-xl shadow-sm">
         <h1 className="text-xl font-bold text-gray-900">Next.js Сторінка: OrderItem</h1>
-        <p className="text-sm text-gray-500">Автоматичний зв'язок з роутом бекенду: <code className="text-blue-600 font-mono">/api/orderitem</code></p>
+        <p className="text-sm text-gray-500">
+          Автоматичний зв'язок з роутом бекенду:{' '}
+          <code className="text-blue-600 font-mono">/api/orderitem</code>
+        </p>
       </div>
 
-      <OrderItemForm onSubmit={createItem} />
+      <OrderItemForm />
 
       <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
         <div className="p-4 border-b bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -31,23 +34,23 @@ export default function OrderItemPage(): React.JSX.Element {
                 <tr>
                   <th className="px-4 py-3 text-left">ID Документа</th>
                   <th className="px-4 py-3 text-left">Order ID</th>
-            <th className="px-4 py-3 text-left">Product ID</th>
-            <th className="px-4 py-3 text-left">Кількість</th>
-            <th className="px-4 py-3 text-left">Ціна за одиницю</th>
+                  <th className="px-4 py-3 text-left">Product ID</th>
+                  <th className="px-4 py-3 text-left">Кількість</th>
+                  <th className="px-4 py-3 text-left">Ціна за одиницю</th>
                   <th className="px-4 py-3 text-right">Дії</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {data.map((item) => (
+                {data.map((item: OrderItem) => ( // <--- Сувора типізація параметра без any
                   <tr key={item.id} className="hover:bg-gray-50/50 transition text-[13px]">
                     <td className="px-4 py-3 font-mono text-xs text-blue-600"> {item.id} </td>
                     <td className="px-4 py-3 text-gray-700"> {String(item.orderId || '-')} </td>
-                <td className="px-4 py-3 text-gray-700"> {String(item.productId || '-')} </td>
-                <td className="px-4 py-3 text-gray-700"> {String(item.quantity || '-')} </td>
-                <td className="px-4 py-3 text-gray-700"> {String(item.price || '-')} </td>
+                    <td className="px-4 py-3 text-gray-700"> {String(item.productId || '-')} </td>
+                    <td className="px-4 py-3 text-gray-700"> {String(item.quantity || '-')} </td>
+                    <td className="px-4 py-3 text-gray-700"> {String(item.price || '-')} USD</td>
                     <td className="px-4 py-3 text-right">
                       <button 
-                        onClick={() => deleteItem(item.id)}
+                        onClick={() => void deleteItem(item.id)}
                         className="p-1.5 text-gray-400 hover:text-red-600 rounded-md transition inline-flex"
                       >
                         <Trash2 className="h-4 w-4" />

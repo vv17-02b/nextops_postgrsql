@@ -1,81 +1,109 @@
+"use client";
+
 import React, { useState } from 'react';
+import { useOrderItem, CreateOrderItemInput } from '../../hooks/useOrderItemCore';
 
-interface FormProps {
-  onSubmit: (data: any) => Promise<void>;
-}
-
-export default function OrderItemForm({ onSubmit }: FormProps): React.JSX.Element {
+export function OrderItemForm(): React.JSX.Element {
+  const { createItem } = useOrderItem();
   const [orderId, setOrderId] = useState<string>('');
   const [productId, setProductId] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
   const [price, setPrice] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
+    if (!orderId || !productId || !quantity || !price) return;
+    
     setLoading(true);
-    await onSubmit({
-      orderId: orderId,
-      productId: productId,
-      quantity: Number(quantity),
-      price: Number(price)
-    });
-    setOrderId('');
-    setProductId('');
-    setQuantity('');
-    setPrice('');
-    setLoading(false);
+    setError(null);
+    
+    try {
+      const payload: CreateOrderItemInput = {
+        orderId: orderId.trim(),
+        productId: productId.trim(),
+        quantity: Number(quantity),
+        price: Number(price),
+      };
+
+      await createItem(payload);
+      
+      setOrderId('');
+      setProductId('');
+      setQuantity('');
+      setPrice('');
+    } catch (err: unknown) {
+      // Виводимо помилку валідації NestJS прямо на форму
+      setError(err instanceof Error ? err.message : 'Невідома помилка відправки');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <form onSubmit={handleSubmit} className="p-5 border rounded-xl bg-gray-50/50 space-y-4 font-sans">
-      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Форма додавання (OrderItem)</h3>
+      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+        Форма додавання (OrderItem)
+      </h3>
+      
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-gray-600">Order ID</label>
-        <input 
-          type="text" 
-          value={orderId}
-          onChange={(e) => setOrderId(e.target.value)}
-          placeholder="Введіть order id..." 
-          className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
-          required
-        />
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-600">ID Замовлення (orderId)</label>
+          <input 
+            type="text" 
+            value={orderId}
+            onChange={(e) => setOrderId(e.target.value)}
+            placeholder="Введіть ID замовлення..." 
+            className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
+            required
+          />
+        </div>
+        
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-600">ID Продукту (productId)</label>
+          <input 
+            type="text" 
+            value={productId}
+            onChange={(e) => setProductId(e.target.value)}
+            placeholder="Введіть ID продукту..." 
+            className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
+            required
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-600">Кількість (quantity)</label>
+          <input 
+            type="number" 
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            placeholder="Введіть кількість..." 
+            className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
+            required
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-600">Ціна за одиницю</label>
+          <input 
+            type="number" 
+            step="0.01"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="Введіть ціну..." 
+            className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
+            required
+          />
+        </div>
       </div>
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-gray-600">Product ID</label>
-        <input 
-          type="text" 
-          value={productId}
-          onChange={(e) => setProductId(e.target.value)}
-          placeholder="Введіть product id..." 
-          className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
-          required
-        />
-      </div>
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-gray-600">Кількість</label>
-        <input 
-          type="number" 
-          value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
-          placeholder="Введіть кількість..." 
-          className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
-          required
-        />
-      </div>
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-gray-600">Ціна за одиницю</label>
-        <input 
-          type="number" 
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          placeholder="Введіть ціна за одиницю..." 
-          className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
-          required
-        />
-      </div>
-      </div>
+
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-mono text-red-600">
+          ⚠️ {error}
+        </div>
+      )}
+
       <button 
         type="submit" 
         disabled={loading}

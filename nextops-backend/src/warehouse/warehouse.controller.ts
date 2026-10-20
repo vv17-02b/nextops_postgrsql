@@ -8,31 +8,41 @@ import type { Warehouse } from '@prisma/client';
 export class WarehouseController {
   constructor(
     @Inject(WarehouseService)
-    private readonly service: WarehouseService
-  ) {}
+    private readonly service: WarehouseService,
+  ) {
+    // Фіксуємо контекст, щоб уникнути падінь 500 на базі або сервісі
+    this.create = this.create.bind(this);
+    this.findAll = this.findAll.bind(this);
+    this.findOne = this.findOne.bind(this);
+    this.update = this.update.bind(this);
+    this.remove = this.remove.bind(this);
+  }
 
   @Post()
-  create(@Body() dto: CreateWarehouseDto): Promise<Warehouse> { 
+  async create(@Body() dto: CreateWarehouseDto): Promise<Warehouse> { 
     return this.service.create(dto); 
   }
 
   @Get()
-  findAll(): Promise<Warehouse[]> { 
+  async findAll(): Promise<Warehouse[]> { 
     return this.service.findAll(); 
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string): Promise<Warehouse> { 
+  async findOne(@Param('id') id: string): Promise<Warehouse> { 
     return this.service.findOne(id); 
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateWarehouseDto): Promise<Warehouse> {
+  async update(
+    @Param('id') id: string, 
+    @Body() dto: UpdateWarehouseDto,
+  ): Promise<Warehouse> {
     return this.service.update(id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string): Promise<Warehouse> { 
+  async remove(@Param('id') id: string): Promise<Warehouse> { 
     return this.service.remove(id); 
   }
 }

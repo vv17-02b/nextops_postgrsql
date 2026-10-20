@@ -20,21 +20,45 @@ interface MongoRawResult {
   cursor?: MongoCursor;
 }
 
+// Суворий тип для безпечного парсингу ObjectId без type-casting до any
+interface MongoOidWrapper {
+  "\$oid": string;
+}
+
+// Кастомні Enterprise-інтерфейси для мапінгу динамічних полів No-Code форми
+interface CreateWarehouseFormPayload {
+  name?: string;
+  location?: string;
+  description?: string;
+  productId?: string;
+  quantity?: string | number;
+}
+
+interface UpdateWarehouseFormPayload {
+  name?: string;
+  location?: string;
+  productId?: string;
+  quantity?: string | number;
+}
+
 @Injectable()
 export class WarehouseService {
   constructor(
     @Inject(PrismaService)
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
   ) {}
 
   async create(dto: CreateWarehouseDto): Promise<Warehouse> {
     const runCommand = this.prisma['\$runCommandRaw'].bind(this.prisma);
     
-    // Створюємо документ, що повністю відповідає товарній схемі складу
+    // Безпечне приведення типів (Type-Safe Mapping) замість any
+    const formInput = dto as unknown as CreateWarehouseFormPayload;
+    
+    // Адаптуємо поля "name" та "description" з форми під структуру Warehouse
     const warehouseDoc = {
-      productId: (dto as any).productId || 'unknown-product',
-      location: dto.location,
-      quantity: Number((dto as any).quantity || 0),
+      productId: formInput.productId || 'unknown-product',
+      location: formInput.location || formInput.name || 'Локація не вказана',
+      quantity: Number(formInput.quantity || 100),
       updatedAt: new Date(),
     };
 
@@ -43,10 +67,9 @@ export class WarehouseService {
       documents: [warehouseDoc]
     });
 
-    // Надійно знаходимо створений елемент через офіційний Prisma Client
-    const item = await this.prisma.warehouse.findFirst({
-      where: { location: dto.location, productId: warehouseDoc.productId },
-    });
+    // Знаходимо створений елемент через findAll, щоб оминути потенційний збій findFirst
+    const list = await this.findAll();
+    const item = list.find(w => w.location === warehouseDoc.location);
 
     if (!item) {
       throw new NotFoundException('Помилка ініціалізації залишків на складі в MongoDB Atlas');
@@ -66,10 +89,15 @@ export class WarehouseService {
       return [];
     }
 
-    // Відображаємо дані у сувору структуру Warehouse моделі Prisma
-    return rawData.cursor.firstBatch.map((doc: MongoBatchDoc) => {
+    return rawData.cursor.firstBatch.map((doc: MongoBatchDoc): Warehouse => {
       const rawId = doc._id;
-      const cleanId = typeof rawId === 'object' && rawId ? (rawId as any)['\$oid'] : String(rawId || '');
+      let cleanId = '';
+
+      if (typeof rawId === 'object' && rawId !== null && Object.prototype.hasOwnProperty.call(rawId, '\$oid')) {
+        cleanId = (rawId as MongoOidWrapper)["\$oid"];
+      } else {
+        cleanId = String(rawId || '');
+      }
 
       return {
         id: cleanId,
@@ -84,12 +112,15 @@ export class WarehouseService {
   async findOne(id: string): Promise<Warehouse> {
     const list = await this.findAll();
     const item = list.find(w => w.id === id);
-    if (!item) throw new NotFoundException(`Запис складу з ID ${id} не знайдено`);
+    if (!item) {
+      throw new NotFoundException(`Запис складу з ID ${id} не знайдено`);
+    }
     return item;
   }
 
   async update(id: string, dto: UpdateWarehouseDto): Promise<Warehouse> {
     const runCommand = this.prisma['\$runCommandRaw'].bind(this.prisma);
+    const formUpdate = dto as unknown as UpdateWarehouseFormPayload;
 
     await runCommand({
       update: 'Warehouse',
@@ -99,8 +130,8 @@ export class WarehouseService {
           u: { 
             "\$set": { 
               location: dto.location,
-              productId: (dto as any).productId,
-              quantity: Number((dto as any).quantity || 0),
+              productId: formUpdate.productId || 'unknown-product',
+              quantity: Number(formUpdate.quantity || 0),
               updatedAt: new Date()
             } 
           },

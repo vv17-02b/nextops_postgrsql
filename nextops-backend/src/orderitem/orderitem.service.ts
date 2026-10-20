@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderItemDto } from './dto/create-orderitem.dto';
 import { UpdateOrderItemDto } from './dto/update-orderitem.dto';
@@ -12,19 +12,31 @@ export class OrderItemService {
   ) {}
 
   async create(dto: CreateOrderItemDto): Promise<OrderItem> {
-    return this.prisma.orderItem.create({
-      data: {
-        orderId: dto.orderId,
-        productId: dto.productId,
-        quantity: dto.quantity,
-        price: dto.price,
-      },
-    });
+    if (!this.prisma || !this.prisma.orderItem) {
+      throw new Error('Критична помилка: PrismaService не ініціалізовано.');
+    }
+
+    try {
+      return await this.prisma.orderItem.create({
+        data: {
+          orderId: dto.orderId,
+          productId: dto.productId,
+          quantity: dto.quantity,
+          price: dto.price,
+        },
+      });
+    } catch (dbError: unknown) {
+      throw new BadRequestException(
+        `Помилка запису в базу даних. Перевірте, чи існують документи з такими ID у колекціях Order та Product. Details: ${
+          dbError instanceof Error ? dbError.message : 'Unknown'
+        }`,
+      );
+    }
   }
 
   async findAll(): Promise<OrderItem[]> {
     if (!this.prisma || !this.prisma.orderItem) {
-      throw new Error('Критична помилка: PrismaService або колекція orderItem не ініціалізовані.');
+      throw new Error('Критична помилка: PrismaService не ініціалізовано.');
     }
     return this.prisma.orderItem.findMany();
   }
