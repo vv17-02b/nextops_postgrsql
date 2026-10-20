@@ -49,3 +49,8 @@ next-env.d.ts
 # backend specific
 nextops-backend/node_modules/
 *test.txt
+
+# Ігнорування всіх текстових файлів
+test.txt
+*.txt
+**/*.txt
