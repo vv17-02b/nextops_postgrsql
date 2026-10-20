@@ -1,17 +1,5 @@
 @import "tailwindcss";
 
-body {
-  margin: 0;
-  padding: 0;
-  min-height: 100vh;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  scroll-behavior: smooth;
-  background-color: #030712;
-  color: #f3f4f6;            
-  overflow-x: hidden;
-}
-
 html {
   box-sizing: border-box;
 }
@@ -20,34 +8,30 @@ html {
   box-sizing: inherit;
 }
 
-/* ЄДИНИЙ КОНТЕЙНЕР ДЛЯ КАРТИНКИ ТА 3D АНІМАЦІЇ */
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+  
+  /* Базовий легкий колір для всього додатку, без картинок */
+  background-color: #030712;
+  color: #f3f4f6;            
+  overflow-x: hidden;
+}
+
+/* КЛАС ДЛЯ КОНТЕЙНЕРА СТОРІНКИ: Картинка завантажується ОДИН раз тут */
 .bg-custom-way {
   position: relative;
   z-index: 0;
-  perspective: 1200px;
-  perspective-origin: center;
   overflow: hidden; 
   border-radius: 1rem;
   
-  /* Картинка задається один раз тут */
-  background-image: linear-gradient(to bottom, rgba(3, 7, 18, 0.2), #030712), url('http://localhost:3001/uploads/images/neural.jpg');
+  background-color: #030712;
+  background-image: linear-gradient(to bottom, rgba(3, 7, 18, 0.4), #030712), url('http://localhost:3001/uploads/images/neural.jpg');
   background-position: top center;
   background-repeat: no-repeat;
   background-size: cover;
-  
-  /* Запуск єдиної чіткої та яскравої анімації дихання */
-  animation: cyberBreathing 16s ease-in-out infinite alternate;
-}
-
-/* ЧІТКА ТА ЯСКРАВА АНІМАЦІЯ БЕЗ ДУБЛЮВАННЯ ШАРІВ */
-@keyframes cyberBreathing {
-  0% {
-    filter: brightness(1.1) contrast(1.2) saturate(1.3);
-  }
-  50% {
-    filter: brightness(1.4) contrast(1.4) saturate(1.6); /* Пік яскравості та чіткості */
-  }
-  100% {
-    filter: brightness(1.0) contrast(1.2) saturate(1.2);
-  }
 }
