@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-node_modules/
-=======
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
 /node_modules
 /.pnp
@@ -33,16 +28,16 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
 
-# TEXT FILES GUARD (Глобальне занесення .txt в ігнор)
-*.txt
-**/*.txt
-text.txt
-test.txt
-/text.txt
-components/text.txt
+# uploads & media
+nextops-backend/uploads/
+*.jpg
+*.jpeg
+*.png
+*.mp3
+*.wav
 
 # vercel
 .vercel
@@ -51,10 +46,6 @@ components/text.txt
 *.tsbuildinfo
 next-env.d.ts
 
-# node
-node_modules
-
-# prisma
-.prisma
-node_modules/.prisma
->>>>>>> 7eb124538a9b6d43f2750b80fab07aa78e773cef
+# backend specific
+nextops-backend/node_modules/
+*test.txt
