@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-export interface UserAiBudget {
-  id: string;
-  [key: string]: any;
-}
+import type { CreateUserAiBudgetInput, UserAiBudget } from '@/types/api';
+export type { CreateUserAiBudgetInput, UserAiBudget };
 
 export function useUserAiBudget() {
   const [data, setData] = useState<UserAiBudget[]>([]);
@@ -14,7 +11,7 @@ export function useUserAiBudget() {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'useraibudget');
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as UserAiBudget[];
         setData(Array.isArray(json) ? json : []);
       }
     } catch (err) {
@@ -24,7 +21,7 @@ export function useUserAiBudget() {
     }
   }, []);
 
-  const createItem = async (formData: any): Promise<void> => {
+  const createItem = async (formData: CreateUserAiBudgetInput): Promise<void> => {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'useraibudget', {
         method: 'POST',

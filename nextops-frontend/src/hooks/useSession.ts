@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-export interface Session {
-  id: string;
-  [key: string]: any;
-}
+import type { CreateSessionInput, Session } from '@/types/api';
+export type { CreateSessionInput, Session };
 
 export function useSession() {
   const [data, setData] = useState<Session[]>([]);
@@ -14,7 +11,7 @@ export function useSession() {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'session');
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as Session[];
         setData(Array.isArray(json) ? json : []);
       }
     } catch (err) {
@@ -24,7 +21,7 @@ export function useSession() {
     }
   }, []);
 
-  const createItem = async (formData: any): Promise<void> => {
+  const createItem = async (formData: CreateSessionInput): Promise<void> => {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'session', {
         method: 'POST',

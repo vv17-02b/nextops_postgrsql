@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-export interface VerificationToken {
-  id: string;
-  [key: string]: any;
-}
+import type { CreateVerificationTokenInput, VerificationToken } from '@/types/api';
+export type { CreateVerificationTokenInput, VerificationToken };
 
 export function useVerificationToken() {
   const [data, setData] = useState<VerificationToken[]>([]);
@@ -14,7 +11,7 @@ export function useVerificationToken() {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'verificationtoken');
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as VerificationToken[];
         setData(Array.isArray(json) ? json : []);
       }
     } catch (err) {
@@ -24,7 +21,7 @@ export function useVerificationToken() {
     }
   }, []);
 
-  const createItem = async (formData: any): Promise<void> => {
+  const createItem = async (formData: CreateVerificationTokenInput): Promise<void> => {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'verificationtoken', {
         method: 'POST',

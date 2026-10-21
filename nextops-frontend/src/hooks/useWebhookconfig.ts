@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-export interface WebhookConfig {
-  id: string;
-  [key: string]: any;
-}
+import type { CreateWebhookConfigInput, WebhookConfig } from '@/types/api';
+export type { CreateWebhookConfigInput, WebhookConfig };
 
 export function useWebhookConfig() {
   const [data, setData] = useState<WebhookConfig[]>([]);
@@ -14,7 +11,7 @@ export function useWebhookConfig() {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'webhookconfig');
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as WebhookConfig[];
         setData(Array.isArray(json) ? json : []);
       }
     } catch (err) {
@@ -24,7 +21,7 @@ export function useWebhookConfig() {
     }
   }, []);
 
-  const createItem = async (formData: any): Promise<void> => {
+  const createItem = async (formData: CreateWebhookConfigInput): Promise<void> => {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'webhookconfig', {
         method: 'POST',

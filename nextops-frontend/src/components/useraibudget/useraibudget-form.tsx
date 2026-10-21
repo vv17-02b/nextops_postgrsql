@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from 'react';
+import type { CreateUserAiBudgetInput } from '@/types/api';
 
 interface FormProps {
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: CreateUserAiBudgetInput) => Promise<void>;
 }
 
 export default function UserAiBudgetForm({ onSubmit }: FormProps): React.JSX.Element {

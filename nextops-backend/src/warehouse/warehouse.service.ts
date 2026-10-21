@@ -20,7 +20,7 @@ interface MongoRawResult {
   cursor?: MongoCursor;
 }
 
-// Суворий тип для безпечного парсингу ObjectId без type-casting до any
+// Суворий тип для безпечного парсингу ObjectId без небезпечного приведення типів
 interface MongoOidWrapper {
   "\$oid": string;
 }
@@ -51,7 +51,7 @@ export class WarehouseService {
   async create(dto: CreateWarehouseDto): Promise<Warehouse> {
     const runCommand = this.prisma['\$runCommandRaw'].bind(this.prisma);
     
-    // Безпечне приведення типів (Type-Safe Mapping) замість any
+    // Безпечне перетворення типів для полів форми
     const formInput = dto as unknown as CreateWarehouseFormPayload;
     
     // Адаптуємо поля "name" та "description" з форми під структуру Warehouse

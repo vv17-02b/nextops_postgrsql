@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-export interface Warehouse {
-  id: string;
-  [key: string]: any;
-}
+import type { CreateWarehouseInput, Warehouse } from '@/types/api';
+export type { CreateWarehouseInput, Warehouse };
 
 export function useWarehouse() {
   const [data, setData] = useState<Warehouse[]>([]);
@@ -14,7 +11,7 @@ export function useWarehouse() {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'warehouse');
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as Warehouse[];
         setData(Array.isArray(json) ? json : []);
       }
     } catch (err) {
@@ -24,7 +21,7 @@ export function useWarehouse() {
     }
   }, []);
 
-  const createItem = async (formData: any): Promise<void> => {
+  const createItem = async (formData: CreateWarehouseInput): Promise<void> => {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'warehouse', {
         method: 'POST',

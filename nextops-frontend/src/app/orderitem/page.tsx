@@ -41,7 +41,7 @@ export default function OrderItemPage(): React.JSX.Element {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {data.map((item: OrderItem) => ( // <--- Сувора типізація параметра без any
+                {data.map((item: OrderItem) => (
                   <tr key={item.id} className="hover:bg-gray-50/50 transition text-[13px]">
                     <td className="px-4 py-3 font-mono text-xs text-blue-600"> {item.id} </td>
                     <td className="px-4 py-3 text-gray-700"> {String(item.orderId || '-')} </td>

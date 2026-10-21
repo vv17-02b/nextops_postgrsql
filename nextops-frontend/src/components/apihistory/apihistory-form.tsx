@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import type { CreateApiHistoryInput } from '@/types/api';
 
 interface FormProps {
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: CreateApiHistoryInput) => Promise<void>;
 }
 
 export default function ApiHistoryForm({ onSubmit }: FormProps): React.JSX.Element {

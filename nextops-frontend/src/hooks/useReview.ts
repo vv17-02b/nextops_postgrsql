@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-export interface Review {
-  id: string;
-  [key: string]: any;
-}
+import type { CreateReviewInput, Review } from '@/types/api';
+export type { CreateReviewInput, Review };
 
 export function useReview() {
   const [data, setData] = useState<Review[]>([]);
@@ -14,7 +11,7 @@ export function useReview() {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'review');
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as Review[];
         setData(Array.isArray(json) ? json : []);
       }
     } catch (err) {
@@ -24,7 +21,7 @@ export function useReview() {
     }
   }, []);
 
-  const createItem = async (formData: any): Promise<void> => {
+  const createItem = async (formData: CreateReviewInput): Promise<void> => {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'review', {
         method: 'POST',

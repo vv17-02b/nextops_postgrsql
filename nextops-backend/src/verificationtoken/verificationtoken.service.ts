@@ -58,7 +58,7 @@ export class VerificationTokenService {
   async update(id: string, dto: UpdateVerificationTokenDto): Promise<VerificationToken> {
     await this.findOne(id);
 
-    // Чиста типізація під Zero-Any без Record<string, any>
+    // Prisma сам перевіряє типи полів оновлення
     return this.prisma.verificationToken.update({
       where: { id },
       data: {

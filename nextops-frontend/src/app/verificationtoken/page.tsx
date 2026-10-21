@@ -5,7 +5,6 @@ import { useVerificationToken } from '../../hooks/useVerificationtoken';
 import VerificationTokenForm from '@/components/verificationtoken/verificationtoken-form';
 import { Trash2 } from 'lucide-react';
 
-// Сувора типізація для продакшену без жодного any
 export interface VerificationTokenItem {
   id: string;
   identifier?: string | null;

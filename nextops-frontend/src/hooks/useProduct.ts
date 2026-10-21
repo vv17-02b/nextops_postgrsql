@@ -1,21 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-// Строгий інтерфейс моделі без жодного any відповідно до стандарту Zero-Any
-export interface Product {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  price: number;
-  compareAtPrice?: number;
-  images: string[];
-  isActive: boolean;
-  categoryId: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export type CreateProductInput = Omit<Product, 'id' | 'createdAt' | 'updatedAt'>;
+import type { CreateProductInput, Product } from '@/types/api';
+export type { CreateProductInput, Product };
 
 interface UseProductReturn {
   data: Product[];

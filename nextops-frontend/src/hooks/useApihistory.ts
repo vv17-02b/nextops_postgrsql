@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-export interface ApiHistory {
-  id: string;
-  [key: string]: any;
-}
+import type { ApiHistory, CreateApiHistoryInput } from '@/types/api';
+export type { ApiHistory, CreateApiHistoryInput };
 
 export function useApiHistory() {
   const [data, setData] = useState<ApiHistory[]>([]);
@@ -14,7 +11,7 @@ export function useApiHistory() {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'apihistory');
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as ApiHistory[];
         setData(Array.isArray(json) ? json : []);
       }
     } catch (err) {
@@ -24,7 +21,7 @@ export function useApiHistory() {
     }
   }, []);
 
-  const createItem = async (formData: any): Promise<void> => {
+  const createItem = async (formData: CreateApiHistoryInput): Promise<void> => {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'apihistory', {
         method: 'POST',

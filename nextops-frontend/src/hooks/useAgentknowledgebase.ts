@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-export interface AgentKnowledgeBase {
-  id: string;
-  [key: string]: any;
-}
+import type { AgentKnowledgeBase, CreateAgentKnowledgeBaseInput } from '@/types/api';
+export type { AgentKnowledgeBase, CreateAgentKnowledgeBaseInput };
 
 export function useAgentKnowledgeBase() {
   const [data, setData] = useState<AgentKnowledgeBase[]>([]);
@@ -14,7 +11,7 @@ export function useAgentKnowledgeBase() {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'agentknowledgebase');
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as AgentKnowledgeBase[];
         setData(Array.isArray(json) ? json : []);
       }
     } catch (err) {
@@ -24,7 +21,7 @@ export function useAgentKnowledgeBase() {
     }
   }, []);
 
-  const createItem = async (formData: any): Promise<void> => {
+  const createItem = async (formData: CreateAgentKnowledgeBaseInput): Promise<void> => {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'agentknowledgebase', {
         method: 'POST',

@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-export interface Category {
-  id: string;
-  [key: string]: any;
-}
+import type { Category, CreateCategoryInput } from '@/types/api';
+export type { Category, CreateCategoryInput };
 
 export function useCategory() {
   const [data, setData] = useState<Category[]>([]);
@@ -14,7 +11,7 @@ export function useCategory() {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'category');
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as Category[];
         setData(Array.isArray(json) ? json : []);
       }
     } catch (err) {
@@ -24,7 +21,7 @@ export function useCategory() {
     }
   }, []);
 
-  const createItem = async (formData: any): Promise<void> => {
+  const createItem = async (formData: CreateCategoryInput): Promise<void> => {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'category', {
         method: 'POST',

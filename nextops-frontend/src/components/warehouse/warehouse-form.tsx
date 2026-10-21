@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import type { CreateWarehouseInput } from '@/types/api';
 
 interface FormProps {
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: CreateWarehouseInput) => Promise<void>;
 }
 
 export default function WarehouseForm({ onSubmit }: FormProps): React.JSX.Element {

@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-export interface Project {
-  id: string;
-  [key: string]: any;
-}
+import type { CreateProjectInput, Project } from '@/types/api';
+export type { CreateProjectInput, Project };
 
 export function useProject() {
   const [data, setData] = useState<Project[]>([]);
@@ -14,7 +11,7 @@ export function useProject() {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'project');
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as Project[];
         setData(Array.isArray(json) ? json : []);
       }
     } catch (err) {
@@ -24,7 +21,7 @@ export function useProject() {
     }
   }, []);
 
-  const createItem = async (formData: any): Promise<void> => {
+  const createItem = async (formData: CreateProjectInput): Promise<void> => {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'project', {
         method: 'POST',

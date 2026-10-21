@@ -13,10 +13,12 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     return super.canActivate(context);
   }
 
-  // Замінено any на суворі типи та безпечний unknown для помилок платформи
   handleRequest<TUser = JwtPayloadUser>(err: unknown, user: TUser | false, info: unknown): TUser {
     if (err || !user) {
-      throw (err as Error) || new UnauthorizedException('Доступ заблоковано. Необхідно надати валідний JWT-токен');
+      if (err instanceof Error) {
+        throw err;
+      }
+      throw new UnauthorizedException('Доступ заблоковано. Необхідно надати валідний JWT-токен');
     }
     return user;
   }

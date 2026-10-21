@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-export interface Order {
-  id: string;
-  [key: string]: any;
-}
+import type { CreateOrderInput, Order } from '@/types/api';
+export type { CreateOrderInput, Order };
 
 export function useOrder() {
   const [data, setData] = useState<Order[]>([]);
@@ -14,7 +11,7 @@ export function useOrder() {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'order');
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as Order[];
         setData(Array.isArray(json) ? json : []);
       }
     } catch (err) {
@@ -24,7 +21,7 @@ export function useOrder() {
     }
   }, []);
 
-  const createItem = async (formData: any): Promise<void> => {
+  const createItem = async (formData: CreateOrderInput): Promise<void> => {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'order', {
         method: 'POST',

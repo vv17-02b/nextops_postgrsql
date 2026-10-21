@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import type { CreateVerificationTokenInput } from '@/types/api';
 
 interface FormProps {
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: CreateVerificationTokenInput) => Promise<void>;
 }
 
 export default function VerificationTokenForm({ onSubmit }: FormProps): React.JSX.Element {

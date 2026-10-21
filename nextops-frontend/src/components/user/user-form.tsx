@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import type { CreateUserInput } from '@/types/api';
 
 interface FormProps {
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: CreateUserInput) => Promise<void>;
 }
 
 export default function UserForm({ onSubmit }: FormProps): React.JSX.Element {

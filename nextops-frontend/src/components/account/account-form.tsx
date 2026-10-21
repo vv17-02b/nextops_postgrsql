@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import type { CreateAccountInput } from '@/types/api';
 
 interface FormProps {
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: CreateAccountInput) => Promise<void>;
 }
 
 export default function AccountForm({ onSubmit }: FormProps): React.JSX.Element {

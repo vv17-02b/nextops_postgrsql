@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
-export interface User {
-  id: string;
-  [key: string]: any;
-}
+import type { CreateUserInput, User } from '@/types/api';
+export type { CreateUserInput, User };
 
 export function useUser() {
   const [data, setData] = useState<User[]>([]);
@@ -14,7 +11,7 @@ export function useUser() {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'user');
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as User[];
         setData(Array.isArray(json) ? json : []);
       }
     } catch (err) {
@@ -24,7 +21,7 @@ export function useUser() {
     }
   }, []);
 
-  const createItem = async (formData: any): Promise<void> => {
+  const createItem = async (formData: CreateUserInput): Promise<void> => {
     try {
       const res = await fetch('http://localhost:3001/api/' + 'user', {
         method: 'POST',

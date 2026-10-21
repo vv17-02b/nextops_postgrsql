@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import type { CreateOrderInput } from '@/types/api';
 
 interface FormProps {
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: CreateOrderInput) => Promise<void>;
 }
 
 export default function OrderForm({ onSubmit }: FormProps): React.JSX.Element {

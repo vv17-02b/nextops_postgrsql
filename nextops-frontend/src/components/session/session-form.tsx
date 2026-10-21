@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import type { CreateSessionInput } from '@/types/api';
 
 interface FormProps {
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: CreateSessionInput) => Promise<void>;
 }
 
 export default function SessionForm({ onSubmit }: FormProps): React.JSX.Element {

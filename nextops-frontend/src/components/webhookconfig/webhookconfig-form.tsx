@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import type { CreateWebhookConfigInput } from '@/types/api';
 
 interface FormProps {
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: CreateWebhookConfigInput) => Promise<void>;
 }
 
 export default function WebhookConfigForm({ onSubmit }: FormProps): React.JSX.Element {

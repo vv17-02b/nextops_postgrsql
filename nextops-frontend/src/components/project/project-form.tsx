@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import type { CreateProjectInput } from '@/types/api';
 
 interface FormProps {
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: CreateProjectInput) => Promise<void>;
 }
 
 export default function ProjectForm({ onSubmit }: FormProps): React.JSX.Element {

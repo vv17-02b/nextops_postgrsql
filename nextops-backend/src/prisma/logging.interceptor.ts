@@ -2,18 +2,19 @@ import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Inject } fr
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { PrismaService } from './prisma.service';
+import type { Request, Response } from 'express';
 
 @Injectable()
-export class LoggingInterceptor implements NestInterceptor {
+export class LoggingInterceptor implements NestInterceptor<unknown, unknown> {
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService
   ) {}
 
-  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+  intercept(context: ExecutionContext, next: CallHandler<unknown>): Observable<unknown> {
     const httpContext = context.switchToHttp();
-    const request = httpContext.getRequest();
-    const response = httpContext.getResponse();
+    const request = httpContext.getRequest<Request>();
+    const response = httpContext.getResponse<Response>();
 
     const method = request.method;
     const endpoint = request.url;
@@ -47,10 +48,16 @@ export class LoggingInterceptor implements NestInterceptor {
             console.error(' [LoggingInterceptor Async Error]:', error);
           });
         },
-        error: (error) => {
+        error: (error: unknown) => {
           const endTime = performance.now();
           const durationMs = Math.round(endTime - startTime);
-          const statusCode = error.status || 500;
+          const statusCode =
+            typeof error === 'object' &&
+            error !== null &&
+            'status' in error &&
+            typeof error.status === 'number'
+              ? error.status
+              : 500;
 
           this.prisma.$runCommandRaw({
             insert: 'ApiHistory',

@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { UpdateSessionDto } from './dto/update-session.dto';
-import type { Session } from '@prisma/client';
+import type { Prisma, Session } from '@prisma/client';
 
 @Injectable()
 export class SessionService {
@@ -43,7 +43,7 @@ export class SessionService {
   async update(id: string, dto: UpdateSessionDto): Promise<Session> {
     await this.findOne(id);
     
-    const updateData: Record<string, any> = {};
+    const updateData: Prisma.SessionUncheckedUpdateInput = {};
     if (dto.sessionToken) updateData.sessionToken = dto.sessionToken;
     if (dto.userId) updateData.userId = dto.userId;
     

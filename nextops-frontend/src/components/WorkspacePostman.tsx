@@ -8,7 +8,7 @@ interface TargetModule {
   name: string;
   endpoint: string;
   method: "GET" | "POST" | "PATCH" | "DELETE";
-  defaultPayload: Record<string, any>;
+  defaultPayload: Record<string, unknown>;
 }
 
 // Повна матриця модулів: тепер включає швидкі тести для авторизації
@@ -112,7 +112,7 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
           // Попередня валідація JSON структури на клієнті
           JSON.parse(jsonPayload.trim());
           options.body = jsonPayload.trim();
-        } catch (jsonErr) {
+        } catch {
           throw new Error("Некоректний формат JSON у полі тіла запиту");
         }
       }
@@ -126,11 +126,18 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
 
       const text = await res.text();
       try {
-        const parsedJson = JSON.parse(text);
+        const parsedJson: unknown = JSON.parse(text);
+        const accessToken =
+          typeof parsedJson === "object" &&
+          parsedJson !== null &&
+          "accessToken" in parsedJson &&
+          typeof parsedJson.accessToken === "string"
+            ? parsedJson.accessToken
+            : undefined;
 
         // 3. АВТО-ЗБЕРЕЖЕННЯ: Якщо це був успішний вхід, зберігаємо JWT токен автоматично
-        if (customEndpoint.includes("/api/auth/login") && res.ok && parsedJson.accessToken) {
-          localStorage.setItem("nextops_jwt", parsedJson.accessToken);
+        if (customEndpoint.includes("/api/auth/login") && res.ok && accessToken) {
+          localStorage.setItem("nextops_jwt", accessToken);
           setResponseBody(`// [SUCCESS] Токен успішно перехоплено та збережено в localStorage!\n// Статус: ${res.status} OK | Час: ${duration}ms\n` + JSON.stringify(parsedJson, null, 2));
         } else {
           setResponseBody(`// Статус: ${res.status} | Час: ${duration}ms\n` + JSON.stringify(parsedJson, null, 2));
@@ -139,9 +146,9 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
         setResponseBody(`// Статус: ${res.status} | Час: ${duration}ms\n${text}`);
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("🚨 [WorkspacePostman Execution Error]:", err);
-      setUiError(err.message || "Помилка мережі при спробі зв'язку з бекендом");
+      setUiError(err instanceof Error ? err.message : "Помилка мережі при спробі зв'язку з бекендом");
     } finally {
       setIsSubmitting(false);
     }
