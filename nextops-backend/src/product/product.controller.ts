@@ -1,11 +1,13 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query } from '@nestjs/common';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import type { Product } from '@prisma/client';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import type { PaginatedResponse } from '../common/pagination/paginate';
 
 @Controller('product')
-// Тимчасово вимкнено для локального наповнення бази даних MongoDB Atlas
+// Тимчасово вимкнено для локального наповнення бази даних PostgreSQL
 // @UseGuards(JwtAuthGuard) 
 export class ProductController {
   constructor(
@@ -26,8 +28,8 @@ export class ProductController {
   }
 
   @Get()
-  async findAll(): Promise<Product[]> { 
-    return this.service.findAll(); 
+  async findAll(@Query() query: PaginationQueryDto): Promise<PaginatedResponse<Product>> {
+    return this.service.findAll(query);
   }
 
   @Get(':id')

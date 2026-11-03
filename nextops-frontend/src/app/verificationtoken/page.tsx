@@ -18,14 +18,14 @@ export default function VerificationTokenPage(): React.JSX.Element {
     <div className="space-y-6 font-sans">
       <div className="bg-white p-6 border rounded-xl shadow-sm">
         <h1 className="text-xl font-bold text-gray-900">Next.js Сторінка: VerificationToken</h1>
-        <p className="text-sm text-gray-500">Автоматичний зв'язок з роутом бекенду: <code className="text-blue-600 font-mono">/api/verificationtoken</code></p>
+        <p className="text-sm text-gray-500">Автоматичний зв&apos;язок з роутом бекенду: <code className="text-blue-600 font-mono">/api/verificationtoken</code></p>
       </div>
 
       <VerificationTokenForm onSubmit={createItem} />
 
       <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
         <div className="p-4 border-b bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Список документів з бази даних (MongoDB Atlas)
+          Записи з бази PostgreSQL
         </div>
         
         {loading ? (

@@ -1,10 +1,14 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query } from '@nestjs/common';
 import { UserAiBudgetService } from './useraibudget.service';
 import { CreateUserAiBudgetDto } from './dto/create-useraibudget.dto';
 import { UpdateUserAiBudgetDto } from './dto/update-useraibudget.dto';
 import type { UserAiBudget } from '@prisma/client';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import type { PaginatedResponse } from '../common/pagination/paginate';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('useraibudget')
+@Roles('OWNER', 'ADMIN')
 export class UserAiBudgetController {
   constructor(
     @Inject(UserAiBudgetService)
@@ -17,8 +21,8 @@ export class UserAiBudgetController {
   }
 
   @Get()
-  findAll(): Promise<UserAiBudget[]> { 
-    return this.service.findAll(); 
+  findAll(@Query() query: PaginationQueryDto): Promise<PaginatedResponse<UserAiBudget>> {
+    return this.service.findAll(query);
   }
 
   @Get(':id')

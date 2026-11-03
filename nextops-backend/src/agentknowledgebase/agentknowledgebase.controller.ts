@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query } from '@nestjs/common';
 import { AgentKnowledgeBaseService } from './agentknowledgebase.service';
 import { CreateAgentKnowledgeBaseDto } from './dto/create-agentknowledgebase.dto';
 import { UpdateAgentKnowledgeBaseDto } from './dto/update-agentknowledgebase.dto';
 import type { AgentKnowledgeBase } from '@prisma/client';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import type { PaginatedResponse } from '../common/pagination/paginate';
 
 @Controller('agentknowledgebase')
 export class AgentKnowledgeBaseController {
@@ -17,8 +19,8 @@ export class AgentKnowledgeBaseController {
   }
 
   @Get()
-  findAll(): Promise<AgentKnowledgeBase[]> { 
-    return this.service.findAll(); 
+  findAll(@Query() query: PaginationQueryDto): Promise<PaginatedResponse<AgentKnowledgeBase>> {
+    return this.service.findAll(query);
   }
 
   @Get(':id')

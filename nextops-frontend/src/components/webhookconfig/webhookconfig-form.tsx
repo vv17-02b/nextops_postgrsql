@@ -17,7 +17,9 @@ export default function WebhookConfigForm({ onSubmit }: FormProps): React.JSX.El
     await onSubmit({
       projectId: projectId,
       url: url,
-      secret: secret
+      secret: secret,
+      events: ['order.created', 'order.updated'],
+      isActive: true
     });
     setProjectId('');
     setUrl('');

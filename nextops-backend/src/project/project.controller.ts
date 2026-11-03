@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import type { Project } from '@prisma/client';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import type { PaginatedResponse } from '../common/pagination/paginate';
 
 @Controller('project')
 export class ProjectController {
@@ -17,8 +19,8 @@ export class ProjectController {
   }
 
   @Get()
-  findAll(): Promise<Project[]> { 
-    return this.service.findAll(); 
+  findAll(@Query() query: PaginationQueryDto): Promise<PaginatedResponse<Project>> {
+    return this.service.findAll(query);
   }
 
   @Get(':id')

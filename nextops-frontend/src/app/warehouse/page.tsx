@@ -3,7 +3,7 @@
 import React from 'react';
 import { useWarehouse } from '@/hooks/useWarehouse'; // Переконайся, що назва хука збігається
 import WarehouseForm from '@/components/warehouse/warehouse-form';
-import { Trash2, Building, MapPin, FileText } from 'lucide-react';
+import { Trash2, MapPin, Package } from 'lucide-react';
 
 export default function WarehousePage(): React.JSX.Element {
   const { data, loading, createItem, deleteItem } = useWarehouse();
@@ -12,14 +12,14 @@ export default function WarehousePage(): React.JSX.Element {
     <div className="space-y-6 font-sans">
       <div className="bg-white p-6 border rounded-xl shadow-sm">
         <h1 className="text-xl font-bold text-gray-900">Next.js Сторінка: Warehouse</h1>
-        <p className="text-sm text-gray-500">Автоматичний зв'язок з роутом бекенду: <code className="text-blue-600 font-mono">/api/warehouse</code></p>
+        <p className="text-sm text-gray-500">Автоматичний зв&apos;язок з роутом бекенду: <code className="text-blue-600 font-mono">/api/warehouse</code></p>
       </div>
 
       <WarehouseForm onSubmit={createItem} />
 
       <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
         <div className="p-4 border-b bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Список документів з бази даних (MongoDB Atlas)
+          Stock records stored in PostgreSQL
         </div>
         
         {loading ? (
@@ -31,9 +31,9 @@ export default function WarehousePage(): React.JSX.Element {
          
                 <tr>
                   <th className="px-4 py-3 text-left">ID Документа</th>
-                  <th className="px-4 py-3 text-left">Назва складу</th>
-                  <th className="px-4 py-3 text-left">Локація</th>
-                  <th className="px-4 py-3 text-left">Опис</th>
+                  <th className="px-4 py-3 text-left">Product ID</th>
+                  <th className="px-4 py-3 text-left">Location</th>
+                  <th className="px-4 py-3 text-right">Quantity</th>
                   <th className="px-4 py-3 text-right">Дії</th>
                 </tr>
               </thead>
@@ -42,25 +42,22 @@ export default function WarehousePage(): React.JSX.Element {
                   <tr key={item.id} className="hover:bg-gray-50/50 transition text-[13px]">
                     <td className="px-4 py-3 font-mono text-xs text-blue-600">{item.id}</td>
                     
-                    <td className="px-4 py-3 text-gray-900 font-medium">
+                    <td className="px-4 py-3 text-gray-900 font-medium font-mono text-xs">
                       <div className="flex items-center gap-1.5">
-                        <Building className="h-3.5 w-3.5 text-gray-400" />
-                        <span>{String(item.name || '-')}</span>
+                        <Package className="h-3.5 w-3.5 text-gray-400" />
+                        <span>{item.productId}</span>
                       </div>
                     </td>
                     
                     <td className="px-4 py-3 text-gray-700">
                       <div className="flex items-center gap-1.5">
                         <MapPin className="h-3.5 w-3.5 text-gray-400" />
-                        <span>{String(item.location || '-')}</span>
+                        <span>{item.location}</span>
                       </div>
                     </td>
 
-                    <td className="px-4 py-3 text-gray-500 italic">
-                      <div className="flex items-center gap-1.5">
-                        <FileText className="h-3.5 w-3.5 text-gray-400" />
-                        <span>{String(item.description || '-')}</span>
-                      </div>
+                    <td className="px-4 py-3 text-gray-700 text-right">
+                      {item.quantity}
                     </td>
 
                     <td className="px-4 py-3 text-right">

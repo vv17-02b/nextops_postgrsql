@@ -1,12 +1,15 @@
-import { Injectable, NotFoundException, Inject, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, InternalServerErrorException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWebhookConfigDto } from './dto/create-webhookconfig.dto';
 import { UpdateWebhookConfigDto } from './dto/update-webhookconfig.dto';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
 import { Prisma } from '@prisma/client';
 import type { WebhookConfig } from '@prisma/client';
 
 @Injectable()
 export class WebhookConfigService {
+  private readonly logger = new Logger(WebhookConfigService.name);
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService
@@ -44,8 +47,8 @@ export class WebhookConfigService {
         if (response.ok) {
           success = true;
         }
-      } catch (error) {
-        console.warn(` [Webhook Retry] Спроба ${attempts} не вдалася для URL: ${targetUrl}`);
+      } catch {
+        this.logger.warn(`Webhook delivery attempt ${attempts} failed.`);
       }
     }
 
@@ -64,8 +67,12 @@ export class WebhookConfigService {
     });
   }
 
-  async findAll(): Promise<WebhookConfig[]> {
-    return this.prisma.webhookConfig.findMany();
+  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<WebhookConfig>> {
+    return paginate(
+      query,
+      (skip, take) => this.prisma.webhookConfig.findMany({ skip, take }),
+      () => this.prisma.webhookConfig.count(),
+    );
   }
 
   async findOne(id: string): Promise<WebhookConfig> {

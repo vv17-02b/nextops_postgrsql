@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { CreateSessionInput, Session } from '@/types/api';
+import { apiFetch, getApiHeaders, getApiUrl } from '@/lib/api';
+import { readPaginatedCollection } from '@/lib/collections';
 export type { CreateSessionInput, Session };
 
 export function useSession() {
@@ -9,10 +11,10 @@ export function useSession() {
   const fetchData = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/' + 'session');
+      const res = await apiFetch(getApiUrl('/api/session'), { headers: getApiHeaders() });
       if (res.ok) {
-        const json = (await res.json()) as Session[];
-        setData(Array.isArray(json) ? json : []);
+        const { data } = await readPaginatedCollection<Session>(res);
+        setData(data);
       }
     } catch (err) {
       console.error('Помилка завантаження:', err);
@@ -23,9 +25,9 @@ export function useSession() {
 
   const createItem = async (formData: CreateSessionInput): Promise<void> => {
     try {
-      const res = await fetch('http://localhost:3001/api/' + 'session', {
+      const res = await apiFetch(getApiUrl('/api/session'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders(true),
         body: JSON.stringify(formData)
       });
       if (res.ok) await fetchData();
@@ -36,7 +38,10 @@ export function useSession() {
 
   const deleteItem = async (id: string): Promise<void> => {
     try {
-      const res = await fetch('http://localhost:3001/api/' + 'session/' + id, { method: 'DELETE' });
+      const res = await apiFetch(getApiUrl(`/api/session/${id}`), {
+        method: 'DELETE',
+        headers: getApiHeaders(),
+      });
       if (res.ok) await fetchData();
     } catch (err) {
       console.error('Помилка видалення:', err);

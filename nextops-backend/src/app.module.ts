@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { AccountModule } from './account/account.module';
@@ -16,10 +17,18 @@ import { UserAiBudgetModule } from './useraibudget/useraibudget.module';
 import { VerificationTokenModule } from './verificationtoken/verificationtoken.module';
 import { WarehouseModule } from './warehouse/warehouse.module';
 import { WebhookConfigModule } from './webhookconfig/webhookconfig.module';
+import { HealthModule } from './health/health.module';
+import { IdempotencyModule, IdempotencyInterceptor } from './common/idempotency/idempotency.module';
+import { TenantContext } from './prisma/tenant-context';
+import { QueueModule } from './common/queue/queue.module';
+import { InvitationModule } from './invitation/invitation.module';
 
 @Module({
   imports: [
     PrismaModule,
+    IdempotencyModule,
+    QueueModule,
+    InvitationModule,
     AuthModule,
     AccountModule,
     AgentKnowledgeBaseModule,
@@ -35,7 +44,18 @@ import { WebhookConfigModule } from './webhookconfig/webhookconfig.module';
     UserAiBudgetModule,
     VerificationTokenModule,
     WarehouseModule,
-    WebhookConfigModule
+    WebhookConfigModule,
+    HealthModule
+  ],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: IdempotencyInterceptor,
+    },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(TenantContext).forRoutes('*splat');
+  }
+}

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { CreateReviewInput, Review } from '@/types/api';
+import { apiFetch, getApiHeaders, getApiUrl } from '@/lib/api';
+import { readPaginatedCollection } from '@/lib/collections';
 export type { CreateReviewInput, Review };
 
 export function useReview() {
@@ -9,10 +11,10 @@ export function useReview() {
   const fetchData = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/' + 'review');
+      const res = await apiFetch(getApiUrl('/api/review'), { headers: getApiHeaders() });
       if (res.ok) {
-        const json = (await res.json()) as Review[];
-        setData(Array.isArray(json) ? json : []);
+        const { data } = await readPaginatedCollection<Review>(res);
+        setData(data);
       }
     } catch (err) {
       console.error('Помилка завантаження:', err);
@@ -23,9 +25,9 @@ export function useReview() {
 
   const createItem = async (formData: CreateReviewInput): Promise<void> => {
     try {
-      const res = await fetch('http://localhost:3001/api/' + 'review', {
+      const res = await apiFetch(getApiUrl('/api/review'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders(true),
         body: JSON.stringify(formData)
       });
       if (res.ok) await fetchData();
@@ -36,7 +38,10 @@ export function useReview() {
 
   const deleteItem = async (id: string): Promise<void> => {
     try {
-      const res = await fetch('http://localhost:3001/api/' + 'review/' + id, { method: 'DELETE' });
+      const res = await apiFetch(getApiUrl(`/api/review/${id}`), {
+        method: 'DELETE',
+        headers: getApiHeaders(),
+      });
       if (res.ok) await fetchData();
     } catch (err) {
       console.error('Помилка видалення:', err);

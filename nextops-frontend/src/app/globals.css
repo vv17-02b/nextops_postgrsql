@@ -11,47 +11,95 @@ html {
 body {
   margin: 0;
   padding: 0;
+  min-width: 0;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   scroll-behavior: smooth;
-  color: #f3f4f6;            
+  color: #ffffff;
   overflow-x: hidden;
+  background-color: #060d22;
+  position: relative;
+}
 
-  /* ВИПРАВЛЕНО: Картинка тепер є глобальним заднім планом для всього браузера */
-  background-color: #030712;
-  background-image: url('http://localhost:3001/uploads/images/neural.jpg');
+/* Окремий шар для супер-насиченого та адаптивного фону */
+/* Окремий шар для супер-насиченого та адаптивного фону БЕЗ зайвого скролу */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0; /* Виправлено: замість width/height використовуємо inset, це прибере зайвий скрол */
+  z-index: -1;
+  pointer-events: none; /* Гарантує, що фон не заважатиме клікати по кнопках */
+  background-image: url('/images/postgresql.jpg');
   background-position: center center;
   background-repeat: no-repeat;
   background-size: cover;
-  background-attachment: fixed; /* Фіксує тло, щоб воно не смикалося */
+  
+  /* Екстремальна насиченість та яскравість кольорів */
+  filter: saturate(1.8) brightness(1.1); 
 }
 
-/* КЛАС ДЛЯ КОНТЕЙНЕРА СТОРІНКИ: Тепер повністю прозорий, щоб бачити глобальне тло */
+
+/* Прозорий контейнер для контенту */
 .bg-custom-way {
   position: relative;
-  z-index: 0;
-  overflow: hidden; 
-  border-radius: 1rem;
-  background-color: transparent; /* Прибрали заливку кольором, яка перекривала body */
+  z-index: 1;
+  background-color: transparent;
 }
 
-/* ГЛОБАЛЬНИЙ КІБЕР-СТИЛЬ ДЛЯ ВСІХ ІНПУТІВ ФОРМИ */
 input, select, textarea {
-  background-color: rgba(3, 7, 18, 0.6) !important;
+  background-color: rgba(3, 7, 18, 0.4) !important;
   color: #ffffff !important;
-  border: 1px solid rgba(75, 85, 99, 0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
   outline: none;
   transition: all 0.2s ease-in-out;
+    backdrop-filter: blur(4px);
+}
+
+main,
+main > *,
+form,
+form > *,
+form label,
+form [class~="grid"] > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+form {
+  width: 100%;
+  padding: clamp(1rem, 2.5vw, 1.25rem);
+}
+
+form[class*="p-"] {
+  padding: clamp(1rem, 2.5vw, 1.25rem);
 }
 
 input:focus, select:focus, textarea:focus {
   border-color: #3b82f6 !important;
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
 }
 
 input::placeholder, textarea::placeholder {
-  color: #4b5563 !important;
+  color: #9ca3af !important;
+}
+
+@media (max-width: 639px) {
+  input, select, textarea {
+    max-width: 100%;
+  }
+
+  form [class~="grid"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  form button[type="submit"] {
+    width: 100%;
+  }
+
+  .bg-custom-way {
+    border-radius: 0.75rem;
+  }
 }

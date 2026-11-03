@@ -9,7 +9,7 @@ interface FormProps {
 
 export default function UserAiBudgetForm({ onSubmit }: FormProps): React.JSX.Element {
   const [userId, setUserId] = useState<string>('');
-  const [totalBudget, setTotalBudget] = useState<string>('');
+  const [totalBudgetMinor, setTotalBudgetMinor] = useState<string>('');
   const [currency, setCurrency] = useState<string>('USD'); // За дефолтом ставимо USD
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -17,16 +17,16 @@ export default function UserAiBudgetForm({ onSubmit }: FormProps): React.JSX.Ele
     e.preventDefault();
     setLoading(true);
 
-    // 🌟 СИНХРОНІЗАЦІЯ З БЕКЕНДОМ: Надсилаємо точні назви полів, які очікує CreateUserAiBudgetDto
+    // Копійки/центи: надсилаємо цілі minor units, які очікує CreateUserAiBudgetDto
     await onSubmit({
       userId: userId,
-      totalBudget: Number(totalBudget),
-      usedBudget: 0, // Новий бюджет завжди стартує з нуля
+      totalBudgetMinor: Math.round(Number(totalBudgetMinor)),
+      usedBudgetMinor: 0, // Новий бюджет завжди стартує з нуля
       currency: currency
     });
 
     setUserId('');
-    setTotalBudget('');
+    setTotalBudgetMinor('');
     setLoading(false);
   };
 
@@ -35,9 +35,9 @@ export default function UserAiBudgetForm({ onSubmit }: FormProps): React.JSX.Ele
       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Форма додавання (UserAiBudget)</h3>
       
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Поле для введення 24-значного MongoDB ID користувача */}
+        {/* Поле для введення UUID користувача */}
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-600">User ID (MongoDB Atlas)</label>
+          <label className="text-xs font-medium text-gray-600">User ID (PostgreSQL)</label>
           <input 
             type="text" 
             value={userId}
@@ -48,14 +48,16 @@ export default function UserAiBudgetForm({ onSubmit }: FormProps): React.JSX.Ele
           />
         </div>
 
-        {/* Загальний бюджет замість застарілого monthlyLimit */}
+        {/* Загальний бюджет у minor units (копійках) */}
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-600">Загальний Бюджет (Total Budget)</label>
+          <label className="text-xs font-medium text-gray-600">Загальний Бюджет (Minor Units)</label>
           <input 
             type="number" 
-            value={totalBudget}
-            onChange={(e) => setTotalBudget(e.target.value)}
-            placeholder="Введіть ліміт (напр. 500)..." 
+            step="1"
+            min="0"
+            value={totalBudgetMinor}
+            onChange={(e) => setTotalBudgetMinor(e.target.value)}
+            placeholder="Ліміт у копійках (напр. 50000 = $500)..."  
             className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
             required
           />

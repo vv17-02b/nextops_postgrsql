@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Webhook, Save, Key, Send, Database, Layers, ArrowRight } from "lucide-react";
+import { Send, Layers } from "lucide-react";
+import { apiFetch, getApiHeaders, getApiUrl } from "@/lib/api";
 
 // Інтерфейс для конфігурації модулів тестування API
 interface TargetModule {
@@ -11,43 +12,212 @@ interface TargetModule {
   defaultPayload: Record<string, unknown>;
 }
 
-// Повна матриця модулів: тепер включає швидкі тести для авторизації
+interface AuthIdentity {
+  id: string;
+  email: string | null;
+  role: string;
+  companyId: string;
+}
+
+function readAuthIdentity(payload: unknown): AuthIdentity | null {
+  if (typeof payload !== "object" || payload === null || !("user" in payload)) return null;
+  const user = payload.user;
+  if (
+    typeof user !== "object" || user === null ||
+    !("id" in user) || !("companyId" in user)
+  ) {
+    return null;
+  }
+
+  const id = user.id;
+  const companyId = user.companyId;
+  if (typeof id !== "string" || typeof companyId !== "string") return null;
+
+  const email = "email" in user ? user.email : null;
+  const role = "role" in user ? user.role : "USER";
+  return {
+    id,
+    companyId,
+    email: typeof email === "string" ? email : null,
+    role: typeof role === "string" ? role : "USER",
+  };
+}
+
+const sampleId = "00000000-0000-4000-8000-000000000000";
+
 const AVAILABLE_MODULES: TargetModule[] = [
   {
     name: "Auth: Register",
     endpoint: "/api/auth/register",
     method: "POST",
-    defaultPayload: { email: "admin2026@nextops.com", password: "super-secure-password" }
+    defaultPayload: { email: "owner@example.com", password: "replace-with-demo-password" }
   },
   {
     name: "Auth: Login",
     endpoint: "/api/auth/login",
     method: "POST",
-    defaultPayload: { email: "admin2026@nextops.com", password: "super-secure-password" }
+    defaultPayload: { email: "owner@example.com", password: "replace-with-demo-password" }
+  },
+  {
+    name: "Auth: Current Session",
+    endpoint: "/api/auth/me",
+    method: "GET",
+    defaultPayload: {}
+  },
+  {
+    name: "Auth: CSRF",
+    endpoint: "/api/auth/csrf",
+    method: "GET",
+    defaultPayload: {}
+  },
+  {
+    name: "Auth: Logout",
+    endpoint: "/api/auth/logout",
+    method: "POST",
+    defaultPayload: {}
+  },
+  {
+    name: "Health: Live",
+    endpoint: "/api/health/live",
+    method: "GET",
+    defaultPayload: {}
+  },
+  {
+    name: "Health: Ready",
+    endpoint: "/api/health/ready",
+    method: "GET",
+    defaultPayload: {}
+  },
+  {
+    name: "Account",
+    endpoint: "/api/account",
+    method: "POST",
+    defaultPayload: {
+      userId: sampleId,
+      type: "oauth",
+      provider: "github",
+      providerAccountId: "replace-with-provider-account-id"
+    }
+  },
+  {
+    name: "Agent Knowledge Base",
+    endpoint: "/api/agentknowledgebase",
+    method: "POST",
+    defaultPayload: { title: "Getting started", content: "Workspace knowledge entry", projectId: sampleId }
+  },
+  {
+    name: "API History",
+    endpoint: "/api/apihistory",
+    method: "POST",
+    defaultPayload: { endpoint: "/api/project", method: "GET", statusCode: 200, durationMs: 42 }
+  },
+  {
+    name: "Category",
+    endpoint: "/api/category",
+    method: "POST",
+    defaultPayload: { name: "Accessories", slug: "accessories", description: "Product category" }
+  },
+  {
+    name: "Invitation",
+    endpoint: "/api/invitation",
+    method: "POST",
+    defaultPayload: { email: "teammate@example.com", role: "MEMBER" }
+  },
+  {
+    name: "Invitation: Accept",
+    endpoint: "/api/invitation/accept",
+    method: "POST",
+    defaultPayload: { token: "replace-with-a-valid-invitation-token", password: "replace-with-12+-character-password" }
+  },
+  {
+    name: "Order Item",
+    endpoint: "/api/orderitem",
+    method: "POST",
+    defaultPayload: { orderId: sampleId, productId: sampleId, quantity: 1 }
   },
   {
     name: "User (Користувач)",
     endpoint: "/api/user",
     method: "POST",
-    defaultPayload: { name: "Олександр", email: "alex2026@example.com", role: "USER" }
+    defaultPayload: { name: "Олександр", email: "member@example.com" }
   },
   {
     name: "Product (Товар)",
     endpoint: "/api/product",
     method: "POST",
-    defaultPayload: { name: "Кава Зернова", slug: "coffee-beans-1kg", price: 450, categoryId: "64b0f19c9d4e2a1b3c4d5e6f" }
+    defaultPayload: { name: "Coffee beans", slug: "coffee-beans-1kg", price: 450, categoryId: sampleId }
   },
   {
     name: "Order (Замовлення)",
     endpoint: "/api/order",
     method: "POST",
-    defaultPayload: { userId: "64b0f19c9d4e2a1b3c4d5e6f", totalAmount: 150, currency: "UAH", status: "PENDING" }
+    defaultPayload: {
+      items: [{ productId: sampleId, quantity: 1 }],
+      currency: "UAH",
+      shippingAddress: { country: "UA", city: "Kyiv", street: "Khreshchatyk 1", zipCode: "01001" }
+    }
+  },
+  {
+    name: "Payment (disabled)",
+    endpoint: `/api/order/${sampleId}/pay`,
+    method: "PATCH",
+    defaultPayload: {}
+  },
+  {
+    name: "Project",
+    endpoint: "/api/project",
+    method: "POST",
+    defaultPayload: { userId: sampleId, name: "New project", description: "Project description" }
+  },
+  {
+    name: "Review",
+    endpoint: "/api/review",
+    method: "POST",
+    defaultPayload: { userId: sampleId, productId: sampleId, rating: 5, comment: "Great product" }
+  },
+  {
+    name: "Session",
+    endpoint: "/api/session",
+    method: "POST",
+    defaultPayload: {
+      sessionToken: "replace-with-session-token",
+      userId: sampleId,
+      expires: "2027-01-01T00:00:00.000Z"
+    }
+  },
+  {
+    name: "AI Budget",
+    endpoint: "/api/useraibudget",
+    method: "POST",
+    defaultPayload: { userId: sampleId, totalBudgetMinor: 1000, usedBudgetMinor: 0, currency: "USD" }
+  },
+  {
+    name: "Verification Token",
+    endpoint: "/api/verificationtoken",
+    method: "POST",
+    defaultPayload: {
+      identifier: "owner@example.com",
+      token: "replace-with-verification-token",
+      expires: "2027-01-01T00:00:00.000Z"
+    }
+  },
+  {
+    name: "Warehouse",
+    endpoint: "/api/warehouse",
+    method: "POST",
+    defaultPayload: { productId: sampleId, location: "Main warehouse", quantity: 10 }
   },
   {
     name: "WebhookConfig (Вебхук)",
     endpoint: "/api/webhookconfig",
     method: "POST",
-    defaultPayload: { url: "https://telegram.org...", secret: "my-sha256-key", events: ["PROJECT_COMPLETED"], projectId: "64b0f19c9d4e2a1b3c4d5e6f" }
+    defaultPayload: {
+      projectId: sampleId,
+      url: "https://example.com/webhook",
+      secret: "replace-with-webhook-secret",
+      events: ["PROJECT_COMPLETED"],
+      isActive: true
+    }
   }
 ];
 
@@ -69,6 +239,8 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
   const [responseBody, setResponseBody] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uiError, setUiError] = useState<string | null>(null);
+  const [authIdentity, setAuthIdentity] = useState<AuthIdentity | null>(null);
+  const [authStatus, setAuthStatus] = useState("Not signed in");
 
   // Синхронізуємо метод, роут та пейлоад при перемиканні табів
   useEffect(() => {
@@ -80,6 +252,49 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
     setResponseStatus(null);
     setResponseBody("");
   }, [selectedModuleIndex]);
+
+  useEffect(() => {
+    let active = true;
+    setAuthStatus("Checking session...");
+    void apiFetch(getApiUrl("/api/auth/me"), { headers: getApiHeaders() })
+      .then(async (response) => {
+        if (response.status === 401 || response.status === 403) {
+          if (active) {
+            setAuthIdentity(null);
+            setAuthStatus("Session expired. Sign in again.");
+          }
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(`Session check failed (HTTP ${response.status}).`);
+        }
+        const payload: unknown = await response.json();
+        const identity = readAuthIdentity(payload);
+        if (!identity) {
+          throw new Error("The API returned an invalid session identity.");
+        }
+        if (active) {
+          setAuthIdentity(identity);
+          setAuthStatus("Signed in");
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setAuthStatus(error instanceof Error ? error.message : "Unable to verify session.");
+        }
+      });
+
+    return () => { active = false; };
+  }, []);
+
+  const signOut = async (): Promise<void> => {
+    await apiFetch(getApiUrl("/api/auth/logout"), {
+      method: "POST",
+      headers: getApiHeaders(),
+    });
+    setAuthIdentity(null);
+    setAuthStatus("Not signed in");
+  };
   // Головна функція інженерного тригера запитів (Емулятор Postman)
   const handleExecuteRequest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,17 +308,10 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
     const startTime = performance.now();
 
     try {
-      //  1. Перевіряємо та зчитуємо збережений JWT токен з пам'яті браузера
-      const savedToken = typeof window !== "undefined" ? localStorage.getItem("nextops_jwt") : null;
-
       // Конфігурація заголовків та параметрів запиту
       const options: RequestInit = {
         method: httpMethod,
-        headers: {
-          "Content-Type": "application/json",
-          //  2. АВТО-ПІДСТАНОВКА: Якщо токен є в пам'яті, прикріплюємо заголовок Bearer для NestJS
-          ...(savedToken ? { "Authorization": `Bearer ${savedToken}` } : {}),
-        },
+        headers: getApiHeaders(true),
       };
 
       // Додаємо тіло запиту тільки для методів POST та PATCH
@@ -118,7 +326,7 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
       }
 
       // Виконуємо живий запит до шлюзу NestJS API
-      const res = await fetch(customEndpoint.trim(), options);
+      const res = await apiFetch(getApiUrl(customEndpoint.trim()), options);
       const endTime = performance.now();
       const duration = Math.round(endTime - startTime);
 
@@ -127,18 +335,13 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
       const text = await res.text();
       try {
         const parsedJson: unknown = JSON.parse(text);
-        const accessToken =
-          typeof parsedJson === "object" &&
-          parsedJson !== null &&
-          "accessToken" in parsedJson &&
-          typeof parsedJson.accessToken === "string"
-            ? parsedJson.accessToken
-            : undefined;
-
-        // 3. АВТО-ЗБЕРЕЖЕННЯ: Якщо це був успішний вхід, зберігаємо JWT токен автоматично
-        if (customEndpoint.includes("/api/auth/login") && res.ok && accessToken) {
-          localStorage.setItem("nextops_jwt", accessToken);
-          setResponseBody(`// [SUCCESS] Токен успішно перехоплено та збережено в localStorage!\n// Статус: ${res.status} OK | Час: ${duration}ms\n` + JSON.stringify(parsedJson, null, 2));
+        if (customEndpoint.includes("/api/auth/login") && res.ok) {
+          const identity = readAuthIdentity(parsedJson);
+          if (identity) {
+            setAuthIdentity(identity);
+            setAuthStatus("Signed in");
+          }
+          setResponseBody(`// [SUCCESS] Authenticated with an HttpOnly session cookie.\n// Status: ${res.status} OK | Duration: ${duration}ms\n` + JSON.stringify(parsedJson, null, 2));
         } else {
           setResponseBody(`// Статус: ${res.status} | Час: ${duration}ms\n` + JSON.stringify(parsedJson, null, 2));
         }
@@ -157,7 +360,8 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
     <div className="flex flex-col w-full bg-neutral-950 border border-neutral-800 rounded-2xl p-4 md:p-6 shadow-2xl font-sans text-neutral-300 transition-all duration-300">
 
       {/* 1. ШЛЮЗ ШАПКИ (Гнучка інженерна панель) */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-neutral-800 pb-4 mb-4 select-none w-full">
+      <div className="flex flex-col sm:flex-row justify-between items-start
+       sm:items-center gap-3 border-b border-neutral-800 pb-4 mb-4 select-none w-full">
         <div className="flex items-center gap-2">
           <Layers className="w-5 h-5 text-blue-400 animate-pulse shrink-0" />
           <span className="text-sm font-mono text-blue-400 font-black tracking-wider">🚀 NEXTOPS_API_POSTMAN v2.0</span>
@@ -176,10 +380,34 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
         </div>
       </div>
 
+      <div className="mb-4 flex flex-col gap-2 rounded-xl border border-neutral-800 bg-black/30 p-3 text-xs sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="font-semibold text-neutral-200">
+            {authIdentity ? `Signed in: ${authIdentity.email ?? authIdentity.id}` : authStatus}
+          </p>
+          {authIdentity && (
+            <p className="mt-1 break-all font-mono text-neutral-500">
+              Business: {authIdentity.companyId} · Role: {authIdentity.role}
+            </p>
+          )}
+        </div>
+        {authIdentity && (
+          <button
+            type="button"
+            onClick={signOut}
+            className="min-h-9 shrink-0 rounded-lg border border-neutral-700 px-3 text-neutral-300 hover:bg-neutral-800"
+          >
+            Sign out
+          </button>
+        )}
+      </div>
+
       {/* 2. ТАБИ СУТНОСТЕЙ (Адаптивна гнучка сітка для 6 табів) */}
       <div className="mb-4 w-full">
-        <label className="block text-[10px] font-mono text-neutral-400 mb-1.5 uppercase font-bold tracking-wider">Оберіть сутність для тесту</label>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 w-full">
+        <label className="block text-[10px] font-mono text-neutral-400 mb-1.5 uppercase font-bold tracking-wider">
+          Оберіть сутність для тесту
+        </label>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 xl:grid-cols-9 gap-2 w-full">
           {AVAILABLE_MODULES.map((mod, idx) => (
             <button
               key={mod.name}
@@ -208,17 +436,23 @@ export default function WorkspacePostman({ isOpen, onCloseAction }: WorkspacePos
 
         {/* Рядок вибору методу та URL-адреси */}
         <div className="flex flex-col sm:flex-row gap-2 w-full">
-          <select
-            value={httpMethod}
-            // ВИПРАВЛЕНО ANY: Суворе приведення типу під допустимі HTTP-методи
-            onChange={(e) => setHttpMethod(e.target.value as "GET" | "POST" | "PATCH" | "DELETE")}
-            className="w-full sm:w-32 text-xs p-3 rounded-xl bg-neutral-900 border border-neutral-800 text-blue-400 font-mono font-black focus:outline-none focus:border-blue-500 cursor-pointer"
-          >
-            <option value="GET">GET</option>
-            <option value="POST">POST</option>
-            <option value="PATCH">PATCH</option>
-            <option value="DELETE">DELETE</option>
-          </select>
+          <div className="grid grid-cols-4 gap-1 sm:flex sm:shrink-0" role="group" aria-label="HTTP method">
+            {(["GET", "POST", "PATCH", "DELETE"] as const).map((method) => (
+              <button
+                key={method}
+                type="button"
+                aria-pressed={httpMethod === method}
+                onClick={() => setHttpMethod(method)}
+                className={`rounded-xl border px-3 py-2 text-xs font-mono font-black transition ${
+                  httpMethod === method
+                    ? "border-blue-500 bg-blue-600 text-white"
+                    : "border-neutral-800 bg-neutral-900 text-blue-400 hover:bg-neutral-800"
+                }`}
+              >
+                {method}
+              </button>
+            ))}
+          </div>
 
           <div className="flex-1 flex gap-2 w-full">
             <input

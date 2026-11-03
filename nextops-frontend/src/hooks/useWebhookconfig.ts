@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { CreateWebhookConfigInput, WebhookConfig } from '@/types/api';
+import { apiFetch, getApiHeaders, getApiUrl } from '@/lib/api';
+import { readPaginatedCollection } from '@/lib/collections';
 export type { CreateWebhookConfigInput, WebhookConfig };
 
 export function useWebhookConfig() {
@@ -9,10 +11,10 @@ export function useWebhookConfig() {
   const fetchData = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/' + 'webhookconfig');
+      const res = await apiFetch(getApiUrl('/api/webhookconfig'), { headers: getApiHeaders() });
       if (res.ok) {
-        const json = (await res.json()) as WebhookConfig[];
-        setData(Array.isArray(json) ? json : []);
+        const { data } = await readPaginatedCollection<WebhookConfig>(res);
+        setData(data);
       }
     } catch (err) {
       console.error('Помилка завантаження:', err);
@@ -23,9 +25,9 @@ export function useWebhookConfig() {
 
   const createItem = async (formData: CreateWebhookConfigInput): Promise<void> => {
     try {
-      const res = await fetch('http://localhost:3001/api/' + 'webhookconfig', {
+      const res = await apiFetch(getApiUrl('/api/webhookconfig'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders(true),
         body: JSON.stringify(formData)
       });
       if (res.ok) await fetchData();
@@ -36,7 +38,10 @@ export function useWebhookConfig() {
 
   const deleteItem = async (id: string): Promise<void> => {
     try {
-      const res = await fetch('http://localhost:3001/api/' + 'webhookconfig/' + id, { method: 'DELETE' });
+      const res = await apiFetch(getApiUrl(`/api/webhookconfig/${id}`), {
+        method: 'DELETE',
+        headers: getApiHeaders(),
+      });
       if (res.ok) await fetchData();
     } catch (err) {
       console.error('Помилка видалення:', err);

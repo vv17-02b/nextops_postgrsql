@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject } from '@nestjs/common'; // ✅ Виправлено імпорт
+import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query } from '@nestjs/common';
 import { AccountService } from './account.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import type { Account } from '@prisma/client';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import type { PaginatedResponse } from '../common/pagination/paginate';
 
 @Controller('account')
 export class AccountController {
@@ -17,8 +19,8 @@ export class AccountController {
   }
 
   @Get()
-  findAll(): Promise<Account[]> { 
-    return this.accountService.findAll(); 
+  findAll(@Query() query: PaginationQueryDto): Promise<PaginatedResponse<Account>> {
+    return this.accountService.findAll(query);
   }
 
   @Get(':id')

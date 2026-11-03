@@ -1,6 +1,7 @@
 import './globals.css';
 import React from 'react';
 import Sidebar from '@/components/ui/sidebar';
+import SessionNotice from '@/components/SessionNotice';
 import { WorkspaceProvider } from '@/context/WorkspaceContext';
 
 export const metadata = {
@@ -15,16 +16,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="uk">
-      {/* ВИПРАВЛЕНО: Прибрали bg-gray-50 та text-gray-900, щоб вони не перекривали картинку з globals.css */}
       <body className="min-h-screen antialiased">
         <WorkspaceProvider>
           <div className="flex min-h-screen bg-custom-way">
-            {/* Сайдбар */}
             <Sidebar />
-            <main className="flex-1 w-full p-4 md:p-8 md:pl-72 min-h-screen overflow-x-hidden pt-16 md:pt-8">
-              {children}
+            <main className="min-w-0 flex-1 w-full min-h-screen overflow-x-hidden 
+            px-4 pb-6 pt-16 sm:px-6 md:px-8 md:pt-16 lg:pl-80 lg:pt-8 xl:pl-[21rem]">
+              <div className="mx-auto w-full max-w-[1600px] min-w-0">
+                {children}
+              </div>
             </main>
           </div>
+          <SessionNotice />
         </WorkspaceProvider>
       </body>
     </html>

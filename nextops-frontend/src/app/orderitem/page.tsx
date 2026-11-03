@@ -13,7 +13,7 @@ export default function OrderItemPage(): React.JSX.Element {
       <div className="bg-white p-6 border rounded-xl shadow-sm">
         <h1 className="text-xl font-bold text-gray-900">Next.js Сторінка: OrderItem</h1>
         <p className="text-sm text-gray-500">
-          Автоматичний зв'язок з роутом бекенду:{' '}
+          Автоматичний зв&apos;язок з роутом бекенду:{' '}
           <code className="text-blue-600 font-mono">/api/orderitem</code>
         </p>
       </div>
@@ -22,7 +22,7 @@ export default function OrderItemPage(): React.JSX.Element {
 
       <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
         <div className="p-4 border-b bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Список документів з бази даних (MongoDB Atlas)
+          Записи з бази PostgreSQL
         </div>
         
         {loading ? (
@@ -47,7 +47,7 @@ export default function OrderItemPage(): React.JSX.Element {
                     <td className="px-4 py-3 text-gray-700"> {String(item.orderId || '-')} </td>
                     <td className="px-4 py-3 text-gray-700"> {String(item.productId || '-')} </td>
                     <td className="px-4 py-3 text-gray-700"> {String(item.quantity || '-')} </td>
-                    <td className="px-4 py-3 text-gray-700"> {String(item.price || '-')} USD</td>
+                    <td className="px-4 py-3 text-gray-700"> {item.priceMinor == null ? '-' : (item.priceMinor / 100).toFixed(2)} </td>
                     <td className="px-4 py-3 text-right">
                       <button 
                         onClick={() => void deleteItem(item.id)}

@@ -1,46 +1,83 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common'; // <-- Додано Inject
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContext } from '../prisma/tenant-context';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
 import { Prisma } from '@prisma/client';
 import type { Order } from '@prisma/client';
+import { MAX_MINOR_UNITS } from '../common/money';
 
 @Injectable()
 export class OrderService {
   // Примусове впровадження через @Inject, щоб прибрати undefined на this.prisma
   constructor(
     @Inject(PrismaService)
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
-  async create(dto: CreateOrderDto): Promise<Order> {
-    return this.prisma.order.create({
-      data: {
-        userId: dto.userId,
-        totalAmount: dto.totalAmount,
-        currency: dto.currency || 'UAH',
-        shippingAddress: dto.shippingAddress ? (dto.shippingAddress as unknown as Prisma.InputJsonValue) : {},
-        status: dto.status || 'PENDING',
-        paymentStatus: dto.status === 'PAID' ? 'PAID' : 'UNPAID',
-        paymentMethod: 'CARD',
-        items: dto.items ? {
-          create: dto.items.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            price: item.price,
-          })),
-        } : undefined,
-      },
-      include: {
-        items: true,
-      },
-    });
+  async create(dto: CreateOrderDto, userId: string): Promise<Order> {
+    const companyId = this.tenantContext.getCompanyId();
+    if (!companyId) throw new ForbiddenException('A business workspace is required.');
+    return this.prisma.$transaction(async (transaction) => {
+      const requestedProductIds = [...new Set(dto.items.map((item) => item.productId))];
+      const products = await transaction.product.findMany({
+        where: { id: { in: requestedProductIds }, isActive: true },
+        select: { id: true, priceMinor: true },
+      });
+      if (products.length !== requestedProductIds.length) {
+        throw new NotFoundException('One or more products are unavailable in this workspace.');
+      }
+
+      const productPrices = new Map(products.map((product) => [product.id, product.priceMinor]));
+      const items = dto.items.map((item) => {
+        const priceMinor = productPrices.get(item.productId);
+        if (priceMinor === undefined) {
+          throw new NotFoundException('One or more products are unavailable in this workspace.');
+        }
+        return {
+          companyId,
+          productId: item.productId,
+          quantity: item.quantity,
+          priceMinor,
+        };
+      });
+      const totalAmountMinor = items.reduce((total, item) => total + item.quantity * item.priceMinor, 0);
+      if (!Number.isSafeInteger(totalAmountMinor) || totalAmountMinor > MAX_MINOR_UNITS) {
+        throw new BadRequestException('The calculated order amount exceeds the supported range.');
+      }
+
+      return transaction.order.create({
+        data: {
+          companyId,
+          userId,
+          totalAmountMinor,
+          currency: dto.currency || 'UAH',
+          shippingAddress: dto.shippingAddress
+            ? (dto.shippingAddress as unknown as Prisma.InputJsonValue)
+            : {},
+          status: 'PENDING',
+          paymentStatus: 'UNPAID',
+          paymentMethod: 'CARD',
+          items: items.length ? { create: items } : undefined,
+        },
+        include: { items: true },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
-  async findAll(): Promise<Order[]> {
-    return this.prisma.order.findMany({
-      include: { items: true },
-    });
+  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<Order>> {
+    return paginate(
+      query,
+      (skip, take) => this.prisma.order.findMany({
+        skip,
+        take,
+        include: { items: true },
+      }),
+      () => this.prisma.order.count(),
+    );
   }
 
   async findOne(id: string): Promise<Order> {
@@ -58,7 +95,6 @@ export class OrderService {
     const updateData: Prisma.OrderUpdateInput = {};
 
     if (dto.status) updateData.status = dto.status;
-    if (dto.paymentStatus) updateData.paymentStatus = dto.paymentStatus;
     if (dto.shippingAddress) {
       updateData.shippingAddress = dto.shippingAddress as unknown as Prisma.InputJsonValue;
     }
@@ -75,17 +111,4 @@ export class OrderService {
     return this.prisma.order.delete({ where: { id } });
   }
 
-  async updatePaymentStatus(id: string, paymentId: string,
-     rawResponse: Prisma.InputJsonValue): Promise<Order> {
-    await this.findOne(id);
-    return this.prisma.order.update({
-      where: { id },
-      data: {
-        paymentStatus: 'PAID',
-        status: 'PROCESSING',
-        paymentId,
-        paymentRawResponse: rawResponse,
-      },
-    });
-  }
 }

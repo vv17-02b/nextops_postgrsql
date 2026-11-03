@@ -1,10 +1,14 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query } from '@nestjs/common';
 import { WebhookConfigService } from './webhookconfig.service';
 import { CreateWebhookConfigDto } from './dto/create-webhookconfig.dto';
 import { UpdateWebhookConfigDto } from './dto/update-webhookconfig.dto';
 import type { WebhookConfig } from '@prisma/client';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import type { PaginatedResponse } from '../common/pagination/paginate';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('webhookconfig')
+@Roles('OWNER', 'ADMIN')
 export class WebhookConfigController {
   constructor(
     @Inject(WebhookConfigService)
@@ -17,8 +21,8 @@ export class WebhookConfigController {
   }
 
   @Get()
-  findAll(): Promise<WebhookConfig[]> { 
-    return this.service.findAll(); 
+  findAll(@Query() query: PaginationQueryDto): Promise<PaginatedResponse<WebhookConfig>> {
+    return this.service.findAll(query);
   }
 
   @Get(':id')

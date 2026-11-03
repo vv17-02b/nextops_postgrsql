@@ -8,7 +8,6 @@ interface FormProps {
 export default function UserForm({ onSubmit }: FormProps): React.JSX.Element {
   const [name, setName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
-  const [role, setRole] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -16,12 +15,10 @@ export default function UserForm({ onSubmit }: FormProps): React.JSX.Element {
     setLoading(true);
     await onSubmit({
       name: name,
-      email: email,
-      role: role
+      email: email
     });
     setName('');
     setEmail('');
-    setRole('');
     setLoading(false);
   };
 
@@ -30,7 +27,7 @@ export default function UserForm({ onSubmit }: FormProps): React.JSX.Element {
       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Форма додавання (User)</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <div className="space-y-1">
-        <label className="text-xs font-medium text-gray-600">Ім'я користувача</label>
+        <label className="text-xs font-medium text-gray-600">Ім&apos;я користувача</label>
         <input 
           type="text" 
           value={name}
@@ -41,23 +38,13 @@ export default function UserForm({ onSubmit }: FormProps): React.JSX.Element {
         />
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium text-gray-600">Email</label>
+        <label htmlFor="user-email" className="text-xs font-medium text-gray-600">Email</label>
         <input 
-          type="text" 
+          id="user-email"
+          type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Введіть email..." 
-          className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
-          required
-        />
-      </div>
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-gray-600">Роль (USER/ADMIN)</label>
-        <input 
-          type="text" 
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-          placeholder="Введіть роль (user/admin)..." 
           className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
           required
         />

@@ -1,10 +1,14 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import type { User } from '@prisma/client';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import type { PaginatedResponse } from '../common/pagination/paginate';
+import type { SafeUser } from './user.service';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('user')
+@Roles('OWNER', 'ADMIN')
 export class UserController {
   constructor(
     @Inject(UserService)
@@ -12,27 +16,27 @@ export class UserController {
   ) {}
 
   @Post()
-  create(@Body() dto: CreateUserDto): Promise<User> { 
+  create(@Body() dto: CreateUserDto): Promise<SafeUser> {
     return this.service.create(dto); 
   }
 
   @Get()
-  findAll(): Promise<User[]> { 
-    return this.service.findAll(); 
+  findAll(@Query() query: PaginationQueryDto): Promise<PaginatedResponse<SafeUser>> {
+    return this.service.findAll(query);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string): Promise<User> { 
+  findOne(@Param('id') id: string): Promise<SafeUser> {
     return this.service.findOne(id); 
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateUserDto): Promise<User> {
+  update(@Param('id') id: string, @Body() dto: UpdateUserDto): Promise<SafeUser> {
     return this.service.update(id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string): Promise<User> { 
+  remove(@Param('id') id: string): Promise<SafeUser> {
     return this.service.remove(id); 
   }
 }

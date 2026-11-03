@@ -8,13 +8,12 @@ export function OrderItemForm(): React.JSX.Element {
   const [orderId, setOrderId] = useState<string>('');
   const [productId, setProductId] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
-  const [price, setPrice] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
-    if (!orderId || !productId || !quantity || !price) return;
+    if (!orderId || !productId || !quantity) return;
     
     setLoading(true);
     setError(null);
@@ -24,7 +23,6 @@ export function OrderItemForm(): React.JSX.Element {
         orderId: orderId.trim(),
         productId: productId.trim(),
         quantity: Number(quantity),
-        price: Number(price),
       };
 
       await createItem(payload);
@@ -32,7 +30,6 @@ export function OrderItemForm(): React.JSX.Element {
       setOrderId('');
       setProductId('');
       setQuantity('');
-      setPrice('');
     } catch (err: unknown) {
       // Виводимо помилку валідації NestJS прямо на форму
       setError(err instanceof Error ? err.message : 'Невідома помилка відправки');
@@ -84,18 +81,6 @@ export function OrderItemForm(): React.JSX.Element {
           />
         </div>
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-600">Ціна за одиницю</label>
-          <input 
-            type="number" 
-            step="0.01"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="Введіть ціну..." 
-            className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
-            required
-          />
-        </div>
       </div>
 
       {error && (

@@ -7,9 +7,9 @@ export default function BudgetChart(): React.JSX.Element {
   const { data, loading } = useUserAiBudget();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  // Динамічно рахуємо реальні агреговані суми лімітів з нашого NoSQL-хабу
-  const totalBudget = data.reduce((sum, item) => sum + (Number(item.totalBudget) || 0), 0) || 0;
-  const usedBudget = data.reduce((sum, item) => sum + (Number(item.usedBudget) || 0), 0) || 0;
+  // Динамічно рахуємо реальні агреговані суми лімітів (minor units → units)
+  const totalBudget = data.reduce((sum, item) => sum + (Number(item.totalBudgetMinor) || 0), 0) / 100 || 0;
+  const usedBudget = data.reduce((sum, item) => sum + (Number(item.usedBudgetMinor) || 0), 0) / 100 || 0;
   const avgBudget = data.length > 0 ? totalBudget / data.length : 0;
 
   // Конфігурація сегментів спалювання лімітів

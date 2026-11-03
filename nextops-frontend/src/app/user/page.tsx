@@ -12,14 +12,14 @@ export default function UserPage(): React.JSX.Element {
     <div className="space-y-6 font-sans">
       <div className="bg-white p-6 border rounded-xl shadow-sm">
         <h1 className="text-xl font-bold text-gray-900">Next.js Сторінка: User</h1>
-        <p className="text-sm text-gray-500">Автоматичний зв'язок з роутом бекенду: <code className="text-blue-600 font-mono">/api/user</code></p>
+        <p className="text-sm text-gray-500">Автоматичний зв&apos;язок з роутом бекенду: <code className="text-blue-600 font-mono">/api/user</code></p>
       </div>
 
       <UserForm onSubmit={createItem} />
 
       <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
         <div className="p-4 border-b bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Список документів з бази даних (MongoDB Atlas)
+          Записи з бази PostgreSQL
         </div>
         
         {loading ? (
@@ -30,7 +30,7 @@ export default function UserPage(): React.JSX.Element {
               <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase border-b">
                 <tr>
                   <th className="px-4 py-3 text-left">ID Документа</th>
-                  <th className="px-4 py-3 text-left">Ім'я користувача</th>
+                  <th className="px-4 py-3 text-left">Ім&apos;я користувача</th>
             <th className="px-4 py-3 text-left">Email</th>
             <th className="px-4 py-3 text-left">Роль (USER/ADMIN)</th>
                   <th className="px-4 py-3 text-right">Дії</th>

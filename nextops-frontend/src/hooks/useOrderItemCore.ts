@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
+import { apiFetch, getApiHeaders, getApiUrl } from '@/lib/api';
+import { readPaginatedCollection } from '@/lib/collections';
 
 export interface OrderItem {
   id: string;
   orderId: string;
   productId: string;
   quantity: number;
-  price: number;
+  priceMinor: number;
 }
 
-export type CreateOrderItemInput = Omit<OrderItem, 'id'>;
+export type CreateOrderItemInput = Omit<OrderItem, 'id' | 'priceMinor'>;
 
 interface UseOrderItemReturn {
   data: OrderItem[];
@@ -25,10 +27,12 @@ export function useOrderItem(): UseOrderItemReturn {
   const fetchData = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
-      const res = await fetch('/api/orderitem');
+      const res = await apiFetch(getApiUrl('/api/orderitem'), {
+        headers: getApiHeaders(),
+      });
       if (res.ok) {
-        const json = (await res.json()) as OrderItem[];
-        setData(Array.isArray(json) ? json : []);
+        const { data } = await readPaginatedCollection<OrderItem>(res);
+        setData(data);
       }
     } catch (err: unknown) {
       console.error('Помилка завантаження:', err);
@@ -38,9 +42,9 @@ export function useOrderItem(): UseOrderItemReturn {
   }, []);
 
   const createItem = async (formData: CreateOrderItemInput): Promise<void> => {
-    const res = await fetch('/api/orderitem', {
+    const res = await apiFetch(getApiUrl('/api/orderitem'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders(true),
       body: JSON.stringify(formData),
     });
 
@@ -57,8 +61,9 @@ export function useOrderItem(): UseOrderItemReturn {
   };
 
   const deleteItem = async (id: string): Promise<void> => {
-    const res = await fetch(`/api/orderitem/${id}`, { 
+    const res = await apiFetch(getApiUrl(`/api/orderitem/${id}`), {
       method: 'DELETE',
+      headers: getApiHeaders(),
     });
 
     if (!res.ok) {

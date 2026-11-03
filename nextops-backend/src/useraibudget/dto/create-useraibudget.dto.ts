@@ -1,19 +1,21 @@
-import { IsString, IsNotEmpty, IsNumber, IsPositive, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsInt, IsOptional, Min } from 'class-validator';
 
+// Budget values are accepted and stored as integer minor units (cents).
 export class CreateUserAiBudgetDto {
   @IsString()
   @IsNotEmpty({ message: 'User ID є обовʼязковим для привʼязки бюджету' })
-  userId: string;
+  userId!: string;
 
-  @IsNumber({}, { message: 'Загальний бюджет (totalBudget) має бути числом' })
-  @IsPositive({ message: 'Загальний бюджет має бути більшим за 0' })
-  totalBudget: number;
+  @IsInt({ message: 'Загальний бюджет (totalBudgetMinor) має бути цілим числом копійок' })
+  @Min(0, { message: 'Загальний бюджет не може бути відʼємним' })
+  totalBudgetMinor!: number;
 
-  @IsNumber({}, { message: 'Використаний бюджет (usedBudget) має бути числом' })
-  @Min(0, { message: 'Використаний бюджет не може бути меншим за 0' })
-  usedBudget: number;
+  @IsInt({ message: 'Використаний бюджет (usedBudgetMinor) має бути цілим числом копійок' })
+  @Min(0, { message: 'Використаний бюджет не може бути відʼємним' })
+  @IsOptional()
+  usedBudgetMinor?: number;
 
   @IsString()
   @IsNotEmpty({ message: 'Валюта (currency) є обовʼязковою' })
-  currency: string;
+  currency!: string;
 }

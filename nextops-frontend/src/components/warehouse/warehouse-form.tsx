@@ -6,82 +6,80 @@ interface FormProps {
 }
 
 export default function WarehouseForm({ onSubmit }: FormProps): React.JSX.Element {
-  // 🌟 Оновлено стейти під реальну NoSQL схему Warehouse
-  const [name, setName] = useState<string>('');
-  const [location, setLocation] = useState<string>('');
-  const [description, setDescription] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
+  const [productId, setProductId] = useState('');
+  const [location, setLocation] = useState('');
+  const [quantity, setQuantity] = useState('0');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
     setLoading(true);
-    
-    // 🌟 Надсилаємо правильні чисті поля на бекенд
-    await onSubmit({
-      name: name,
-      location: location,
-      description: description || undefined // Якщо порожній, передаємо як undefined
-    });
-    
-    setName('');
-    setLocation('');
-    setDescription('');
-    loading && setLoading(false);
+
+    try {
+      await onSubmit({
+        productId: productId.trim(),
+        location: location.trim(),
+        quantity: Number(quantity),
+      });
+      setProductId('');
+      setLocation('');
+      setQuantity('0');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <form onSubmit={handleSubmit} className="p-5 border rounded-xl bg-gray-50/50 space-y-4 font-sans">
-      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Форма додавання (Warehouse)</h3>
-      
+      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Add product stock</h3>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Назва складу замість старого Product ID */}
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-600">Назва складу</label>
-          <input 
-            type="text" 
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Введіть назву складу (напр. Головний Склад Київ)..." 
+          <label className="text-xs font-medium text-gray-600">Product ID (UUID)</label>
+          <input
+            type="text"
+            value={productId}
+            onChange={(event) => setProductId(event.target.value)}
+            placeholder="Enter the existing product UUID"
             className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
             required
+            pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}"
+            title="Enter a valid PostgreSQL UUID"
           />
         </div>
 
-        {/* Локація складу */}
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-600">Локація складу</label>
-          <input 
-            type="text" 
+          <label className="text-xs font-medium text-gray-600">Warehouse location</label>
+          <input
+            type="text"
             value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="Введіть локацію складу (напр. вул. Хрещатик, 1)..." 
+            onChange={(event) => setLocation(event.target.value)}
+            placeholder="Main warehouse, shelf A1"
             className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
             required
           />
         </div>
 
-        {/* Опис складу (двоколонкове розтягування для краси верстки) */}
         <div className="space-y-1 sm:col-span-2">
-          <label className="text-xs font-medium text-gray-600">Опис складу (опціонально)</label>
-          <input 
-            type="text" 
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Введіть додатковий опис чи примітки..." 
-            className="w-full px-3 py-2 border rounded-lg text-sm
-             bg-white focus:outline-none focus:border-blue-500"
+          <label className="text-xs font-medium text-gray-600">Quantity</label>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
+            className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
+            required
           />
         </div>
       </div>
 
-      <button 
-        type="submit" 
+      <button
+        type="submit"
         disabled={loading}
-        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 
-        text-white px-5 py-2.5 rounded-lg text-sm font-medium 
-        transition disabled:opacity-50 shadow-sm"
+        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition disabled:opacity-50 shadow-sm"
       >
-        {loading ? 'Надсилання...' : 'Створити документ'}
+        {loading ? 'Saving...' : 'Add stock'}
       </button>
     </form>
   );

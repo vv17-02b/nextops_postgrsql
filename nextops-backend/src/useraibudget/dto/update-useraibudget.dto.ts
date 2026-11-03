@@ -1,19 +1,20 @@
-import { IsString, IsOptional, IsNumber, IsPositive, Min } from 'class-validator';
+import { IsString, IsOptional, IsInt, Min } from 'class-validator';
 
+// Budget values are accepted and stored as integer minor units (cents).
 export class UpdateUserAiBudgetDto {
   @IsString()
   @IsOptional()
   userId?: string;
 
-  @IsNumber({}, { message: 'Загальний бюджет (totalBudget) має бути числом' })
-  @IsPositive({ message: 'Загальний budget має бути більшим за 0' })
+  @IsInt({ message: 'Загальний бюджет (totalBudgetMinor) має бути цілим числом копійок' })
+  @Min(0, { message: 'Загальний бюджет не може бути відʼємним' })
   @IsOptional()
-  totalBudget?: number;
+  totalBudgetMinor?: number;
 
-  @IsNumber({}, { message: 'Використаний бюджет (usedBudget) має бути числом' })
-  @Min(0, { message: 'Використаний бюджет не може бути меншим за 0' })
+  @IsInt({ message: 'Використаний бюджет (usedBudgetMinor) має бути цілим числом копійок' })
+  @Min(0, { message: 'Використаний бюджет не може бути відʼємним' })
   @IsOptional()
-  usedBudget?: number;
+  usedBudgetMinor?: number;
 
   @IsString()
   @IsOptional()

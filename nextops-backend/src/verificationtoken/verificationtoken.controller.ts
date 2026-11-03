@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query } from '@nestjs/common';
 import { VerificationTokenService } from './verificationtoken.service';
 import { CreateVerificationTokenDto } from './dto/create-verificationtoken.dto';
 import { UpdateVerificationTokenDto } from './dto/update-verificationtoken.dto';
 import type { VerificationToken } from '@prisma/client';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import type { PaginatedResponse } from '../common/pagination/paginate';
 
 @Controller('verificationtoken')
 export class VerificationTokenController {
@@ -24,8 +26,8 @@ export class VerificationTokenController {
   }
 
   @Get()
-  async findAll(): Promise<VerificationToken[]> { 
-    return this.service.findAll(); 
+  async   findAll(@Query() query: PaginationQueryDto): Promise<PaginatedResponse<VerificationToken>> {
+    return this.service.findAll(query);
   }
 
   @Get(':id')

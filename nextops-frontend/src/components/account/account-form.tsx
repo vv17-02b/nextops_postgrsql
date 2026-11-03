@@ -33,12 +33,12 @@ export default function AccountForm({ onSubmit }: FormProps): React.JSX.Element 
       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Форма додавання (Account)</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <div className="space-y-1">
-        <label className="text-xs font-medium text-gray-600">User ID (MongoDB ObjectId)</label>
+        <label className="text-xs font-medium text-gray-600">User ID (PostgreSQL UUID)</label>
         <input 
           type="text" 
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
-          placeholder="Введіть user id (mongodb objectid)..." 
+          placeholder="Введіть user id (UUID)..."
           className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
           required
         />

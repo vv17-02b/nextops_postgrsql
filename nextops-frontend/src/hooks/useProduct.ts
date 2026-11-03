@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { CreateProductInput, Product } from '@/types/api';
+import { apiFetch, getApiHeaders, getApiUrl } from '@/lib/api';
+import { readPaginatedCollection } from '@/lib/collections';
 export type { CreateProductInput, Product };
 
 interface UseProductReturn {
@@ -14,14 +16,15 @@ export function useProduct(): UseProductReturn {
   const [data, setData] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
-  // Використовуємо відносні шляхи Next.js, щоб запити йшли разом із JWT сесією
   const fetchData = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
-      const res = await fetch('/api/product');
+      const res = await apiFetch(getApiUrl('/api/product'), {
+        headers: getApiHeaders(),
+      });
       if (res.ok) {
-        const json = (await res.json()) as Product[];
-        setData(Array.isArray(json) ? json : []);
+        const { data } = await readPaginatedCollection<Product>(res);
+        setData(data);
       } else {
         console.error('Сервер повернув помилку доступу. Статус:', res.status);
       }
@@ -34,9 +37,9 @@ export function useProduct(): UseProductReturn {
 
   const createItem = async (formData: CreateProductInput): Promise<void> => {
     try {
-      const res = await fetch('/api/product', {
+      const res = await apiFetch(getApiUrl('/api/product'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders(true),
         body: JSON.stringify(formData),
       });
       if (res.ok) {
@@ -49,8 +52,9 @@ export function useProduct(): UseProductReturn {
 
   const deleteItem = async (id: string): Promise<void> => {
     try {
-      const res = await fetch(`/api/product/${id}`, { 
+      const res = await apiFetch(getApiUrl(`/api/product/${id}`), {
         method: 'DELETE',
+        headers: getApiHeaders(),
       });
       if (res.ok) {
         await fetchData();

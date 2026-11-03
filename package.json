@@ -1,6 +1,6 @@
 {
   "private": true,
-  "name": "nextops",
+  "name": "nextops_postgrsql",
   "version": "1.0.0",
   "scripts": {
     "backend": "cd nextops-backend && yarn start:dev",
@@ -8,6 +8,7 @@
     "start:dev": "concurrently \"yarn backend\" \"yarn frontend\""
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "concurrently": "^9.2.1"
   }
 }

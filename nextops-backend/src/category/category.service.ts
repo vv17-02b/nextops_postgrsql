@@ -1,23 +1,33 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContext } from '../prisma/tenant-context';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
 import type { Category } from '@prisma/client';
 
 @Injectable()
 export class CategoryService {
   constructor(
     @Inject(PrismaService)
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
   async create(dto: CreateCategoryDto): Promise<Category> {
-    return this.prisma.category.create({ data: dto });
+    const companyId = this.tenantContext.getCompanyId();
+    if (!companyId) throw new ForbiddenException('A business workspace is required.');
+    return this.prisma.category.create({ data: { ...dto, companyId } });
   }
 
   // 🌟 Спрощено: прибираємо include для стабільного першого запуску NoSQL
-  async findAll(): Promise<Category[]> {
-    return this.prisma.category.findMany();
+  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<Category>> {
+    return paginate(
+      query,
+      (skip, take) => this.prisma.category.findMany({ skip, take }),
+      () => this.prisma.category.count(),
+    );
   }
 
   // 🌟 Спрощено: шукаємо документ суто за його унікальним ID

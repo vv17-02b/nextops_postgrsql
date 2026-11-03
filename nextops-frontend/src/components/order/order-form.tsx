@@ -6,23 +6,23 @@ interface FormProps {
 }
 
 export default function OrderForm({ onSubmit }: FormProps): React.JSX.Element {
-  const [userId, setUserId] = useState<string>('');
-  const [status, setStatus] = useState<string>('');
-  const [totalAmount, setTotalAmount] = useState<string>('');
+  const [productId, setProductId] = useState<string>('');
+  const [quantity, setQuantity] = useState<string>('1');
   const [loading, setLoading] = useState<boolean>(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     setLoading(true);
-    await onSubmit({
-      userId: userId,
-      status: status,
-      totalAmount: Number(totalAmount)
-    });
-    setUserId('');
-    setStatus('');
-    setTotalAmount('');
-    setLoading(false);
+    try {
+      await onSubmit({
+        items: [{ productId: productId.trim(), quantity: Number(quantity) }],
+        currency: 'UAH',
+      });
+      setProductId('');
+      setQuantity('1');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -30,34 +30,24 @@ export default function OrderForm({ onSubmit }: FormProps): React.JSX.Element {
       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Форма додавання (Order)</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <div className="space-y-1">
-        <label className="text-xs font-medium text-gray-600">User ID (MongoDB ObjectId)</label>
+        <label className="text-xs font-medium text-gray-600">Product ID (PostgreSQL UUID)</label>
         <input 
           type="text" 
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
-          placeholder="Введіть user id (mongodb objectid)..." 
+          value={productId}
+          onChange={(e) => setProductId(e.target.value)}
+          placeholder="Введіть ID продукту..."
           className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
           required
         />
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium text-gray-600">Статус (PENDING/PAID)</label>
-        <input 
-          type="text" 
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          placeholder="Введіть статус (pending/paid)..." 
-          className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
-          required
-        />
-      </div>
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-gray-600">Загальна сума</label>
-        <input 
-          type="number" 
-          value={totalAmount}
-          onChange={(e) => setTotalAmount(e.target.value)}
-          placeholder="Введіть загальна сума..." 
+        <label className="text-xs font-medium text-gray-600">Кількість</label>
+        <input
+          type="number"
+          min="1"
+          step="1"
+          value={quantity}
+          onChange={(e) => setQuantity(e.target.value)}
           className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
           required
         />

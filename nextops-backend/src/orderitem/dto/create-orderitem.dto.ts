@@ -1,24 +1,21 @@
 import { Transform } from 'class-transformer';
-import { IsMongoId, IsNotEmpty, IsNumber, IsPositive, IsInt, IsString } from 'class-validator';
+import { IsUUID, IsNotEmpty, IsPositive, IsInt, IsString } from 'class-validator';
 
 export class CreateOrderItemDto {
   @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   @IsString()
   @IsNotEmpty()
-  @IsMongoId()
+  @IsUUID()
   orderId: string;
 
   @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   @IsString()
   @IsNotEmpty()
-  @IsMongoId()
+  @IsUUID()
   productId: string;
 
   @IsInt()
   @IsPositive()
   quantity: number;
 
-  @IsNumber()
-  @IsPositive()
-  price: number;
 }

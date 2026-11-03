@@ -1,15 +1,17 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsInt, IsNotEmpty, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateWarehouseDto {
-  @IsString()
-  @IsNotEmpty({ message: 'Назва складу (name) є обовʼязковою' })
-  name: string;
+  @IsUUID()
+  @IsNotEmpty()
+  productId: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'Локація або адреса складу (location) є обовʼязковою' })
+  @IsNotEmpty({ message: 'Локація складу є обовʼязковою' })
   location: string;
 
-  @IsString()
-  @IsOptional()
-  description?: string;
+  @Transform(({ value }) => value === undefined ? value : Number(value))
+  @IsInt()
+  @Min(0)
+  quantity?: number;
 }

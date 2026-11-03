@@ -1,11 +1,13 @@
-import { IsString, IsNotEmpty, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsInt, Min, Max, MaxLength } from 'class-validator';
 
 export class CreateApiHistoryDto {
   @IsString()
+  @MaxLength(2048)
   @IsNotEmpty({ message: 'Ендпоінт (endpoint) є обовʼязковим для логування' })
   endpoint: string;
 
   @IsString()
+  @MaxLength(16)
   @IsNotEmpty({ message: 'Метод запиту (method) є обовʼязковим' })
   method: string;
 

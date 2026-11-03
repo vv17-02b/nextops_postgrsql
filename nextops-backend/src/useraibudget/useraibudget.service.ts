@@ -1,14 +1,30 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContext } from '../prisma/tenant-context';
 import { CreateUserAiBudgetDto } from './dto/create-useraibudget.dto';
 import { UpdateUserAiBudgetDto } from './dto/update-useraibudget.dto';
 import { Prisma } from '@prisma/client';
 import type { UserAiBudget } from '@prisma/client';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
 
-// Інтерфейс розширення для ідеальної сумісності з преміальним графіком фронтенду
+const CENTS_PER_UNIT = 100;
+
+function toMinor(value: number): number {
+  if (!Number.isFinite(value)) {
+    throw new ForbiddenException('Budget values must be finite numbers.');
+  }
+  const minor = Math.round(value * CENTS_PER_UNIT);
+  if (!Number.isSafeInteger(minor) || minor < 0) {
+    throw new ForbiddenException('Budget value is out of the supported minor-unit range.');
+  }
+  return minor;
+}
+
+// Extension shape kept compatible with the frontend budget view.
 interface UserAiBudgetExtended extends UserAiBudget {
-  totalBudget: number;
-  usedBudget: number;
+  totalBudgetMinor: number;
+  usedBudgetMinor: number;
   currency: string;
 }
 
@@ -16,20 +32,23 @@ interface UserAiBudgetExtended extends UserAiBudget {
 export class UserAiBudgetService {
   constructor(
     @Inject(PrismaService)
-    private readonly prisma: PrismaService
-  ) {}
+    private readonly prisma: PrismaService,
+    @Inject(TenantContext) private readonly tenantContext: TenantContext,
+  ) { }
 
   async create(dto: CreateUserAiBudgetDto): Promise<UserAiBudget> {
-    // 🌟 АВТО-ДАТА СКИДАННЯ: Вираховуємо дату рівно на 30 днів вперед від сьогодні
+    const companyId = this.tenantContext.getCompanyId();
+    if (!companyId) throw new ForbiddenException('A business workspace is required.');
+    // Auto reset date: exactly 30 days ahead.
     const autoResetDate = new Date();
     autoResetDate.setDate(autoResetDate.getDate() + 30);
 
-    // 🌟 СИНХРОНІЗАЦІЯ NoSQL ЗІ СХЕМОЮ: Наповнюємо всі обов'язкові властивості моделі Prisma
     const budgetData: Prisma.UserAiBudgetUncheckedCreateInput = {
+      companyId,
       userId: String(dto.userId).trim(),
-      monthlyLimit: Number(dto.totalBudget || 0),
-      currentUsage: Number(dto.usedBudget || 0), // Мапимо usedBudget в поле currentUsage схеми
-      resetDate: autoResetDate, // Передаємо легальний обов'язковий об'єкт Date
+      monthlyLimitMinor: toMinor(dto.totalBudgetMinor),
+      currentUsageMinor: toMinor(dto.usedBudgetMinor ?? 0),
+      resetDate: autoResetDate,
     };
 
     return this.prisma.userAiBudget.create({
@@ -37,41 +56,41 @@ export class UserAiBudgetService {
     });
   }
 
-  async findAll(): Promise<UserAiBudget[]> {
-    const list = await this.prisma.userAiBudget.findMany();
-    
-    // 🌟 ЗВОРOТНИЙ МАПІНГ: Віртуально повертаємо поля totalBudget/usedBudget для нашого BudgetChart
-    return list.map((item: UserAiBudget) => {
-      const extended = item as unknown as UserAiBudgetExtended;
-      
-      const rawLimit = (item as unknown as { monthlyLimit: number }).monthlyLimit || 0;
-      const rawUsage = (item as unknown as { currentUsage?: number }).currentUsage || 0;
-      
-      extended.totalBudget = rawLimit;
-      extended.usedBudget = rawUsage;
-      extended.currency = 'USD'; // Дефолтна валюта для відображення картки графіка
-      return extended;
-    });
+  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<UserAiBudgetExtended>> {
+    return paginate(
+      query,
+      async (skip, take) => {
+        const budgets = await this.prisma.userAiBudget.findMany({ skip, take });
+        return budgets.map((item) => ({
+          ...item,
+          totalBudgetMinor: item.monthlyLimitMinor,
+          usedBudgetMinor: item.currentUsageMinor,
+          currency: 'USD',
+        }));
+      },
+      () => this.prisma.userAiBudget.count(),
+    );
   }
 
-  async findOne(id: string): Promise<UserAiBudget> {
+  async findOne(id: string): Promise<UserAiBudgetExtended> {
     const item = await this.prisma.userAiBudget.findUnique({ where: { id } });
     if (!item) throw new NotFoundException(`Бюджет з ID ${id} не знайдено`);
-    
-    const extended = item as unknown as UserAiBudgetExtended;
-    extended.totalBudget = (item as unknown as { monthlyLimit: number }).monthlyLimit || 0;
-    extended.usedBudget = (item as unknown as { currentUsage?: number }).currentUsage || 0;
-    extended.currency = 'USD';
-    return extended;
+
+    return {
+      ...item,
+      totalBudgetMinor: item.monthlyLimitMinor,
+      usedBudgetMinor: item.currentUsageMinor,
+      currency: 'USD',
+    };
   }
 
   async update(id: string, dto: UpdateUserAiBudgetDto): Promise<UserAiBudget> {
     await this.findOne(id);
-    
+
     const updateData: Prisma.UserAiBudgetUncheckedUpdateInput = {};
     if (dto.userId) updateData.userId = dto.userId;
-    if (dto.totalBudget) updateData.monthlyLimit = Number(dto.totalBudget);
-    if (dto.usedBudget !== undefined) updateData.currentUsage = Number(dto.usedBudget);
+    if (dto.totalBudgetMinor !== undefined) updateData.monthlyLimitMinor = toMinor(dto.totalBudgetMinor);
+    if (dto.usedBudgetMinor !== undefined) updateData.currentUsageMinor = toMinor(dto.usedBudgetMinor);
 
     return this.prisma.userAiBudget.update({
       where: { id },

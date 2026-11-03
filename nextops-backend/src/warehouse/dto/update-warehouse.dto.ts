@@ -1,15 +1,18 @@
-import { IsString, IsOptional } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class UpdateWarehouseDto {
-  @IsString()
+  @IsUUID()
   @IsOptional()
-  name?: string;
+  productId?: string;
 
   @IsString()
   @IsOptional()
   location?: string;
 
-  @IsString()
+  @Transform(({ value }) => value === undefined ? value : Number(value))
+  @IsInt()
+  @Min(0)
   @IsOptional()
-  description?: string;
+  quantity?: number;
 }

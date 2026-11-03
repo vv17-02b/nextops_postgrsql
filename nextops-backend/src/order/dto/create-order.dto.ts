@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsNumber, IsArray, IsOptional, ValidateNested, IsInstance } from 'class-validator';
+import { IsString, IsNotEmpty, IsArray, IsOptional, ValidateNested, IsInstance, IsInt, IsPositive, Matches, ArrayMinSize } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ShippingAddressDto {
@@ -24,27 +24,16 @@ export class OrderItemInputDto {
   @IsNotEmpty()
   productId: string;
 
-  @IsNumber()
+  @IsInt()
+  @IsPositive()
   quantity: number;
 
-  @IsNumber()
-  price: number;
 }
 
 export class CreateOrderDto {
   @IsString()
-  @IsNotEmpty()
-  userId: string;
-
-  @IsNumber()
-  totalAmount: number;
-
-  @IsString()
   @IsOptional()
-  status?: string; // <-- Тепер статус офіційно є в DTO для форми
-
-  @IsString()
-  @IsOptional()
+  @Matches(/^[A-Z]{3}$/)
   currency?: string;
 
   @IsInstance(ShippingAddressDto)
@@ -54,8 +43,8 @@ export class CreateOrderDto {
   shippingAddress?: ShippingAddressDto;
 
   @IsArray()
-  @IsOptional()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => OrderItemInputDto)
-  items?: OrderItemInputDto[];
+  items: OrderItemInputDto[];
 }

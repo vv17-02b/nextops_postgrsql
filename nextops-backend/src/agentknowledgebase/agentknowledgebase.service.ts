@@ -1,18 +1,27 @@
-import { Injectable, NotFoundException, Inject, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Inject, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContext } from '../prisma/tenant-context';
 import { CreateAgentKnowledgeBaseDto } from './dto/create-agentknowledgebase.dto';
 import { UpdateAgentKnowledgeBaseDto } from './dto/update-agentknowledgebase.dto';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
 import type { AgentKnowledgeBase } from '@prisma/client';
 
 @Injectable()
 export class AgentKnowledgeBaseService {
   constructor(
     @Inject(PrismaService)
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
   // 1. Метод виконання ШІ-завдань із вбудованим FinOps-контролем бюджету
-  async executeAiTask(userId: string, estimatedCost: number, taskPayload: string): Promise<{ success: boolean; aiResponse: string }> {
+  // estimatedCostMinor — вартість у цілих копійках (minor units).
+  async executeAiTask(userId: string, estimatedCostMinor: number, taskPayload: string): Promise<{ success: boolean; aiResponse: string }> {
+    if (!Number.isSafeInteger(estimatedCostMinor) || estimatedCostMinor <= 0) {
+      throw new BadRequestException('Estimated cost must be a positive integer number of minor units.');
+    }
+
     // А. Шукаємо бюджет користувача через findFirst (оскільки userId не унікальний індекс на рівні Prisma)
     const budget = await this.prisma.userAiBudget.findFirst({
       where: { userId },
@@ -22,27 +31,21 @@ export class AgentKnowledgeBaseService {
       throw new NotFoundException(`FinOps Error: Для користувача з ID ${userId} не знайдено активного ШІ-гаманця`);
     }
 
-    // Б. Зчитуємо реальне поле currentUsage зі схеми NextOps
-    const currentUsage = budget.currentUsage || 0;
-
-    // В. 🔥 HARD-LOCKING ГВАРДІЯ: Захист від перевищення ліміту компанії
-    if (currentUsage + estimatedCost > budget.monthlyLimit) {
-      throw new ForbiddenException(
-        `Запит заблоковано FinOps системою. Місячний ліміт ШІ-токенів вичерпано. Доступний баланс: \$${(budget.monthlyLimit - currentUsage).toFixed(4)}`
-      );
-    }
-
-    // Г. Емуляція виконання запиту до нейромережі (OpenAI / Anthropic / Local LLM)
-    const mockAiResponse = `Processed task: "${taskPayload}". AI tokens validated by NextOps engine core.`;
-
-    // Д. АТОМАРНЕ СПИСАННЯ БАЛАНСУ: Оновлюємо за унікальним id самого бюджету budget.id
-    await this.prisma.userAiBudget.update({
-      where: { id: budget.id },
+    const charged = await this.prisma.userAiBudget.updateMany({
+      where: {
+        id: budget.id,
+        currentUsageMinor: { lte: budget.monthlyLimitMinor - estimatedCostMinor },
+      },
       data: {
-        currentUsage: { increment: estimatedCost },
+        currentUsageMinor: { increment: estimatedCostMinor },
       },
     });
 
+    if (charged.count !== 1) {
+      throw new ForbiddenException('The AI budget limit has been reached.');
+    }
+
+    const mockAiResponse = `Processed task: "${taskPayload}". AI tokens validated by NextOps engine core.`;
     return {
       success: true,
       aiResponse: mockAiResponse,
@@ -51,11 +54,17 @@ export class AgentKnowledgeBaseService {
 
   // 2. Стандартні системні CRUD методи модуля
   async create(dto: CreateAgentKnowledgeBaseDto): Promise<AgentKnowledgeBase> {
-    return this.prisma.agentKnowledgeBase.create({ data: dto });
+    const companyId = this.tenantContext.getCompanyId();
+    if (!companyId) throw new ForbiddenException('A business workspace is required.');
+    return this.prisma.agentKnowledgeBase.create({ data: { ...dto, companyId } });
   }
 
-  async findAll(): Promise<AgentKnowledgeBase[]> {
-    return this.prisma.agentKnowledgeBase.findMany();
+  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<AgentKnowledgeBase>> {
+    return paginate(
+      query,
+      (skip, take) => this.prisma.agentKnowledgeBase.findMany({ skip, take }),
+      () => this.prisma.agentKnowledgeBase.count(),
+    );
   }
 
   async findOne(id: string): Promise<AgentKnowledgeBase> {

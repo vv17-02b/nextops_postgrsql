@@ -13,7 +13,7 @@ export default function UserAiBudgetPage(): React.JSX.Element {
     <div className="space-y-6 font-sans">
       <div className="bg-white p-6 border rounded-xl shadow-sm">
         <h1 className="text-xl font-bold text-gray-900">Next.js Сторінка: UserAiBudget</h1>
-        <p className="text-sm text-gray-500">Автоматичний зв'язок з роутом бекенду: <code className="text-blue-600 font-mono">/api/useraibudget</code></p>
+        <p className="text-sm text-gray-500">Автоматичний зв&apos;язок з роутом бекенду: <code className="text-blue-600 font-mono">/api/useraibudget</code></p>
       </div>
 
       {/* 🌟 ГНУЧКА СІТКА: Форма та Неоновий графік стають поруч! */}
@@ -24,7 +24,7 @@ export default function UserAiBudgetPage(): React.JSX.Element {
 
       <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
         <div className="p-4 border-b bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Список документів з бази даних (MongoDB Atlas)
+          Записи з бази PostgreSQL
         </div>
         
         {loading ? (
@@ -52,14 +52,14 @@ export default function UserAiBudgetPage(): React.JSX.Element {
                     <td className="px-4 py-3 text-gray-900 font-bold">
                       <div className="flex items-center gap-1">
                         <DollarSign className="h-3.5 w-3.5 text-gray-400" />
-                        <span>{Number(item.totalBudget || 0).toFixed(2)}</span>
+                        <span>{(Number(item.totalBudgetMinor || 0) / 100).toFixed(2)}</span>
                       </div>
                     </td>
 
                     <td className="px-4 py-3 text-amber-600 font-mono">
                       <div className="flex items-center gap-1">
                         <Activity className="h-3.5 w-3.5 text-amber-400" />
-                        <span>{Number(item.usedBudget || 0).toFixed(2)}</span>
+                        <span>{(Number(item.usedBudgetMinor || 0) / 100).toFixed(2)}</span>
                       </div>
                     </td>
 

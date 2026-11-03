@@ -1,7 +1,10 @@
-import { Injectable, NotFoundException, Inject, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContext } from '../prisma/tenant-context';
 import { CreateVerificationTokenDto } from './dto/create-verificationtoken.dto';
 import { UpdateVerificationTokenDto } from './dto/update-verificationtoken.dto';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
 import type { VerificationToken } from '@prisma/client';
 
 @Injectable()
@@ -9,6 +12,7 @@ export class VerificationTokenService {
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
+    @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
   async create(dto: CreateVerificationTokenDto): Promise<VerificationToken> {
@@ -24,27 +28,30 @@ export class VerificationTokenService {
     }
 
     try {
+      const companyId = this.tenantContext.getCompanyId();
+      if (!companyId) throw new ForbiddenException('A business workspace is required.');
       return await this.prisma.verificationToken.create({
         data: {
+          companyId,
           identifier: dto.identifier.trim(),
           token: dto.token.trim(),
           expires: parsedDate,
         },
       });
-    } catch (dbError: unknown) {
-      throw new BadRequestException(
-        `Помилка унікальності індексу в MongoDB Atlas. Можливо, такий токен вже існує. Details: ${
-          dbError instanceof Error ? dbError.message : 'Unknown'
-        }`,
-      );
+    } catch {
+      throw new BadRequestException('Could not save the verification token.');
     }
   }
 
-  async findAll(): Promise<VerificationToken[]> {
+  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<VerificationToken>> {
     if (!this.prisma || !this.prisma.verificationToken) {
       throw new Error('Критична помилка: PrismaService не ініціалізовано.');
     }
-    return this.prisma.verificationToken.findMany();
+    return paginate(
+      query,
+      (skip, take) => this.prisma.verificationToken.findMany({ skip, take }),
+      () => this.prisma.verificationToken.count(),
+    );
   }
 
   async findOne(id: string): Promise<VerificationToken> {

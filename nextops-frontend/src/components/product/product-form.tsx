@@ -58,6 +58,8 @@ export default function ProductForm({ onSubmit }: FormProps): React.JSX.Element 
         <label className="text-xs font-medium text-gray-600">Ціна</label>
         <input 
           type="number" 
+          min="0"
+          step="0.01"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
           placeholder="Введіть ціна..." 

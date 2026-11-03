@@ -1,17 +1,23 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContext } from '../prisma/tenant-context';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { UpdateSessionDto } from './dto/update-session.dto';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
 import type { Prisma, Session } from '@prisma/client';
 
 @Injectable()
 export class SessionService {
   constructor(
     @Inject(PrismaService)
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
   async create(dto: CreateSessionDto): Promise<Session> {
+    const companyId = this.tenantContext.getCompanyId();
+    if (!companyId) throw new ForbiddenException('A business workspace is required.');
     // 🌟 КУЛЕНЕПРОБИВНА ПЕРЕВІРКА ДАТИ: 
     // Якщо dto.expires порожній, або спроба створити з нього Date повертає Invalid Date —
     // примусово ставимо легальну дату на 7 днів вперед.
@@ -24,14 +30,19 @@ export class SessionService {
     return this.prisma.session.create({
       data: {
         sessionToken: dto.sessionToken,
+        companyId,
         userId: dto.userId,
         expires: sessionExpires, // Тут тепер гарантовано валідний об'єкт Date
       },
     });
   }
 
-  async findAll(): Promise<Session[]> {
-    return this.prisma.session.findMany();
+  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<Session>> {
+    return paginate(
+      query,
+      (skip, take) => this.prisma.session.findMany({ skip, take }),
+      () => this.prisma.session.count(),
+    );
   }
 
   async findOne(id: string): Promise<Session> {

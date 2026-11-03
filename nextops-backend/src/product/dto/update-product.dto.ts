@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsBoolean, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsBoolean, IsArray, Min } from 'class-validator';
 
 export class UpdateProductDto {
   @IsString()
@@ -13,13 +13,15 @@ export class UpdateProductDto {
   @IsOptional()
   description?: string;
 
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   @IsOptional()
   price?: number;
 
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   @IsOptional()
-  compareAtPrice?: number;
+  compareAtPrice?: number | null;
 
   @IsArray()
   @IsString({ each: true })

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { CreateUserAiBudgetInput, UserAiBudget } from '@/types/api';
+import { readPaginatedCollection } from '@/lib/collections';
+import { apiFetch, getApiHeaders, getApiUrl } from '@/lib/api';
 export type { CreateUserAiBudgetInput, UserAiBudget };
 
 export function useUserAiBudget() {
@@ -9,10 +11,10 @@ export function useUserAiBudget() {
   const fetchData = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/' + 'useraibudget');
+      const res = await apiFetch(getApiUrl('/api/useraibudget'), { headers: getApiHeaders() });
       if (res.ok) {
-        const json = (await res.json()) as UserAiBudget[];
-        setData(Array.isArray(json) ? json : []);
+        const { data } = await readPaginatedCollection<UserAiBudget>(res);
+        setData(data);
       }
     } catch (err) {
       console.error('Помилка завантаження:', err);
@@ -23,9 +25,9 @@ export function useUserAiBudget() {
 
   const createItem = async (formData: CreateUserAiBudgetInput): Promise<void> => {
     try {
-      const res = await fetch('http://localhost:3001/api/' + 'useraibudget', {
+      const res = await apiFetch(getApiUrl('/api/useraibudget'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders(true),
         body: JSON.stringify(formData)
       });
       if (res.ok) await fetchData();
@@ -36,7 +38,10 @@ export function useUserAiBudget() {
 
   const deleteItem = async (id: string): Promise<void> => {
     try {
-      const res = await fetch('http://localhost:3001/api/' + 'useraibudget/' + id, { method: 'DELETE' });
+      const res = await apiFetch(getApiUrl(`/api/useraibudget/${id}`), {
+        method: 'DELETE',
+        headers: getApiHeaders(),
+      });
       if (res.ok) await fetchData();
     } catch (err) {
       console.error('Помилка видалення:', err);

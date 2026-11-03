@@ -1,4 +1,4 @@
-import { IsEmail, IsString, IsOptional, MinLength } from 'class-validator';
+import { IsEmail, IsString, IsOptional } from 'class-validator';
 
 export class UpdateUserDto {
   @IsString()
@@ -13,13 +13,4 @@ export class UpdateUserDto {
   @IsOptional()
   image?: string;
 
-  @IsString()
-  @IsOptional()
-  @MinLength(6, { message: 'Пароль має бути не менше 6 символів' })
-  @IsOptional()
-  passwordHash?: string;
-
-  @IsString()
-  @IsOptional()
-  role?: string;
 }

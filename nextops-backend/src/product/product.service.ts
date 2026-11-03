@@ -1,24 +1,45 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContext } from '../prisma/tenant-context';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
+import { toMinorUnits } from '../common/money';
 import type { Product } from '@prisma/client';
 
 @Injectable()
 export class ProductService {
   constructor(
     @Inject(PrismaService)
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
   async create(dto: CreateProductDto): Promise<Product> {
-    return this.prisma.product.create({ data: dto });
+    const companyId = this.tenantContext.getCompanyId();
+    if (!companyId) throw new ForbiddenException('A business workspace is required.');
+    const { price, compareAtPrice, ...productData } = dto;
+    return this.prisma.product.create({
+      data: {
+        ...productData,
+        priceMinor: toMinorUnits(price),
+        compareAtPriceMinor: compareAtPrice == null ? null : toMinorUnits(compareAtPrice),
+        companyId,
+      },
+    });
   }
 
-  async findAll(): Promise<Product[]> {
-    return this.prisma.product.findMany({
-      include: { category: true } // Автоматично підтягуємо повні дані про категорію
-    });
+  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<Product>> {
+    return paginate(
+      query,
+      (skip, take) => this.prisma.product.findMany({
+        skip,
+        take,
+        include: { category: true },
+      }),
+      () => this.prisma.product.count(),
+    );
   }
 
   async findOne(id: string): Promise<Product> {
@@ -32,9 +53,16 @@ export class ProductService {
 
   async update(id: string, dto: UpdateProductDto): Promise<Product> {
     await this.findOne(id);
+    const { price, compareAtPrice, ...productData } = dto;
     return this.prisma.product.update({
       where: { id },
-      data: dto,
+      data: {
+        ...productData,
+        ...(price === undefined ? {} : { priceMinor: toMinorUnits(price) }),
+        ...(compareAtPrice === undefined
+          ? {}
+          : { compareAtPriceMinor: compareAtPrice === null ? null : toMinorUnits(compareAtPrice) }),
+      },
     });
   }
 

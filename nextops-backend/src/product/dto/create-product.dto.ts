@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsBoolean, IsArray } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsBoolean, IsArray, Min } from 'class-validator';
 
 export class CreateProductDto {
   @IsString()
@@ -13,12 +13,14 @@ export class CreateProductDto {
   @IsOptional()
   description?: string;
 
-  @IsNumber({}, { message: 'Ціна має бути числом' })
+  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Ціна має бути числом з максимум двома десятковими знаками' })
+  @Min(0)
   price: number;
 
-  @IsNumber({}, { message: 'Порівняльна ціна має бути числом' })
+  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Порівняльна ціна має бути числом з максимум двома десятковими знаками' })
+  @Min(0)
   @IsOptional()
-  compareAtPrice?: number;
+  compareAtPrice?: number | null;
 
   @IsArray()
   @IsString({ each: true })

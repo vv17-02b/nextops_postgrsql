@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query } from '@nestjs/common';
 import { OrderItemService } from './orderitem.service';
 import { CreateOrderItemDto } from './dto/create-orderitem.dto';
 import { UpdateOrderItemDto } from './dto/update-orderitem.dto';
 import type { OrderItem } from '@prisma/client';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import type { PaginatedResponse } from '../common/pagination/paginate';
 
 @Controller('orderitem')
 export class OrderItemController {
@@ -25,8 +27,8 @@ export class OrderItemController {
   }
 
   @Get()
-  async findAll(): Promise<OrderItem[]> { 
-    return this.service.findAll(); 
+  async findAll(@Query() query: PaginationQueryDto): Promise<PaginatedResponse<OrderItem>> {
+    return this.service.findAll(query);
   }
 
   @Get(':id')

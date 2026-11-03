@@ -1,11 +1,13 @@
-import { IsString, IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsInt, Min, Max, MaxLength } from 'class-validator';
 
 export class UpdateApiHistoryDto {
   @IsString()
+  @MaxLength(2048)
   @IsOptional()
   endpoint?: string;
 
   @IsString()
+  @MaxLength(16)
   @IsOptional()
   method?: string;
 

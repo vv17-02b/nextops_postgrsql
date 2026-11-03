@@ -7,9 +7,12 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   Suspense
 } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { apiFetch, getApiHeaders, getApiUrl } from "@/lib/api";
+import { readPaginatedCollection } from "@/lib/collections";
 
 export interface Project {
   id: string;
@@ -52,10 +55,31 @@ interface WorkspaceContextType {
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
-function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
+function WorkspaceSearchSync({
+  onChange,
+}: {
+  onChange: (searchTarget: string | null, searchQuery: string | null) => void;
+}) {
   const searchParams = useSearchParams();
-  const searchTarget = searchParams ? searchParams.get("search_target") : null;
-  const searchQuery = searchParams ? searchParams.get("q")?.toLowerCase().trim() : null;
+  const searchTarget = searchParams.get("search_target");
+  const searchQuery = searchParams.get("q")?.toLowerCase().trim() ?? null;
+
+  useEffect(() => {
+    onChange(searchTarget, searchQuery);
+  }, [onChange, searchTarget, searchQuery]);
+
+  return null;
+}
+
+function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const initialPathname = useRef(pathname);
+  const [searchTarget, setSearchTarget] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string | null>(null);
+  const updateSearch = useCallback((target: string | null, query: string | null) => {
+    setSearchTarget(target);
+    setSearchQuery(query);
+  }, []);
 
   const [rawProjects, setRawProjects] = useState<Project[]>([]);
   const [rawWebhooks, setRawWebhooks] = useState<WebhookConfig[]>([]);
@@ -66,36 +90,36 @@ function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
   const refreshWorkspace = useCallback(async () => {
     try {
       setIsLoading(true);
+      const headers = getApiHeaders();
       const [resProjects, resWebhooks, resAnalytics] = await Promise.all([
-        fetch("/api/project"),
-        fetch("/api/webhookconfig"),
-        fetch("/api/apihistory") 
+        apiFetch(getApiUrl("/api/project"), { headers }),
+        apiFetch(getApiUrl("/api/webhookconfig"), { headers }),
+        apiFetch(getApiUrl("/api/apihistory"), { headers })
       ]);
 
       if (resProjects.ok && resWebhooks.ok) {
-        const dataProj = await resProjects.json();
-        const dataWh = await resWebhooks.json();
-
-        const fetchedProjects: Project[] = Array.isArray(dataProj) ? dataProj : dataProj.projects || [];
-        const fetchedWebhooks: WebhookConfig[] = Array.isArray(dataWh) ? dataWh : dataWh.webhooks || [];
+        const [projects, webhooks, history] = await Promise.all([
+          readPaginatedCollection<Project>(resProjects),
+          readPaginatedCollection<WebhookConfig>(resWebhooks),
+          resAnalytics.ok
+            ? readPaginatedCollection<unknown>(resAnalytics)
+            : Promise.resolve(null),
+        ]);
+        const fetchedProjects = projects.data;
+        const fetchedWebhooks = webhooks.data;
 
         setRawProjects(fetchedProjects);
         setRawWebhooks(fetchedWebhooks);
 
-        if (resAnalytics.ok) {
-          const dataAnal = await resAnalytics.json();
-          if (dataAnal && (dataAnal.metrics || Array.isArray(dataAnal))) {
-            const totalCount = Array.isArray(dataAnal) ? dataAnal.length : 0;
-            setAnalytics({
-              totalBudget: 0,
-              averageCheck: 0,
-              activeProjects: 0,
-              totalProjects: totalCount,
-              count_all: totalCount,
-              active_count: 0
-            });
-          }
-        }
+        const totalCount = history?.meta?.total ?? 0;
+        setAnalytics({
+          totalBudget: 0,
+          averageCheck: 0,
+          activeProjects: 0,
+          totalProjects: totalCount,
+          count_all: totalCount,
+          active_count: 0
+        });
 
         if (fetchedProjects.length > 0) {
           setActiveProject((prev) => {
@@ -134,7 +158,18 @@ function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
   }, [rawWebhooks, searchQuery, searchTarget]);
 
   useEffect(() => {
+    if (initialPathname.current === "/login" || initialPathname.current === "/invite") return;
     refreshWorkspace();
+  }, [refreshWorkspace]);
+
+  useEffect(() => {
+    const handleSessionRestored = (): void => {
+      void refreshWorkspace();
+    };
+    window.addEventListener("nextops:session-restored", handleSessionRestored);
+    return () => {
+      window.removeEventListener("nextops:session-restored", handleSessionRestored);
+    };
   }, [refreshWorkspace]);
 
   return (
@@ -149,22 +184,16 @@ function WorkspaceProviderInner({ children }: { children: React.ReactNode }) {
         isLoading
       }}
     >
+      <Suspense fallback={null}>
+        <WorkspaceSearchSync onChange={updateSearch} />
+      </Suspense>
       {children}
     </WorkspaceContext.Provider>
   );
 }
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
-  return (
-    <Suspense fallback={
-      <div className="fixed inset-0 bg-slate-950 flex items-center justify-center font-mono text-xs text-slate-500 z-50">
-        <span className="w-4 h-4 border-2 border-t-transparent border-blue-500 rounded-full animate-spin mr-2"></span>
-        <span>CONNECTING_NEXTOPS_CORES...</span>
-      </div>
-    }>
-      <WorkspaceProviderInner>{children}</WorkspaceProviderInner>
-    </Suspense>
-  );
+  return <WorkspaceProviderInner>{children}</WorkspaceProviderInner>;
 }
 
 export function useWorkspace() {

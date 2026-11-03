@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query } from '@nestjs/common';
 import { WarehouseService } from './warehouse.service';
 import { CreateWarehouseDto } from './dto/create-warehouse.dto';
 import { UpdateWarehouseDto } from './dto/update-warehouse.dto';
 import type { Warehouse } from '@prisma/client';
+import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
+import type { PaginatedResponse } from '../common/pagination/paginate';
 
 @Controller('warehouse')
 export class WarehouseController {
@@ -24,8 +26,8 @@ export class WarehouseController {
   }
 
   @Get()
-  async findAll(): Promise<Warehouse[]> { 
-    return this.service.findAll(); 
+  async findAll(@Query() query: PaginationQueryDto): Promise<PaginatedResponse<Warehouse>> {
+    return this.service.findAll(query);
   }
 
   @Get(':id')

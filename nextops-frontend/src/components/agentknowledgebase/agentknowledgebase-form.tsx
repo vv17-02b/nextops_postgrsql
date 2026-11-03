@@ -30,12 +30,12 @@ export default function AgentKnowledgeBaseForm({ onSubmit }: FormProps): React.J
       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Форма додавання (AgentKnowledgeBase)</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <div className="space-y-1">
-        <label className="text-xs font-medium text-gray-600">Project ID (MongoDB ObjectId)</label>
+        <label className="text-xs font-medium text-gray-600">Project ID (PostgreSQL UUID)</label>
         <input 
           type="text" 
           value={projectId}
           onChange={(e) => setProjectId(e.target.value)}
-          placeholder="Введіть project id (mongodb objectid)..." 
+          placeholder="Введіть project id (UUID)..."
           className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
           required
         />

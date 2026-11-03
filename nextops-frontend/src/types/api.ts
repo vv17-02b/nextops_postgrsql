@@ -26,6 +26,13 @@ export interface CreateAccountInput {
   type: string;
   provider: string;
   providerAccountId: string;
+  refresh_token?: string;
+  access_token?: string;
+  expires_at?: number;
+  token_type?: string;
+  scope?: string;
+  id_token?: string;
+  session_state?: string;
 }
 
 export interface AgentKnowledgeBase {
@@ -86,7 +93,7 @@ export interface Order {
   paymentMethod: string;
   paymentId?: string | null;
   paymentRawResponse?: JsonValue;
-  totalAmount: number;
+  totalAmountMinor: number;
   currency: string;
   shippingAddress: JsonValue;
   createdAt: string;
@@ -94,9 +101,14 @@ export interface Order {
 }
 
 export interface CreateOrderInput {
-  userId: string;
-  status: string;
-  totalAmount: number;
+  items: Array<{ productId: string; quantity: number }>;
+  currency?: string;
+  shippingAddress?: {
+    country: string;
+    city: string;
+    street: string;
+    zipCode: string;
+  };
 }
 
 export interface Product {
@@ -104,8 +116,8 @@ export interface Product {
   name: string;
   slug: string;
   description?: string | null;
-  price: number;
-  compareAtPrice?: number | null;
+  priceMinor: number;
+  compareAtPriceMinor?: number | null;
   images: string[];
   isActive: boolean;
   categoryId: string;
@@ -178,15 +190,14 @@ export interface User {
 export interface CreateUserInput {
   name: string;
   email: string;
-  role: string;
 }
 
 export interface UserAiBudget {
   id: string;
   userId: string;
   projectId?: string | null;
-  totalBudget: number;
-  usedBudget: number;
+  totalBudgetMinor: number;
+  usedBudgetMinor: number;
   currency: string;
   resetDate: string;
   createdAt: string;
@@ -195,8 +206,8 @@ export interface UserAiBudget {
 
 export interface CreateUserAiBudgetInput {
   userId: string;
-  totalBudget: number;
-  usedBudget: number;
+  totalBudgetMinor: number;
+  usedBudgetMinor?: number;
   currency: string;
 }
 
@@ -214,18 +225,16 @@ export interface CreateVerificationTokenInput {
 
 export interface Warehouse {
   id: string;
-  productId?: string;
-  name?: string;
+  productId: string;
   location: string;
-  quantity?: number;
-  description?: string;
-  updatedAt?: string;
+  quantity: number;
+  updatedAt: string;
 }
 
 export interface CreateWarehouseInput {
-  name: string;
+  productId: string;
   location: string;
-  description?: string;
+  quantity?: number;
 }
 
 export interface WebhookConfig {
@@ -242,5 +251,7 @@ export interface WebhookConfig {
 export interface CreateWebhookConfigInput {
   projectId: string;
   url: string;
-  secret: string;
+  secret?: string;
+  events: string[];
+  isActive?: boolean;
 }
