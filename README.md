@@ -324,3 +324,4 @@ Do not advertise the current checkout as a fully audited or production-ready mul
 - **Tenant migration refuses to continue:** inspect and backfill legacy ownership; do not assign unknown data to an arbitrary company.
 - **Prisma client generation fails on Windows with `EPERM` replacing a query-engine DLL:** close processes that are using the backend Prisma client, then retry `yarn db:generate`. Do not delete dependencies while the application is running.
 - **Next.js manifests or chunks are missing:** stop conflicting Next.js processes and run `yarn build:frontend` again. Development and production use separate output directories.
+# nextops_postgrsql
