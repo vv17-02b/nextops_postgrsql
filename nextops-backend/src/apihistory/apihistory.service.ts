@@ -14,9 +14,21 @@ export class ApiHistoryService {
   ) {}
 
   async create(dto: CreateApiHistoryDto, userId: string): Promise<ApiHistory> {
+    // 1. Спочатку дізнаємося, до якої компанії (workspace) належить користувач
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { companyId: true },
+    });
+
+    if (!user || !user.companyId) {
+      throw new NotFoundException(`Користувача або його робочу область не знайдено`);
+    }
+
+    // 2. Створюємо запис з прив'язкою до тенанта (companyId)
     return this.prisma.apiHistory.create({
       data: {
         userId,
+        companyId: user.companyId, // <--- Виправили баг
         endpoint: dto.endpoint,
         method: dto.method,
         statusCode: dto.statusCode,

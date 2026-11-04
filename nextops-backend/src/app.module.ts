@@ -18,16 +18,22 @@ import { VerificationTokenModule } from './verificationtoken/verificationtoken.m
 import { WarehouseModule } from './warehouse/warehouse.module';
 import { WebhookConfigModule } from './webhookconfig/webhookconfig.module';
 import { HealthModule } from './health/health.module';
-import { IdempotencyModule, IdempotencyInterceptor } from './common/idempotency/idempotency.module';
+
+// === НА МАЙБУТНЄ (Коли повернеш Redis, прибери "//" з початку двох рядків нижче) ===
+// import { IdempotencyModule, IdempotencyInterceptor } from './common/idempotency/idempotency.module';
+// import { QueueModule } from './common/queue/queue.module';
+
 import { TenantContext } from './prisma/tenant-context';
-import { QueueModule } from './common/queue/queue.module';
 import { InvitationModule } from './invitation/invitation.module';
 
 @Module({
   imports: [
     PrismaModule,
-    IdempotencyModule,
-    QueueModule,
+    
+    // === НА МАЙБУТНЄ (Прибери "//" з початку цих двох рядків, коли запустиш Redis) ===
+    // IdempotencyModule, 
+    // QueueModule,        
+    
     InvitationModule,
     AuthModule,
     AccountModule,
@@ -48,10 +54,12 @@ import { InvitationModule } from './invitation/invitation.module';
     HealthModule
   ],
   providers: [
-    {
+    // === НА МАЙБУТНЄ (Зараз цей блок повністю закоментований через "/*" та "*/") ===
+    // Коли з'явиться Redis, просто видали "/*" рядок вище та "*/" рядок нижче, щоб увімкнути інтерцептор.
+    /* {
       provide: APP_INTERCEPTOR,
       useClass: IdempotencyInterceptor,
-    },
+    }, */
   ],
 })
 export class AppModule implements NestModule {

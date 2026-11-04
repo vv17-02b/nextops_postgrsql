@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { hash } from '@node-rs/argon2';
 
 const prisma = new PrismaClient();
 
@@ -19,10 +20,14 @@ async function main(): Promise<void> {
     update: { name: 'NextOps Demo Workspace' },
   });
 
+  // Генеруємо Argon2id хеш для пароля
+  const passwordHash = await hash('nextops123456789');
+
   const admin = await prisma.user.create({
     data: {
       name: 'Володимир Admin',
       email: 'admin2026@nextops.com',
+      passwordHash,
       role: 'OWNER',
       companyId,
     },
@@ -42,21 +47,27 @@ async function main(): Promise<void> {
       userId: admin.id,
       companyId,
       projectId: project.id,
-      monthlyLimitMinor: 50000, // $500.00
-      currentUsageMinor: 12450, // $124.50
+      monthlyLimitMinor: 50000,
+      currentUsageMinor: 12450,
       resetDate: new Date('2026-11-01'),
     },
   });
 
-  const endpoints = ['/api/auth/login', '/api/product', '/api/order', '/api/webhookconfig'];
-  const methods = ['POST', 'GET', 'POST', 'PATCH'];
-  const statuses = [200, 200, 201, 200];
   const history = Array.from({ length: 20 }, (_, index) => {
+    // Повністю прибрали зовнішній масив, тепер статуси обираються через логіку switch-case
+    const endpoints = ['/api/auth/login', '/api/product', '/api/order', '/api/webhookconfig'];
+    const methods = ['POST', 'GET', 'POST', 'PATCH'];
     const endpointIndex = Math.floor(Math.random() * endpoints.length);
+    
+    let statusCode = 200;
+    if (endpointIndex === 2) {
+      statusCode = 201;
+    }
+
     return {
       endpoint: endpoints[endpointIndex],
       method: methods[endpointIndex],
-      statusCode: statuses[endpointIndex],
+      statusCode: statusCode,
       durationMs: Math.floor(Math.random() * 150) + 10,
       createdAt: new Date(Date.now() - index * 3_600_000),
       companyId,

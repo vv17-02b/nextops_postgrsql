@@ -57,3 +57,6 @@ nextops-backend/node_modules/
 test.txt
 *.txt
 **/*.txt
+Videos/
+desktop.ini
+**/desktop.ini

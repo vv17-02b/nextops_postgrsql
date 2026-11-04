@@ -1,44 +1,30 @@
-import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
+import { hash, verify } from '@node-rs/argon2';
 
-const KEY_LENGTH = 64;
-
-function deriveKey(password: string, salt: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    scryptCallback(password, salt, KEY_LENGTH, (error, key) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(key);
-    });
-  });
-}
-
-function safeEqual(left: Buffer, right: Buffer): boolean {
-  return left.length === right.length && timingSafeEqual(left, right);
-}
-
+/**
+ * Хешує пароль за допомогою алгоритму Argon2id
+ */
 export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString('hex');
-  const key = await deriveKey(password, salt);
-  return `scrypt$${salt}$${key.toString('hex')}`;
+  return await hash(password);
 }
 
+/**
+ * Перевіряє, чи збігається введений пароль із збереженим хешем Argon2
+ */
 export async function verifyPassword(
   password: string,
   storedPassword: string,
 ): Promise<{ valid: boolean; needsRehash: boolean }> {
-  const [algorithm, salt, keyHex] = storedPassword.split('$');
-  if (algorithm !== 'scrypt' || !salt || !keyHex) {
-    const provided = Buffer.from(password);
-    const stored = Buffer.from(storedPassword);
-    return { valid: safeEqual(provided, stored), needsRehash: true };
-  }
+  try {
+    // Якщо в базі чомусь залишився старий scrypt або пусте поле
+    if (!storedPassword || storedPassword.startsWith('scrypt$')) {
+      return { valid: false, needsRehash: false };
+    }
 
-  const expectedKey = Buffer.from(keyHex, 'hex');
-  if (expectedKey.length !== KEY_LENGTH) {
+    // Перевірка через native-бібліотеку
+    const valid = await verify(storedPassword, password);
+    return { valid, needsRehash: false };
+  } catch (error) {
+    // Будь-яка помилка формату не повинна викликати 500 помилку сервера
     return { valid: false, needsRehash: false };
   }
-  const actualKey = await deriveKey(password, salt);
-  return { valid: safeEqual(actualKey, expectedKey), needsRehash: false };
 }

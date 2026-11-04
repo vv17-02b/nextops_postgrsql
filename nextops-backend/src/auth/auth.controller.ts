@@ -17,17 +17,19 @@ const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    //  Примусово інжектуємо обидва сервіси через @Inject, щоб обійти баги компілятора
+   constructor(
+    
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
     @Inject(JwtService)
     private readonly jwtService: JwtService,
     @Inject(TenantContext)
     private readonly tenantContext: TenantContext,
+    @Inject(TokenRevocationService) 
     private readonly tokenRevocation: TokenRevocationService,
     private readonly emailQueue: EmailQueueService,
   ) {}
+
 
   @Post('register')
   @Public()
