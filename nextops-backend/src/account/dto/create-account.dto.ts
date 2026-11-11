@@ -3,19 +3,19 @@ import { IsString, IsNotEmpty, IsOptional, IsInt } from 'class-validator';
 export class CreateAccountDto {
   @IsString()
   @IsNotEmpty({ message: 'User ID є обовʼязковим для привʼязки акаунта' })
-  userId: string;
+  userId!: string;
 
   @IsString()
   @IsNotEmpty({ message: 'Тип акаунта є обовʼязковим (наприклад, oauth)' })
-  type: string;
+  type!: string;
 
   @IsString()
   @IsNotEmpty({ message: 'Провайдер є обовʼязковим (наприклад, github, google)' })
-  provider: string;
+  provider!: string;
 
   @IsString()
   @IsNotEmpty({ message: 'ID провайдера акаунта є обовʼязковим' })
-  providerAccountId: string;
+  providerAccountId!: string;
 
   @IsString()
   @IsOptional()

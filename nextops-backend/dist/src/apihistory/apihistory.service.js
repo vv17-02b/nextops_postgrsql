@@ -21,9 +21,17 @@ let ApiHistoryService = class ApiHistoryService {
         this.prisma = prisma;
     }
     async create(dto, userId) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { companyId: true },
+        });
+        if (!user || !user.companyId) {
+            throw new common_1.NotFoundException(`Користувача або його робочу область не знайдено`);
+        }
         return this.prisma.apiHistory.create({
             data: {
                 userId,
+                companyId: user.companyId,
                 endpoint: dto.endpoint,
                 method: dto.method,
                 statusCode: dto.statusCode,

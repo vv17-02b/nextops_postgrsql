@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@prisma/client");
+const argon2_1 = require("@node-rs/argon2");
 const prisma = new client_1.PrismaClient();
 async function main() {
     console.log('Starting PostgreSQL seed for nextops_db...');
@@ -16,10 +17,12 @@ async function main() {
         create: { id: companyId, name: 'NextOps Demo Workspace' },
         update: { name: 'NextOps Demo Workspace' },
     });
+    const passwordHash = await (0, argon2_1.hash)('nextops123456789');
     const admin = await prisma.user.create({
         data: {
             name: 'Володимир Admin',
             email: 'admin2026@nextops.com',
+            passwordHash,
             role: 'OWNER',
             companyId,
         },
@@ -42,15 +45,18 @@ async function main() {
             resetDate: new Date('2026-11-01'),
         },
     });
-    const endpoints = ['/api/auth/login', '/api/product', '/api/order', '/api/webhookconfig'];
-    const methods = ['POST', 'GET', 'POST', 'PATCH'];
-    const statuses = [200, 200, 201, 200];
     const history = Array.from({ length: 20 }, (_, index) => {
+        const endpoints = ['/api/auth/login', '/api/product', '/api/order', '/api/webhookconfig'];
+        const methods = ['POST', 'GET', 'POST', 'PATCH'];
         const endpointIndex = Math.floor(Math.random() * endpoints.length);
+        let statusCode = 200;
+        if (endpointIndex === 2) {
+            statusCode = 201;
+        }
         return {
             endpoint: endpoints[endpointIndex],
             method: methods[endpointIndex],
-            statusCode: statuses[endpointIndex],
+            statusCode: statusCode,
             durationMs: Math.floor(Math.random() * 150) + 10,
             createdAt: new Date(Date.now() - index * 3_600_000),
             companyId,

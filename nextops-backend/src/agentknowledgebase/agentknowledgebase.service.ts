@@ -15,14 +15,11 @@ export class AgentKnowledgeBaseService {
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
-  // 1. Метод виконання ШІ-завдань із вбудованим FinOps-контролем бюджету
-  // estimatedCostMinor — вартість у цілих копійках (minor units).
   async executeAiTask(userId: string, estimatedCostMinor: number, taskPayload: string): Promise<{ success: boolean; aiResponse: string }> {
     if (!Number.isSafeInteger(estimatedCostMinor) || estimatedCostMinor <= 0) {
       throw new BadRequestException('Estimated cost must be a positive integer number of minor units.');
     }
 
-    // А. Шукаємо бюджет користувача через findFirst (оскільки userId не унікальний індекс на рівні Prisma)
     const budget = await this.prisma.userAiBudget.findFirst({
       where: { userId },
     });
@@ -52,37 +49,49 @@ export class AgentKnowledgeBaseService {
     };
   }
 
-  // 2. Стандартні системні CRUD методи модуля
-  async create(dto: CreateAgentKnowledgeBaseDto): Promise<AgentKnowledgeBase> {
-    const companyId = this.tenantContext.getCompanyId();
-    if (!companyId) throw new ForbiddenException('A business workspace is required.');
-    return this.prisma.agentKnowledgeBase.create({ data: { ...dto, companyId } });
+  async create(dto: CreateAgentKnowledgeBaseDto, companyId?: string): Promise<AgentKnowledgeBase> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
+    return this.prisma.agentKnowledgeBase.create({ data: { ...dto, companyId: activeCompanyId } });
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<AgentKnowledgeBase>> {
+  async findAll(
+    query: PaginationQueryDto,
+    companyId?: string,
+  ): Promise<PaginatedResponse<AgentKnowledgeBase>> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+
     return paginate(
       query,
-      (skip, take) => this.prisma.agentKnowledgeBase.findMany({ skip, take }),
-      () => this.prisma.agentKnowledgeBase.count(),
+      (skip, take) => this.prisma.agentKnowledgeBase.findMany({ where, skip, take }),
+      () => this.prisma.agentKnowledgeBase.count({ where }),
     );
   }
 
-  async findOne(id: string): Promise<AgentKnowledgeBase> {
-    const item = await this.prisma.agentKnowledgeBase.findUnique({ where: { id } });
+  async findOne(id: string, companyId?: string): Promise<AgentKnowledgeBase> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const item = await this.prisma.agentKnowledgeBase.findFirst({
+      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+    });
     if (!item) throw new NotFoundException(`Документ бази знань з ID ${id} не знайдено`);
     return item;
   }
 
-  async update(id: string, dto: UpdateAgentKnowledgeBaseDto): Promise<AgentKnowledgeBase> {
-    await this.findOne(id);
+  async update(
+    id: string,
+    dto: UpdateAgentKnowledgeBaseDto,
+    companyId?: string,
+  ): Promise<AgentKnowledgeBase> {
+    await this.findOne(id, companyId);
     return this.prisma.agentKnowledgeBase.update({
       where: { id },
       data: dto,
     });
   }
 
-  async remove(id: string): Promise<AgentKnowledgeBase> {
-    await this.findOne(id);
+  async remove(id: string, companyId?: string): Promise<AgentKnowledgeBase> {
+    await this.findOne(id, companyId);
     return this.prisma.agentKnowledgeBase.delete({ where: { id } });
   }
 }

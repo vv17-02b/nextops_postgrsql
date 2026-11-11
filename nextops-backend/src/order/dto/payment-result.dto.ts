@@ -4,7 +4,7 @@ import type { Prisma } from '@prisma/client';
 export class PaymentResultDto {
   @IsString()
   @IsNotEmpty()
-  paymentId: string;
+  paymentId!: string;
 
   @IsOptional()
   @IsObject()

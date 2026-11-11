@@ -6,6 +6,15 @@ import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { InvitationService } from './invitation.service';
 
+interface RequestWithUser extends Request {
+  user: {
+    id: string;
+    email?: string;
+    role: string;
+    companyId?: string;
+  };
+}
+
 @Controller('invitation')
 export class InvitationController {
   constructor(
@@ -16,9 +25,9 @@ export class InvitationController {
   @Roles('OWNER', 'ADMIN')
   invite(
     @Body() dto: CreateInvitationDto,
-    @Req() request: Request & { user: { role: string } },
+    @Req() request: RequestWithUser,
   ): Promise<{ success: true }> {
-    return this.service.invite(dto, request.user.role);
+    return this.service.invite(dto, request.user.role, request.user.companyId);
   }
 
   @Post('accept')

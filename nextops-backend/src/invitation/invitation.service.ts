@@ -17,9 +17,13 @@ export class InvitationService {
     private readonly emailQueue: EmailQueueService,
   ) {}
 
-  async invite(dto: CreateInvitationDto, inviterRole: string): Promise<{ success: true }> {
-    const companyId = this.tenantContext.getCompanyId();
-    if (!companyId) throw new ForbiddenException('A business workspace is required.');
+  async invite(
+    dto: CreateInvitationDto,
+    inviterRole: string,
+    companyId?: string,
+  ): Promise<{ success: true }> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
 
     const email = dto.email.trim().toLowerCase();
     const existingUser = await this.prisma.user.findUnique({ where: { email } });
@@ -31,7 +35,7 @@ export class InvitationService {
     }
 
     const existingInvitation = await this.prisma.invitation.findFirst({
-      where: { companyId, email, acceptedAt: null },
+      where: { companyId: activeCompanyId, email, acceptedAt: null },
     });
     const token = randomBytes(32).toString('base64url');
     const tokenHash = createHash('sha256').update(token).digest('hex');
@@ -44,12 +48,12 @@ export class InvitationService {
       });
     } else {
       await this.prisma.invitation.create({
-        data: { companyId, email, role, tokenHash, expiresAt },
+        data: { companyId: activeCompanyId, email, role, tokenHash, expiresAt },
       });
     }
 
     const company = await this.prisma.company.findUnique({
-      where: { id: companyId },
+      where: { id: activeCompanyId },
       select: { name: true },
     });
     if (!company) throw new NotFoundException('The business workspace was not found.');
@@ -100,7 +104,7 @@ export class InvitationService {
           aiBudgets: {
             create: {
               company: { connect: { id: invitation.companyId } },
-              monthlyLimitMinor: 1000, // $10.00
+              monthlyLimitMinor: 1000,
               resetDate: new Date(new Date().setMonth(new Date().getMonth() + 1)),
             },
           },

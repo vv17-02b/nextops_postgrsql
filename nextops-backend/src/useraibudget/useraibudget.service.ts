@@ -21,8 +21,7 @@ function toMinor(value: number): number {
   return minor;
 }
 
-// Extension shape kept compatible with the frontend budget view.
-interface UserAiBudgetExtended extends UserAiBudget {
+export interface UserAiBudgetExtended extends UserAiBudget {
   totalBudgetMinor: number;
   usedBudgetMinor: number;
   currency: string;
@@ -34,17 +33,17 @@ export class UserAiBudgetService {
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
-  ) { }
+  ) {}
 
-  async create(dto: CreateUserAiBudgetDto): Promise<UserAiBudget> {
-    const companyId = this.tenantContext.getCompanyId();
-    if (!companyId) throw new ForbiddenException('A business workspace is required.');
-    // Auto reset date: exactly 30 days ahead.
+  async create(dto: CreateUserAiBudgetDto, companyId?: string): Promise<UserAiBudget> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
+
     const autoResetDate = new Date();
     autoResetDate.setDate(autoResetDate.getDate() + 30);
 
     const budgetData: Prisma.UserAiBudgetUncheckedCreateInput = {
-      companyId,
+      companyId: activeCompanyId,
       userId: String(dto.userId).trim(),
       monthlyLimitMinor: toMinor(dto.totalBudgetMinor),
       currentUsageMinor: toMinor(dto.usedBudgetMinor ?? 0),
@@ -56,11 +55,17 @@ export class UserAiBudgetService {
     });
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<UserAiBudgetExtended>> {
+  async findAll(
+    query: PaginationQueryDto,
+    companyId?: string,
+  ): Promise<PaginatedResponse<UserAiBudgetExtended>> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+
     return paginate(
       query,
       async (skip, take) => {
-        const budgets = await this.prisma.userAiBudget.findMany({ skip, take });
+        const budgets = await this.prisma.userAiBudget.findMany({ where, skip, take });
         return budgets.map((item) => ({
           ...item,
           totalBudgetMinor: item.monthlyLimitMinor,
@@ -68,12 +73,15 @@ export class UserAiBudgetService {
           currency: 'USD',
         }));
       },
-      () => this.prisma.userAiBudget.count(),
+      () => this.prisma.userAiBudget.count({ where }),
     );
   }
 
-  async findOne(id: string): Promise<UserAiBudgetExtended> {
-    const item = await this.prisma.userAiBudget.findUnique({ where: { id } });
+  async findOne(id: string, companyId?: string): Promise<UserAiBudgetExtended> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const item = await this.prisma.userAiBudget.findFirst({
+      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+    });
     if (!item) throw new NotFoundException(`Бюджет з ID ${id} не знайдено`);
 
     return {
@@ -84,8 +92,8 @@ export class UserAiBudgetService {
     };
   }
 
-  async update(id: string, dto: UpdateUserAiBudgetDto): Promise<UserAiBudget> {
-    await this.findOne(id);
+  async update(id: string, dto: UpdateUserAiBudgetDto, companyId?: string): Promise<UserAiBudget> {
+    await this.findOne(id, companyId);
 
     const updateData: Prisma.UserAiBudgetUncheckedUpdateInput = {};
     if (dto.userId) updateData.userId = dto.userId;
@@ -98,8 +106,8 @@ export class UserAiBudgetService {
     });
   }
 
-  async remove(id: string): Promise<UserAiBudget> {
-    await this.findOne(id);
+  async remove(id: string, companyId?: string): Promise<UserAiBudget> {
+    await this.findOne(id, companyId);
     return this.prisma.userAiBudget.delete({ where: { id } });
   }
 }

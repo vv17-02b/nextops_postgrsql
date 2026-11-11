@@ -1,5 +1,7 @@
-import { Injectable, NotFoundException, Inject, InternalServerErrorException, Logger } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
+import { ForbiddenException, Injectable, NotFoundException, Inject, InternalServerErrorException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContext } from '../prisma/tenant-context';
 import { CreateWebhookConfigDto } from './dto/create-webhookconfig.dto';
 import { UpdateWebhookConfigDto } from './dto/update-webhookconfig.dto';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
@@ -12,14 +14,18 @@ export class WebhookConfigService {
   private readonly logger = new Logger(WebhookConfigService.name);
   constructor(
     @Inject(PrismaService)
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    @Inject(TenantContext)
+    private readonly tenantContext: TenantContext,
   ) {}
 
+  async triggerWebhook(
+    configId: string,
+    payload: Record<string, unknown>,
+    companyId?: string,
+  ): Promise<{ success: boolean; attempts: number }> {
+    const config = await this.findOne(configId, companyId);
 
-  async triggerWebhook(configId: string, payload: Record<string, unknown>): Promise<{ success: boolean; attempts: number }> {
-    const config = await this.findOne(configId);
-    
-  
     if (!config.isActive) {
       return { success: false, attempts: 0 };
     }
@@ -29,8 +35,7 @@ export class WebhookConfigService {
     let success = false;
 
     const targetUrl = config.url || 'http://localhost:3000/fallback-webhook';
-    
-    const eventName = config.events.length > 0 ? config.events[0] : 'ai.task.completed';
+    const eventName = config.events.length > 0 ? config.events : 'ai.task.completed';
 
     while (attempts < maxRetries && !success) {
       attempts++;
@@ -41,7 +46,12 @@ export class WebhookConfigService {
             'Content-Type': 'application/json',
             'X-NextOps-Signature': config.secret || 'sha256-mock-secure-signature-key',
           },
-          body: JSON.stringify({ event: eventName, data: payload }),
+          body: JSON.stringify({
+            event: eventName,
+            projectId: config.projectId,
+            timestamp: new Date().toISOString(),
+            data: Object.keys(payload).length > 0 ? payload : { status: 'completed', test: true },
+          }),
         });
 
         if (response.ok) {
@@ -59,40 +69,69 @@ export class WebhookConfigService {
     return { success, attempts };
   }
 
-  // 2. Системні CRUD методи з використанням нативного типу Prisma інпуту
-  async create(dto: CreateWebhookConfigDto): Promise<WebhookConfig> {
-    const inputData = dto as Prisma.WebhookConfigUncheckedCreateInput;
-    return this.prisma.webhookConfig.create({ 
+  async create(dto: CreateWebhookConfigDto, companyId?: string): Promise<WebhookConfig> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
+
+    const inputData: Prisma.WebhookConfigUncheckedCreateInput = {
+      projectId: dto.projectId,
+      url: dto.url,
+      secret: dto.secret?.trim() || `whsec_${randomBytes(24).toString('hex')}`,
+      events: dto.events,
+      isActive: dto.isActive ?? true,
+      companyId: activeCompanyId,
+    };
+
+    return this.prisma.webhookConfig.create({
       data: inputData,
     });
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<WebhookConfig>> {
+  async findAll(
+    query: PaginationQueryDto,
+    companyId?: string,
+  ): Promise<PaginatedResponse<WebhookConfig>> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+
     return paginate(
       query,
-      (skip, take) => this.prisma.webhookConfig.findMany({ skip, take }),
-      () => this.prisma.webhookConfig.count(),
+      (skip, take) => this.prisma.webhookConfig.findMany({ where, skip, take }),
+      () => this.prisma.webhookConfig.count({ where }),
     );
   }
 
-  async findOne(id: string): Promise<WebhookConfig> {
-    const item = await this.prisma.webhookConfig.findUnique({ where: { id } });
+  async findOne(id: string, companyId?: string): Promise<WebhookConfig> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const item = await this.prisma.webhookConfig.findFirst({
+      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+    });
     if (!item) throw new NotFoundException(`Конфігурацію вебхука з ID ${id} не знайдено`);
     return item;
   }
 
-  async update(id: string, dto: UpdateWebhookConfigDto): Promise<WebhookConfig> {
-    await this.findOne(id);
-    const updateData = dto as Prisma.WebhookConfigUncheckedUpdateInput;
-    
+  async update(
+    id: string,
+    dto: UpdateWebhookConfigDto,
+    companyId?: string,
+  ): Promise<WebhookConfig> {
+    await this.findOne(id, companyId);
+    const updateData: Prisma.WebhookConfigUncheckedUpdateInput = {
+      ...(dto.projectId !== undefined ? { projectId: dto.projectId } : {}),
+      ...(dto.url !== undefined ? { url: dto.url } : {}),
+      ...(dto.secret !== undefined ? { secret: dto.secret } : {}),
+      ...(dto.events !== undefined ? { events: dto.events } : {}),
+      ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+    };
+
     return this.prisma.webhookConfig.update({
       where: { id },
       data: updateData,
     });
   }
 
-  async remove(id: string): Promise<WebhookConfig> {
-    await this.findOne(id);
+  async remove(id: string, companyId?: string): Promise<WebhookConfig> {
+    await this.findOne(id, companyId);
     return this.prisma.webhookConfig.delete({ where: { id } });
   }
 }

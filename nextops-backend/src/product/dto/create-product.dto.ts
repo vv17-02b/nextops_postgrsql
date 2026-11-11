@@ -3,11 +3,11 @@ import { IsString, IsNotEmpty, IsOptional, IsNumber, IsBoolean, IsArray, Min } f
 export class CreateProductDto {
   @IsString()
   @IsNotEmpty({ message: 'Назва товару є обовʼязковою' })
-  name: string;
+  name!: string;
 
   @IsString()
   @IsNotEmpty({ message: 'Slug є обовʼязковим для SEO та роутингу' })
-  slug: string;
+  slug!: string;
 
   @IsString()
   @IsOptional()
@@ -15,7 +15,7 @@ export class CreateProductDto {
 
   @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Ціна має бути числом з максимум двома десятковими знаками' })
   @Min(0)
-  price: number;
+  price!: number;
 
   @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Порівняльна ціна має бути числом з максимум двома десятковими знаками' })
   @Min(0)
@@ -33,5 +33,5 @@ export class CreateProductDto {
 
   @IsString()
   @IsNotEmpty({ message: 'Необхідно вказати ID категорії' })
-  categoryId: string;
+  categoryId!: string;
 }

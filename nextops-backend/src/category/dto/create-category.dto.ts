@@ -3,11 +3,11 @@ import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 export class CreateCategoryDto {
   @IsString()
   @IsNotEmpty({ message: 'Назва категорії є обовʼязковою' })
-  name: string;
+  name!: string;
 
   @IsString()
   @IsNotEmpty({ message: 'Slug є обовʼязковим для категорій' })
-  slug: string;
+  slug!: string;
 
   @IsString()
   @IsOptional()
@@ -15,5 +15,5 @@ export class CreateCategoryDto {
 
   @IsString()
   @IsOptional()
-  parentId?: string; 
+  parentId?: string;
 }

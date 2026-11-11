@@ -4,13 +4,13 @@ import { IsInt, IsNotEmpty, IsString, IsUUID, Min } from 'class-validator';
 export class CreateWarehouseDto {
   @IsUUID()
   @IsNotEmpty()
-  productId: string;
+  productId!: string;
 
   @IsString()
   @IsNotEmpty({ message: 'Локація складу є обовʼязковою' })
-  location: string;
+  location!: string;
 
-  @Transform(({ value }) => value === undefined ? value : Number(value))
+  @Transform(({ value }) => (value === undefined ? value : Number(value)))
   @IsInt()
   @Min(0)
   quantity?: number;

@@ -2,20 +2,19 @@ import { Transform } from 'class-transformer';
 import { IsUUID, IsNotEmpty, IsPositive, IsInt, IsString } from 'class-validator';
 
 export class CreateOrderItemDto {
-  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
   @IsUUID()
-  orderId: string;
+  orderId!: string;
 
-  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
   @IsUUID()
-  productId: string;
+  productId!: string;
 
   @IsInt()
   @IsPositive()
-  quantity: number;
-
+  quantity!: number;
 }

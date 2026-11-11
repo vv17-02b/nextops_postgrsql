@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, Inject, MethodNotAllowedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContext } from '../prisma/tenant-context';
 import { CreateApiHistoryDto } from './dto/create-apihistory.dto';
 import { UpdateApiHistoryDto } from './dto/update-apihistory.dto';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
@@ -10,25 +11,29 @@ import type { ApiHistory } from '@prisma/client';
 export class ApiHistoryService {
   constructor(
     @Inject(PrismaService)
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    @Inject(TenantContext)
+    private readonly tenantContext: TenantContext,
   ) {}
 
-  async create(dto: CreateApiHistoryDto, userId: string): Promise<ApiHistory> {
-    // 1. Спочатку дізнаємося, до якої компанії (workspace) належить користувач
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { companyId: true },
-    });
+  async create(dto: CreateApiHistoryDto, userId: string, companyId?: string): Promise<ApiHistory> {
+    let activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
 
-    if (!user || !user.companyId) {
-      throw new NotFoundException(`Користувача або його робочу область не знайдено`);
+    if (!activeCompanyId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { companyId: true },
+      });
+      if (!user || !user.companyId) {
+        throw new NotFoundException(`Користувача або його робочу область не знайдено`);
+      }
+      activeCompanyId = user.companyId;
     }
 
-    // 2. Створюємо запис з прив'язкою до тенанта (companyId)
     return this.prisma.apiHistory.create({
       data: {
         userId,
-        companyId: user.companyId, // <--- Виправили баг
+        companyId: activeCompanyId,
         endpoint: dto.endpoint,
         method: dto.method,
         statusCode: dto.statusCode,
@@ -37,20 +42,31 @@ export class ApiHistoryService {
     });
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<ApiHistory>> {
+  async findAll(
+    query: PaginationQueryDto,
+    companyId?: string,
+  ): Promise<PaginatedResponse<ApiHistory>> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+
     return paginate(
       query,
-      (skip, take) => this.prisma.apiHistory.findMany({
-        skip,
-        take,
-        orderBy: { createdAt: 'desc' },
-      }),
-      () => this.prisma.apiHistory.count(),
+      (skip, take) =>
+        this.prisma.apiHistory.findMany({
+          where,
+          skip,
+          take,
+          orderBy: { createdAt: 'desc' },
+        }),
+      () => this.prisma.apiHistory.count({ where }),
     );
   }
 
-  async findOne(id: string): Promise<ApiHistory> {
-    const item = await this.prisma.apiHistory.findUnique({ where: { id } });
+  async findOne(id: string, companyId?: string): Promise<ApiHistory> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const item = await this.prisma.apiHistory.findFirst({
+      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+    });
     if (!item) throw new NotFoundException(`Запис логу з ID ${id} не знайдено`);
     return item;
   }

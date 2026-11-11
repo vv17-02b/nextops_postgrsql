@@ -325,3 +325,223 @@ Do not advertise the current checkout as a fully audited or production-ready mul
 - **Prisma client generation fails on Windows with `EPERM` replacing a query-engine DLL:** close processes that are using the backend Prisma client, then retry `yarn db:generate`. Do not delete dependencies while the application is running.
 - **Next.js manifests or chunks are missing:** stop conflicting Next.js processes and run `yarn build:frontend` again. Development and production use separate output directories.
 # nextops_postgrsql
+
+
+
+# Recommendations for making changes to the project
+---
+name: NextOps SaaS analysis
+overview: "Розбір реального коду NextOps у Documents/nextops_postgrsql: що вже тримає мультитенантний фундамент, де захист зараз пропускає запит, і в якому порядку закривати дірки до продажу підписки."
+todos:
+  - id: phase-1-tenant-fail-closed
+    content: Fail-closed tenant proxy, lock secret CRUD, required companyId, auth rate limits, cross-tenant tests in CI
+    status: pending
+  - id: phase-2-pagination
+    content: Shared pagination and visible API errors on workspace list pages
+    status: pending
+  - id: phase-3-rls
+    content: Postgres RLS with non-owner app role, transaction-scoped company id, retest isolation
+    status: pending
+  - id: phase-4-billing
+    content: Platform subscription plans separate from order acquiring and signed webhooks
+    status: pending
+  - id: phase-5-ops
+    content: Encrypted off-site backups, CI test job, audit of privileged writes
+    status: pending
+isProject: false
+---
+
+# Аналіз NextOps і порядок доробок
+
+
+
+## Що вже зроблено сильніше, ніж у зібраних нотатках
+
+Ізоляція тенанта не зводиться до ручного `where: { companyId }` у кожному сервісі. [prisma.service.ts](C:\Users\Admin\Documents\nextops_postgrsql\nextops-backend\src\prisma\prisma.service.ts) обгортає клієнт Prisma і для моделей зі списку `TENANT_MODELS` дописує `companyId` у `where` / `data`, якщо контекст уже встановлений. Контекст живе в `AsyncLocalStorage` ([tenant-context.ts](C:\Users\Admin\Documents\nextops_postgrsql\nextops-backend\src\prisma\tenant-context.ts)) і виставляється після JWT у [jwt.strategy.ts](C:\Users\Admin\Documents\nextops_postgrsql\nextops-backend\src\auth\strategies\jwt.strategy.ts). У схемі є складені зовнішні ключі `(id, companyId)`, тож чужий `productId` з іншої компанії база відхиляє.
+
+Окремо вже є: Argon2id, HttpOnly JWT на 7 днів, CSRF (`Origin` + `X-CSRF-Token`), Redis blacklist і session epoch, інвайти та скидання пароля через BullMQ, ціни замовлення в minor units зі серверним snapshot у [order.service.ts](C:\Users\Admin\Documents\nextops_postgrsql\nextops-backend\src\order\order.service.ts), `@Idempotent()` лише на `POST /api/order`, пагінація API (`page` / `limit` / `meta`), Pino, health live/ready, Compose з Postgres 17 і Redis 7. `PATCH /api/order/:id/pay` свідомо віддає 503. `paymentStatus` клієнт через `UpdateOrderDto` не змінює.
+
+Ролі — фіксований набір. `VIEWER` не пише. `OWNER`/`ADMIN` потрібні для user, AI budget, webhook config і запрошень. Решта мутацій відкрита й для `MEMBER`.
+
+## Діри, які нотатки описують неточно
+
+```mermaid
+flowchart TD
+  request[HTTP request]
+  jwt[JWT sets companyId]
+  proxy[Prisma tenant proxy]
+  db[(PostgreSQL)]
+  request --> jwt --> proxy --> db
+  proxy -->|"companyId missing OR call without args"| open[Query runs unscoped]
+  proxy -->|"queryRaw or array transaction"| open
+```
+
+**Проксі тенанта зараз fail-open.** У `wrapTenantClient` якщо `companyId` порожній або метод викликано без об’єкта аргументів, запит іде в базу як є. Фонова задача, публічний шлях або новий `findMany()` без аргументів прочитає всі компанії. RLS це закриє лише після окремої ролі БД; до того проксі має кидати помилку, а не пропускати.
+
+**RLS не вмикається одним `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`.** Prisma тримає пул з’єднань. `SET LOCAL app.current_company_id` живе лише всередині транзакції. Власник таблиці і роль із `BYPASSRLS` політики не бачать. Міграції мають іти окремою роллю, застосунок — обмеженою, з `FORCE ROW LEVEL SECURITY`. Публічні шляхи (реєстрація, accept invite, reset password) мають власні політики, інакше реєстрація зламається. Це робота після тестів, не перший патч.
+
+**Чутливі ресурси віддані як звичайний CRUD.** `Session`, `VerificationToken` і `Account` (з `access_token`, `refresh_token`, `id_token`) доступні автентифікованому `MEMBER` на читання і запис. Це ближче до витоку секретів, ніж відсутність другої сторінки товарів.
+
+`**ApiHistory.companyId` nullable.** Рядок без компанії випадає з інваріанта тенанта. Унікальність `Account` на `(provider, providerAccountId)` глобальна, не в межах компанії.
+
+**Статус замовлення обходиться без оплати.** `MEMBER` може `PATCH` статусу в `PROCESSING` або `SHIPPED`. Грошей це не списує, але операційний стан уже можна підробити з UI.
+
+**AI-бюджет — запис у таблиці.** [useraibudget.service.ts](C:\Users\Admin\Documents\nextops_postgrsql\nextops-backend\src\useraibudget\useraibudget.service.ts) зберігає `monthlyLimitMinor` / `currentUsageMinor` і віддає їх у UI. Немає списання за виклик моделі, блокування при перевищенні і політики округлення. Вхід API ще приходить десятковим числом і округлюється через `Math.round`.
+
+**Фронтенд читає лише першу сторінку, крім ApiHistory.** Хуки на кшталт [useProduct.ts](C:\Users\Admin\Documents\nextops_postgrsql\nextops-frontend\src\hooks\useProduct.ts) викликають `GET` без `page`, забирають `data` і гублять `meta`. Помилки 401/403 йдуть у `console.error`. Пошук у сайдбарі фільтрує назви модулів, не записи.
+
+**Тестів немає.** У репозиторії нуль `*.spec.ts` / e2e. [ci.yml](C:\Users\Admin\Documents\nextops_postgrsql.github\workflows\ci.yml) робить install, Prisma validate/generate, build і typecheck. Немає Postgres service, Jest, ESLint у job і ліміту часу. `DATABASE_URL` у CI вказує на localhost, але база для перевірок не піднімається, бо міграції в CI не застосовуються.
+
+**Білінг підписки і еквайринг замовлень — різні продукти.** `Company` має лише `id`, `name`, `createdAt`. Немає плану, статусу підписки, місць, `stripeCustomerId`. Оплата замовлення клієнта компанії і оплата доступу до самої платформи не замінюють одна одну. Віджет картки на `/payment` не робить платформу продаваною.
+
+**Бекапи лишаються на тому самому хості.** Скрипт і профіль `backups` пишуть custom dump у локальний volume на 7 днів. Шифрування і зовнішня копія відсутні. Rate limit на login/register/forgot-password відсутній. OpenAPI, audit log, distributed tracing і деплой з main теж відсутні.
+
+## Порядок, у якому це варто робити
+
+Продаж підписки до фаз 1–3 збільшує ризик витоку між клієнтами і не дає чим обмежувати тариф.
+
+### Фаза 1. Закрити доступ, поки даних ще мало
+
+- У проксі тенанта: для моделі з `TENANT_MODELS` без `companyId` кидати `ForbiddenException`, не виконувати запит. Те саме для виклику без аргументів.
+- Прибрати з публічного CRUD секрети: `Session`, `VerificationToken`, поля токенів у `Account`. Лишити адмінські read-only подання без секретів або закрити маршрути.
+- `ApiHistory.companyId` зробити обов’язковим. Унікальність акаунта провайдера звузити до компанії.
+- `PATCH /order/:id` для статусів відвантаження дозволити лише `OWNER`/`ADMIN`, окремо від `paymentStatus`.
+- Redis rate limit на `register`, `login`, `forgot-password`, `reset-password`, `invitation/accept`.
+- Інтеграційні тести на реальному Postgres у CI: компанія A читає і пише id компанії B для order, product, user, webhook; очікування 404/403 і порожній список. Сюди ж тест, що запит без контексту не повертає рядки.
+
+### Фаза 2. Кабінет, яким можна користуватися після 20 записів
+
+- Спільний хук пагінації за зразком [useApihistory.ts](C:\Users\Admin\Documents\nextops_postgrsql\nextops-frontend\src\hooks\useApihistory.ts) для product, order, project, user, category та решти модулів.
+- Показ помилки API на сторінці, а не лише в консолі.
+- Серверні `search` / фільтр статусу там, де список операційний (замовлення, товари, користувачі).
+
+### Фаза 3. RLS як другий контур, не заміна тестів
+
+- Окрема роль `nextops_app` без володіння таблицями, `FORCE ROW LEVEL SECURITY`.
+- Кожен запит застосунку в транзакції з `set_config('app.current_company_id', ..., true)`.
+- Політики на всі тенант-таблиці; винятки лише для реєстрації, інвайта і скидання пароля, з вузькими функціями.
+- Ті самі тести фази 1 прогнати повторно вже проти RLS, включно з прямим SQL під роллю застосунку.
+
+### Фаза 4. Гроші: спочатку підписка платформи
+
+- Модель `Plan` + поля компанії: план, статус (`trialing` / `active` / `past_due` / `canceled`), період, зовнішній customer id.
+- Обмеження місць і модулів у guard до запису (наприклад, ліміт користувачів).
+- Stripe або Paddle для підписки платформи: Checkout + webhook із перевіркою підпису, ідемпотентний журнал подій, оновлення статусу компанії. Блокування кабінету при `past_due` після пільгового вікна.
+- Еквайринг замовлень (Stripe / LiqPay) окремим контуром: сума лише з `totalAmountMinor`, підпис webhook, заборона виставляти `paymentStatus` з браузера. `/payment` лишається read-only, доки цей контур не пройде тести підпису.
+
+### Фаза 5. Експлуатація
+
+- Шифрований dump у R2 або B2, окремий бакет, перевірка відновлення на чистій базі за розкладом.
+- CI: Postgres service, Jest, ESLint, кеш Yarn; образи збирати після зеленого main, не на кожен push чернетки.
+- Мінімальний audit: хто змінив ціну, статус замовлення, роль користувача.
+
+AI-бюджет як списання токенів має сенс лише після фази 1 і явної одиниці обліку (цент за запит чи мікро-одиниці за токен). До цього сторінка бюджету лишається довідником ліміту, не білінгом.
+
+## Що не варто робити першим
+
+Віджет введення картки, безкінечний скрол і «тариф Basic за $19» не компенсують fail-open проксі, CRUD секретів і відсутність тестів ізоляції. Хмарний бекап потрібен до перших чужих даних, але він не замінює виправлення доступу.
+Чого не вистачає до «Повноцінного SaaS» 
+
+- Щоб почати продавати доступ до цієї платформи іншим компаніям підписку, вам потрібно реалізувати наступні модулі:
+- Біллінг та Тарифи (Stripe/Paddle): Зараз у вас немає прив'язки компанії до тарифного плану (наприклад, Basic, Pro, -  - Enterprise). Потрібно додати логіку: «Якщо компанія не оплатила підписку — блокувати доступ до кабінету» або «Тариф  -  Basic дозволяє мати лише 3 користувачів».
+- Платіжний шлюз: Як вказано в логах, метод /pay повертає 503 . Потрібно підключити реальний еквайринг і обробку вебхуків від платіжки (з валідацією підписів).
+- База даних (Row-Level Security): Зараз ви фільтруєте дані кодом через Prisma (App Scoping) . Це працює, але якщо розробник десь забуде дописати .findMany({ where: { companyId } }), одна компанія побачить дані іншої. Увімкнення - - - - PostgreSQL RLS (Row-Level Security) на рівні самої бази застрахує вас від людської помилки .
+
+. Що ви упустили (Найкритичніші дірки)
+
+• Платіжний шлюз повністю відсутній. Ендпоінт PATCH /api/order/:id/pay просто повертає помилку 503. Без підключення Stripe, LiqPay або іншого еквайрингу цей SaaS не може приймати гроші. Немає обробки вебхуків від платіжних систем, перевірки їхніх підписів та логіки підписок (SaaS-тарифів).
+• Слабкий захист між клієнтами (Tenant Isolation). Ви поклалися виключно на Prisma (код застосунку). Якщо новий програміст у вашій команді забуде написати .findMany({ where: { companyId } }) у новому контролері — один клієнт побачить дані іншого. PostgreSQL Row-Level Security (RLS) не увімкнено.
+• Фронтенд «недопилений». Пагінація є в БD, але на фронтенді більшість сторінок показують лише першу сторінку даних. Клієнт, у якого буде понад 20 товарів чи користувачів, просто не зможе їх погортати.
+• AI-бюджети — лише цифри в БD. Поля monthlyLimitMinor ви створили, але самої логіки підрахунку токенів (скільки зняти за один запит до ChatGPT/Claude) і блокування користувача, якщо ліміт вичерпано, в коді немає.
+• Локальні бекапи — це ризик. Скрипт зберігає дампи на тому самому Docker-хості. Якщо «помре» сервер, згорять і бекапи.
+
+2. Що треба терміново дописати / доділати (Ваш чек-лист)
+
+
+БЕЗПЕКА ТА БD:
+
+1. Увімкнути Row-Level Security (RLS) у PostgreSQL. Налаштувати Prisma так, щоб при кожному запиті в базу передавався контекст companyId, і сама БD блокувала доступ до чужих рядків на рівні ядра.
+2. Написати крос-тенантні тести. Автоматичні тести, які імітують хакерський запит від Компанії А з метою прочитати замовлення Компанії Б (перевірка на уразливість BOLA/IDOR).
+
+ФІНАНСИ ТА БІЛІНГ:
+
+3. Інтегрувати платіжний шлюз. Написати логіку створення інвойсів, підключити фронтенд-віджети для введення карток.
+4. Створити обробник вебхуків (Webhook Endpoint). Він має приймати повідомлення від платіжки (наприклад, «платіж успішний»), обов'язково валідувати криптографічний підпис шлюзу та оновлювати статус замовлення.
+5. Додати білінг підписок. Логіку тарифних планів (наприклад: Базовий — $19/міс, Про — $49/міс) та обмеження функціоналу залежно від тарифу (Plan Enforcement).
+
+ІНФРАСТРУКТУРА (DEVOPS):
+
+6. Винести бекапи в хмару. Переписати PowerShell/Bash скрипти, щоб вони шифрували дамп бази і заливали його на AWS S3, Cloudflare R2 або Backblaze B2.
+7. Rate Limiting (Захист від спаму). Обмежити кількість запитів (особливо на логін, реєстрацію та відновлення пароля), щоб систему не завалили брутфорсом.
+
+ФРОНТЕНД:
+
+8. Додати компоненти пагінації. Дописати на всіх сторінках (товари, проекти, користувачі) кнопки «Вперед/Назад» або Infinite Scroll.
+  Рекомендації щодо покращення та розробки SaaS-платформи
+1. Безпека та Ізоляція даних (Multi-Tenancy)
+PostgreSQL RLS (Row-Level Security): Увімкни захист на рівні таблиць БД (ALTER TABLE "Project" ENABLE ROW LEVEL SECURITY;), щоб база намертво блокувала доступ чужих компаній до даних.
+
+Context Middleware: Налаштуй NestJS так, щоб він автоматично підставляв company_id поточного користувача в транзакцію бази даних (SET LOCAL app.current_company_id = '...'). Це захистить від хакерських атак типу BOLA/IDOR.
+
+Тести на ізоляцію: Напиши E2E-тести, де компанія «А» намагається вкрасти дані компанії «Б».
+
+2. Платежі та Білінг (Stripe)
+Інтеграція Stripe: Замість заглушок підключи реальний Stripe Checkout для оплати та підписок.
+
+Гроші в центах: Усі суми обов'язково зберігай цілими числами в дрібних одиницях (центах / minor units), щоб уникнути похибок округлення у плавучій точці (float).
+
+Вебхуки зірки: Зроби захищений ендпоінт для подій від Stripe з обов'язковою перевіркою підпису (Stripe-Signature).
+
+3. Масштабування та Надійність
+Redis для лімітів (Rate Limiting): Перенеси захист від спаму і брутфорсу з пам'яті сервера у спільний Redis, щоб ліміти працювали навіть при запуску кількох інстансів програми.
+
+Хмарні бекапи: Налаштуй автоматичне збереження зашифрованих дампів бази у зовнішнє сховище (AWS S3 / Cloudflare R2) з регулярними тестовими відновленнями.
+
+4. Стандарти коду
+Суворий TypeScript: Повна заборона типу any. Використовуй тільки строгі типи та strictNullChecks, щоб виловлювати баги ще під час компіляції.
+. Швидка перевірка PR — > паралельно запуск ESLint, перевірки TypeScript та тестування Jest. Використовуйте легкий сервісний контейнер PostgreSQL для інтеграційних тестів, щоб Prisma працювала з реальною базою даних, а не з крихкими макетами. Тримайте весь цей забіг менше трьох хвилин.
+
+2. Шарово-кешовані збірки образів -> Створюйте та запускайте свій Docker-контейнер лише після об'єднання з основним. Використовуйте GitHub Actions або кешування реєстру AWS, щоб залежності не перевстановлювалися при кожному запуску.
+
+3. Пряме розгортання -> Запускати автоматичне розгортання безпосередньо з основного через вебхук або раннер, який отримує новий образ і перезапускає сервіс.
+
+1. Завжди фіксуйте сирі запити під час розробки. Якщо кінцева точка запускає десятки SQL-операторів для одного запиту, її потрібно негайно переписувати. 
+
+2. Відправте обчислення в PostgreSQL. Якщо потрібні підрахунки або суми, використовуйте Prisma groupBy, _count або закрийте до $queryRaw з належним JOIN замість обчислень у Node.js пам'яті. 
+
+3. Будьте суворими у виборі. Перезавантаження реляційних моделей — найшвидший спосіб роздувати корисні навантаження та різко збільшити використання пам'яті. 
+
+
+Загальна архітектура системи (System Architecture)
+flowchart TB
+    subgraph Client ["Клієнтський шар (Frontend)"]
+        Browser["Next.js App Router (UI / Tailwind / Lucide)"]
+    end
+
+    subgraph Gateway ["Шлюз та безпека (API Proxy)"]
+        NextProxy["Same-Origin Proxy (/api/*)"]
+        CSRF["CSRF Token & HttpOnly Cookie Validation"]
+        Idempotency["Redis Idempotency Interceptor (POST /api/order)"]
+    end
+
+    subgraph Backend ["Бекенд-шар (NestJS API)"]
+        TenantGuard["Tenant Context & Role Guards (OWNER, ADMIN, MEMBER, VIEWER)"]
+        PrismaProxy["Prisma ORM (AsyncLocalStorage Tenant Scoping)"]
+        BullMQ["BullMQ Workers (Redis-backed Email Queue)"]
+    end
+
+    subgraph Database ["Сховище даних (Infrastructure)"]
+        Postgres[(PostgreSQL 17\nComposite Foreign Keys)]
+        Redis[(Redis 7\nBlacklist & Sessions)]
+        SMTP["SMTP Mailer"]
+    end
+
+    Browser -->|HTTPS / WSS| NextProxy
+    NextProxy --> CSRF
+    CSRF --> Idempotency
+    Idempotency --> TenantGuard
+    TenantGuard --> PrismaProxy
+    PrismaProxy --> Postgres
+    TenantGuard --> Redis
+    BullMQ --> SMTP
+    

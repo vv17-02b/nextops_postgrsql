@@ -15,12 +15,10 @@ export class VerificationTokenService {
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
-  async create(dto: CreateVerificationTokenDto): Promise<VerificationToken> {
-    if (!this.prisma || !this.prisma.verificationToken) {
-      throw new Error('Критична помилка: PrismaService не ініціалізовано.');
-    }
+  async create(dto: CreateVerificationTokenDto, companyId?: string): Promise<VerificationToken> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
 
-    // Безпечний парсинг дати: якщо з форми прийшла Invalid Date, ставимо дефолт (+1 день)
     let parsedDate = new Date(dto.expires);
     if (isNaN(parsedDate.getTime())) {
       parsedDate = new Date();
@@ -28,11 +26,9 @@ export class VerificationTokenService {
     }
 
     try {
-      const companyId = this.tenantContext.getCompanyId();
-      if (!companyId) throw new ForbiddenException('A business workspace is required.');
       return await this.prisma.verificationToken.create({
         data: {
-          companyId,
+          companyId: activeCompanyId,
           identifier: dto.identifier.trim(),
           token: dto.token.trim(),
           expires: parsedDate,
@@ -43,29 +39,38 @@ export class VerificationTokenService {
     }
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<VerificationToken>> {
-    if (!this.prisma || !this.prisma.verificationToken) {
-      throw new Error('Критична помилка: PrismaService не ініціалізовано.');
-    }
+  async findAll(
+    query: PaginationQueryDto,
+    companyId?: string,
+  ): Promise<PaginatedResponse<VerificationToken>> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+
     return paginate(
       query,
-      (skip, take) => this.prisma.verificationToken.findMany({ skip, take }),
-      () => this.prisma.verificationToken.count(),
+      (skip, take) => this.prisma.verificationToken.findMany({ where, skip, take }),
+      () => this.prisma.verificationToken.count({ where }),
     );
   }
 
-  async findOne(id: string): Promise<VerificationToken> {
-    const item = await this.prisma.verificationToken.findUnique({ where: { id } });
+  async findOne(id: string, companyId?: string): Promise<VerificationToken> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const item = await this.prisma.verificationToken.findFirst({
+      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+    });
     if (!item) {
       throw new NotFoundException('Токен верифікації не знайдено');
     }
     return item;
   }
 
-  async update(id: string, dto: UpdateVerificationTokenDto): Promise<VerificationToken> {
-    await this.findOne(id);
+  async update(
+    id: string,
+    dto: UpdateVerificationTokenDto,
+    companyId?: string,
+  ): Promise<VerificationToken> {
+    await this.findOne(id, companyId);
 
-    // Prisma сам перевіряє типи полів оновлення
     return this.prisma.verificationToken.update({
       where: { id },
       data: {
@@ -76,8 +81,8 @@ export class VerificationTokenService {
     });
   }
 
-  async remove(id: string): Promise<VerificationToken> {
-    await this.findOne(id);
+  async remove(id: string, companyId?: string): Promise<VerificationToken> {
+    await this.findOne(id, companyId);
     return this.prisma.verificationToken.delete({ where: { id } });
   }
 }

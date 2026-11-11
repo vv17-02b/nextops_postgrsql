@@ -15,36 +15,42 @@ export class ReviewService {
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
-  async create(dto: CreateReviewDto): Promise<Review> {
-    const companyId = this.tenantContext.getCompanyId();
-    if (!companyId) throw new ForbiddenException('A business workspace is required.');
-    return this.prisma.review.create({ data: { ...dto, companyId } });
+  async create(dto: CreateReviewDto, companyId?: string): Promise<Review> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
+    return this.prisma.review.create({ data: { ...dto, companyId: activeCompanyId } });
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<Review>> {
+  async findAll(query: PaginationQueryDto, companyId?: string): Promise<PaginatedResponse<Review>> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+
     return paginate(
       query,
-      (skip, take) => this.prisma.review.findMany({ skip, take }),
-      () => this.prisma.review.count(),
+      (skip, take) => this.prisma.review.findMany({ where, skip, take }),
+      () => this.prisma.review.count({ where }),
     );
   }
 
-  async findOne(id: string): Promise<Review> {
-    const item = await this.prisma.review.findUnique({ where: { id } });
+  async findOne(id: string, companyId?: string): Promise<Review> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const item = await this.prisma.review.findFirst({
+      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+    });
     if (!item) throw new NotFoundException(`Відгук з ID ${id} не знайдено`);
     return item;
   }
 
-  async update(id: string, dto: UpdateReviewDto): Promise<Review> {
-    await this.findOne(id);
+  async update(id: string, dto: UpdateReviewDto, companyId?: string): Promise<Review> {
+    await this.findOne(id, companyId);
     return this.prisma.review.update({
       where: { id },
       data: dto,
     });
   }
 
-  async remove(id: string): Promise<Review> {
-    await this.findOne(id);
+  async remove(id: string, companyId?: string): Promise<Review> {
+    await this.findOne(id, companyId);
     return this.prisma.review.delete({ where: { id } });
   }
 }

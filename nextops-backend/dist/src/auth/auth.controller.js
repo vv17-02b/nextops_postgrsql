@@ -271,6 +271,7 @@ exports.AuthController = AuthController = __decorate([
     __param(0, (0, common_1.Inject)(prisma_service_1.PrismaService)),
     __param(1, (0, common_1.Inject)(jwt_1.JwtService)),
     __param(2, (0, common_1.Inject)(tenant_context_1.TenantContext)),
+    __param(3, (0, common_1.Inject)(token_revocation_service_1.TokenRevocationService)),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         jwt_1.JwtService,
         tenant_context_1.TenantContext,

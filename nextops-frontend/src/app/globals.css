@@ -30,7 +30,7 @@ body::before {
   inset: 0; /* Виправлено: замість width/height використовуємо inset, це прибере зайвий скрол */
   z-index: -1;
   pointer-events: none; /* Гарантує, що фон не заважатиме клікати по кнопках */
-  background-image: url('/images/postgresql.jpg');
+  background-image: url('/images/4.webp');
   background-position: center center;
   background-repeat: no-repeat;
   background-size: cover;

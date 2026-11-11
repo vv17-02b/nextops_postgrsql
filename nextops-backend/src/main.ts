@@ -63,11 +63,17 @@ async function bootstrap() {
     credentials: true,
   });
 
+  const csrfEnabled = process.env.CSRF_ENABLED !== 'false';
   app.use((request: CsrfRequest, response: Response, next: NextFunction) => {
     const csrfCookie = readCookie(request, CSRF_COOKIE);
     if (!csrfCookie) {
       request.csrfToken = randomBytes(32).toString('base64url');
       response.cookie(CSRF_COOKIE, request.csrfToken, csrfCookieOptions());
+    }
+
+    if (!csrfEnabled) {
+      next();
+      return;
     }
 
     const isUnsafeMethod = !['GET', 'HEAD', 'OPTIONS'].includes(request.method);
@@ -94,12 +100,10 @@ async function bootstrap() {
     next();
   });
 
-  // Роздача статичних файлів (картинки, файли товарів) з папки uploads
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
     prefix: '/uploads',
   });
 
- 
   const prismaService = app.get(PrismaService);
   app.useGlobalInterceptors(new LoggingInterceptor(prismaService));
 

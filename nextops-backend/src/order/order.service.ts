@@ -11,20 +11,19 @@ import { MAX_MINOR_UNITS } from '../common/money';
 
 @Injectable()
 export class OrderService {
-  // Примусове впровадження через @Inject, щоб прибрати undefined на this.prisma
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
-  async create(dto: CreateOrderDto, userId: string): Promise<Order> {
-    const companyId = this.tenantContext.getCompanyId();
-    if (!companyId) throw new ForbiddenException('A business workspace is required.');
+  async create(dto: CreateOrderDto, userId: string, companyId?: string): Promise<Order> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
     return this.prisma.$transaction(async (transaction) => {
       const requestedProductIds = [...new Set(dto.items.map((item) => item.productId))];
       const products = await transaction.product.findMany({
-        where: { id: { in: requestedProductIds }, isActive: true },
+        where: { id: { in: requestedProductIds }, isActive: true, companyId: activeCompanyId },
         select: { id: true, priceMinor: true },
       });
       if (products.length !== requestedProductIds.length) {
@@ -38,7 +37,6 @@ export class OrderService {
           throw new NotFoundException('One or more products are unavailable in this workspace.');
         }
         return {
-          companyId,
           productId: item.productId,
           quantity: item.quantity,
           priceMinor,
@@ -51,7 +49,7 @@ export class OrderService {
 
       return transaction.order.create({
         data: {
-          companyId,
+          companyId: activeCompanyId,
           userId,
           totalAmountMinor,
           currency: dto.currency || 'UAH',
@@ -68,30 +66,36 @@ export class OrderService {
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<Order>> {
+  async findAll(query: PaginationQueryDto, companyId?: string): Promise<PaginatedResponse<Order>> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+
     return paginate(
       query,
-      (skip, take) => this.prisma.order.findMany({
-        skip,
-        take,
-        include: { items: true },
-      }),
-      () => this.prisma.order.count(),
+      (skip, take) =>
+        this.prisma.order.findMany({
+          where,
+          skip,
+          take,
+          include: { items: true },
+        }),
+      () => this.prisma.order.count({ where }),
     );
   }
 
-  async findOne(id: string): Promise<Order> {
-    const item = await this.prisma.order.findUnique({
-      where: { id },
+  async findOne(id: string, companyId?: string): Promise<Order> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const item = await this.prisma.order.findFirst({
+      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
       include: { items: true },
     });
     if (!item) throw new NotFoundException(`Документ не знайдено`);
     return item;
   }
 
-  async update(id: string, dto: UpdateOrderDto): Promise<Order> {
-    await this.findOne(id);
-    
+  async update(id: string, dto: UpdateOrderDto, companyId?: string): Promise<Order> {
+    await this.findOne(id, companyId);
+
     const updateData: Prisma.OrderUpdateInput = {};
 
     if (dto.status) updateData.status = dto.status;
@@ -106,9 +110,8 @@ export class OrderService {
     });
   }
 
-  async remove(id: string): Promise<Order> {
-    await this.findOne(id);
+  async remove(id: string, companyId?: string): Promise<Order> {
+    await this.findOne(id, companyId);
     return this.prisma.order.delete({ where: { id } });
   }
-
 }

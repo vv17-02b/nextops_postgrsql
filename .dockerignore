@@ -1,0 +1,32 @@
+# Залежності (вони інсталюються з нуля всередині контейнера)
+node_modules
+**/node_modules
+
+# Локальні результати збірки фронтенду та бекенду
+.next
+**/.next
+dist
+**/dist
+out
+build
+
+# Логи та тимчасові файли
+*.log
+**/*.log
+.npm
+.yarn/cache
+.yarn/unplugged
+.pnp.*
+
+# Системні файли та Git
+.git
+.gitignore
+.wslconfig
+.vscode
+.idea
+Thumbs.db
+.DS_Store
+
+# Папки локальних завантажень або бекапів
+nextops-backend/uploads
+postgres-backups

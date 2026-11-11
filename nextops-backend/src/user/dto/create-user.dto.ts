@@ -6,10 +6,9 @@ export class CreateUserDto {
   name?: string;
 
   @IsEmail({}, { message: 'Некоректний формат Email' })
-  email: string;
+  email!: string;
 
   @IsString()
   @IsOptional()
   image?: string;
-
 }

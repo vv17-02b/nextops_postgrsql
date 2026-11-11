@@ -7,29 +7,41 @@ import type { ApiHistory } from '@prisma/client';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
 
+interface RequestWithUser extends Request {
+  user: {
+    id: string;
+    email?: string;
+    role?: string;
+    companyId?: string;
+  };
+}
+
 @Controller('apihistory')
 export class ApiHistoryController {
   constructor(
     @Inject(ApiHistoryService)
-    private readonly service: ApiHistoryService
+    private readonly service: ApiHistoryService,
   ) {}
 
   @Post()
   create(
     @Body() dto: CreateApiHistoryDto,
-    @Req() request: Request & { user: { id: string } },
+    @Req() request: RequestWithUser,
   ): Promise<ApiHistory> {
-    return this.service.create(dto, request.user.id);
+    return this.service.create(dto, request.user.id, request.user.companyId);
   }
 
   @Get()
-  findAll(@Query() query: PaginationQueryDto): Promise<PaginatedResponse<ApiHistory>> {
-    return this.service.findAll(query);
+  findAll(
+    @Query() query: PaginationQueryDto,
+    @Req() request: RequestWithUser,
+  ): Promise<PaginatedResponse<ApiHistory>> {
+    return this.service.findAll(query, request.user.companyId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string): Promise<ApiHistory> { 
-    return this.service.findOne(id); 
+  findOne(@Param('id') id: string, @Req() request: RequestWithUser): Promise<ApiHistory> {
+    return this.service.findOne(id, request.user.companyId);
   }
 
   @Patch(':id')
@@ -38,7 +50,7 @@ export class ApiHistoryController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string): Promise<ApiHistory> { 
-    return this.service.remove(id); 
+  remove(@Param('id') id: string): Promise<ApiHistory> {
+    return this.service.remove(id);
   }
 }

@@ -2,7 +2,7 @@ import { IsEmail, IsIn, IsOptional } from 'class-validator';
 
 export class CreateInvitationDto {
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsOptional()
   @IsIn(['ADMIN', 'MEMBER', 'VIEWER'])

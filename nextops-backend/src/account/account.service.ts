@@ -15,36 +15,42 @@ export class AccountService {
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
-  async create(dto: CreateAccountDto): Promise<Account> {
-    const companyId = this.tenantContext.getCompanyId();
-    if (!companyId) throw new ForbiddenException('A business workspace is required.');
-    return this.prisma.account.create({ data: { ...dto, companyId } });
+  async create(dto: CreateAccountDto, companyId?: string): Promise<Account> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
+    return this.prisma.account.create({ data: { ...dto, companyId: activeCompanyId } });
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<Account>> {
+  async findAll(query: PaginationQueryDto, companyId?: string): Promise<PaginatedResponse<Account>> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+
     return paginate(
       query,
-      (skip, take) => this.prisma.account.findMany({ skip, take }),
-      () => this.prisma.account.count(),
+      (skip, take) => this.prisma.account.findMany({ where, skip, take }),
+      () => this.prisma.account.count({ where }),
     );
   }
 
-  async findOne(id: string): Promise<Account> {
-    const item = await this.prisma.account.findUnique({ where: { id } });
+  async findOne(id: string, companyId?: string): Promise<Account> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const item = await this.prisma.account.findFirst({
+      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+    });
     if (!item) throw new NotFoundException(`Документ з ID ${id} не знайдено`);
     return item;
   }
 
-  async update(id: string, dto: UpdateAccountDto): Promise<Account> {
-    await this.findOne(id);
+  async update(id: string, dto: UpdateAccountDto, companyId?: string): Promise<Account> {
+    await this.findOne(id, companyId);
     return this.prisma.account.update({
       where: { id },
       data: dto,
     });
   }
 
-  async remove(id: string): Promise<Account> {
-    await this.findOne(id);
+  async remove(id: string, companyId?: string): Promise<Account> {
+    await this.findOne(id, companyId);
     return this.prisma.account.delete({ where: { id } });
   }
 }

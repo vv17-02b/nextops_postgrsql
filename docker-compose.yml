@@ -33,7 +33,6 @@ services:
     build:
       context: .
       dockerfile: nextops-backend/Dockerfile
-      target: build
     working_dir: /app/nextops-backend
     command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy", "--schema", "src/prisma/schema.prisma"]
     environment:
@@ -47,7 +46,6 @@ services:
     build:
       context: .
       dockerfile: nextops-backend/Dockerfile
-      target: runner
     environment:
       NODE_ENV: production
       PORT: 3001

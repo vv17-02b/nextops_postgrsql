@@ -7,12 +7,19 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
 import type { Order } from '@prisma/client';
-
 import { Idempotent } from '../common/idempotency/idempotency.interceptor';
+
+interface RequestWithUser extends Request {
+  user: {
+    id: string;
+    email?: string;
+    role?: string;
+    companyId?: string;
+  };
+}
 
 @Controller('order')
 export class OrderController {
-  // Примусове впровадження через декоратор @Inject
   constructor(
     @Inject(OrderService)
     private readonly service: OrderService,
@@ -22,29 +29,36 @@ export class OrderController {
   @Idempotent()
   create(
     @Body() dto: CreateOrderDto,
-    @Req() request: Request & { user: { id: string } },
+    @Req() request: RequestWithUser,
   ): Promise<Order> {
-    return this.service.create(dto, request.user.id);
+    return this.service.create(dto, request.user.id, request.user.companyId);
   }
 
   @Get()
-  findAll(@Query() query: PaginationQueryDto): Promise<PaginatedResponse<Order>> {
-    return this.service.findAll(query);
+  findAll(
+    @Query() query: PaginationQueryDto,
+    @Req() request: RequestWithUser,
+  ): Promise<PaginatedResponse<Order>> {
+    return this.service.findAll(query, request.user.companyId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string): Promise<Order> { 
-    return this.service.findOne(id); 
+  findOne(@Param('id') id: string, @Req() request: RequestWithUser): Promise<Order> {
+    return this.service.findOne(id, request.user.companyId);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateOrderDto): Promise<Order> {
-    return this.service.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateOrderDto,
+    @Req() request: RequestWithUser,
+  ): Promise<Order> {
+    return this.service.update(id, dto, request.user.companyId);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string): Promise<Order> { 
-    return this.service.remove(id); 
+  remove(@Param('id') id: string, @Req() request: RequestWithUser): Promise<Order> {
+    return this.service.remove(id, request.user.companyId);
   }
 
   @Patch(':id/pay')

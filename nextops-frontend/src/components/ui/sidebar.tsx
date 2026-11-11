@@ -71,9 +71,12 @@ export default function Sidebar(): React.JSX.Element {
 
       <aside
         id="primary-navigation"
-        className={`w-72 max-w-[85vw] bg-slate-950 text-slate-400 flex flex-col h-screen fixed left-0 top-0 border-r border-slate-800 z-20 font-sans shadow-2xl transition-transform duration-300 lg:translate-x-0 bg-cover bg-center bg-no-repeat ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`w-72 max-w-[85vw] bg-slate-950 text-slate-400 flex 
+          flex-col h-screen fixed left-0 top-0 border-r border-slate-800 z-20 
+          font-sans shadow-2xl transition-transform duration-300 lg:translate-x-0
+          bg-cover bg-center bg-no-repeat ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
-        style={{ backgroundImage: "url('/images/barside.jpg')" }}
+        style={{ backgroundImage: "url('/images/way-3.jpg')" }}
       >
         <div className="flex flex-col h-full w-full bg-slate-950/85">
 

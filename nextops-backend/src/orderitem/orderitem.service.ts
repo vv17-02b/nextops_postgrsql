@@ -17,17 +17,17 @@ export class OrderItemService {
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
-  async create(dto: CreateOrderItemDto): Promise<OrderItem> {
-    const companyId = this.tenantContext.getCompanyId();
-    if (!companyId) throw new ForbiddenException('A business workspace is required.');
+  async create(dto: CreateOrderItemDto, companyId?: string): Promise<OrderItem> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
     return this.prisma.$transaction(async (transaction) => {
       const [order, product] = await Promise.all([
         transaction.order.findFirst({
-          where: { id: dto.orderId, paymentStatus: 'UNPAID' },
+          where: { id: dto.orderId, paymentStatus: 'UNPAID', companyId: activeCompanyId },
           select: { id: true, totalAmountMinor: true },
         }),
         transaction.product.findFirst({
-          where: { id: dto.productId, isActive: true },
+          where: { id: dto.productId, isActive: true, companyId: activeCompanyId },
           select: { id: true, priceMinor: true },
         }),
       ]);
@@ -39,7 +39,7 @@ export class OrderItemService {
         throw new BadRequestException('The order item amount exceeds the supported range.');
       }
       const updatedOrder = await transaction.order.updateMany({
-        where: { id: order.id, paymentStatus: 'UNPAID' },
+        where: { id: order.id, paymentStatus: 'UNPAID', companyId: activeCompanyId },
         data: { totalAmountMinor: { increment: lineTotal } },
       });
       if (updatedOrder.count !== 1) {
@@ -47,7 +47,7 @@ export class OrderItemService {
       }
       return transaction.orderItem.create({
         data: {
-          companyId,
+          companyId: activeCompanyId,
           orderId: order.id,
           productId: product.id,
           quantity: dto.quantity,
@@ -57,28 +57,34 @@ export class OrderItemService {
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<OrderItem>> {
-    if (!this.prisma || !this.prisma.orderItem) {
-      throw new Error('Критична помилка: PrismaService не ініціалізовано.');
-    }
+  async findAll(query: PaginationQueryDto, companyId?: string): Promise<PaginatedResponse<OrderItem>> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+
     return paginate(
       query,
-      (skip, take) => this.prisma.orderItem.findMany({ skip, take }),
-      () => this.prisma.orderItem.count(),
+      (skip, take) => this.prisma.orderItem.findMany({ where, skip, take }),
+      () => this.prisma.orderItem.count({ where }),
     );
   }
 
-  async findOne(id: string): Promise<OrderItem> {
-    const item = await this.prisma.orderItem.findUnique({ where: { id } });
+  async findOne(id: string, companyId?: string): Promise<OrderItem> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const item = await this.prisma.orderItem.findFirst({
+      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+    });
     if (!item) {
       throw new NotFoundException('Елемент замовлення не знайдено');
     }
     return item;
   }
 
-  async update(id: string, dto: UpdateOrderItemDto): Promise<OrderItem> {
+  async update(id: string, dto: UpdateOrderItemDto, companyId?: string): Promise<OrderItem> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
     return this.prisma.$transaction(async (transaction) => {
-      const item = await transaction.orderItem.findUnique({ where: { id } });
+      const item = await transaction.orderItem.findFirst({
+        where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+      });
       if (!item) throw new NotFoundException('Елемент замовлення не знайдено');
       const order = await transaction.order.findFirst({
         where: { id: item.orderId, paymentStatus: 'UNPAID' },
@@ -105,9 +111,12 @@ export class OrderItemService {
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
-  async remove(id: string): Promise<OrderItem> {
+  async remove(id: string, companyId?: string): Promise<OrderItem> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
     return this.prisma.$transaction(async (transaction) => {
-      const item = await transaction.orderItem.findUnique({ where: { id } });
+      const item = await transaction.orderItem.findFirst({
+        where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+      });
       if (!item) throw new NotFoundException('Елемент замовлення не знайдено');
       const order = await transaction.order.findFirst({
         where: { id: item.orderId, paymentStatus: 'UNPAID' },

@@ -14,7 +14,7 @@ function withoutPassword(user: User): SafeUser {
   return safeUser;
 }
 
-@Injectable( )
+@Injectable()
 export class UserService {
   constructor(
     @Inject(PrismaService)
@@ -40,7 +40,7 @@ export class UserService {
         data: {
           userId: newUser.id,
           companyId,
-          monthlyLimitMinor: 1000, // $10.00
+          monthlyLimitMinor: 1000,
           resetDate: new Date(new Date().setMonth(new Date().getMonth() + 1)),
         },
       });
@@ -50,22 +50,34 @@ export class UserService {
     return withoutPassword(user);
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<SafeUser>> {
+  async findAll(query: PaginationQueryDto, companyId?: string): Promise<PaginatedResponse<SafeUser>> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+
     const page = await paginate(
       query,
-      (skip, take) => this.prisma.user.findMany({ skip, take }),
-      () => this.prisma.user.count(),
+      (skip, take) => this.prisma.user.findMany({ where, skip, take }),
+      () => this.prisma.user.count({ where }),
     );
     return { ...page, data: page.data.map(withoutPassword) };
   }
 
-  async findOne(id: string): Promise<SafeUser> {
-    const item = await this.prisma.user.findUnique({ where: { id } });
+  async findOne(id: string, companyId?: string): Promise<SafeUser> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const item = await this.prisma.user.findFirst({
+      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+    });
     if (!item) throw new NotFoundException(`Користувача не знайдено`);
     return withoutPassword(item);
   }
 
-  async update(id: string, dto: UpdateUserDto): Promise<SafeUser> {
+  async update(id: string, dto: UpdateUserDto, companyId?: string): Promise<SafeUser> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (activeCompanyId) {
+      const existing = await this.prisma.user.findFirst({ where: { id, companyId: activeCompanyId } });
+      if (!existing) throw new NotFoundException(`Користувача не знайдено`);
+    }
+
     const updatedUser = await this.prisma.user.update({
       where: { id },
       data: { ...dto, role: undefined, companyId: undefined, passwordHash: undefined },
@@ -73,7 +85,13 @@ export class UserService {
     return withoutPassword(updatedUser);
   }
 
-  async remove(id: string): Promise<SafeUser> {
+  async remove(id: string, companyId?: string): Promise<SafeUser> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (activeCompanyId) {
+      const existing = await this.prisma.user.findFirst({ where: { id, companyId: activeCompanyId } });
+      if (!existing) throw new NotFoundException(`Користувача не знайдено`);
+    }
+
     const deletedUser = await this.prisma.user.delete({ where: { id } });
     return withoutPassword(deletedUser);
   }

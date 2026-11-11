@@ -8,7 +8,6 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
-const core_1 = require("@nestjs/core");
 const prisma_module_1 = require("./prisma/prisma.module");
 const auth_module_1 = require("./auth/auth.module");
 const account_module_1 = require("./account/account.module");
@@ -27,9 +26,7 @@ const verificationtoken_module_1 = require("./verificationtoken/verificationtoke
 const warehouse_module_1 = require("./warehouse/warehouse.module");
 const webhookconfig_module_1 = require("./webhookconfig/webhookconfig.module");
 const health_module_1 = require("./health/health.module");
-const idempotency_module_1 = require("./common/idempotency/idempotency.module");
 const tenant_context_1 = require("./prisma/tenant-context");
-const queue_module_1 = require("./common/queue/queue.module");
 const invitation_module_1 = require("./invitation/invitation.module");
 let AppModule = class AppModule {
     configure(consumer) {
@@ -41,8 +38,6 @@ exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
             prisma_module_1.PrismaModule,
-            idempotency_module_1.IdempotencyModule,
-            queue_module_1.QueueModule,
             invitation_module_1.InvitationModule,
             auth_module_1.AuthModule,
             account_module_1.AccountModule,
@@ -62,12 +57,7 @@ exports.AppModule = AppModule = __decorate([
             webhookconfig_module_1.WebhookConfigModule,
             health_module_1.HealthModule
         ],
-        providers: [
-            {
-                provide: core_1.APP_INTERCEPTOR,
-                useClass: idempotency_module_1.IdempotencyInterceptor,
-            },
-        ],
+        providers: [],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map

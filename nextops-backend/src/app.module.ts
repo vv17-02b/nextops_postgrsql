@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { AccountModule } from './account/account.module';
 import { AgentKnowledgeBaseModule } from './agentknowledgebase/agentknowledgebase.module';
 import { ApiHistoryModule } from './apihistory/apihistory.module';
+import { ApiHistoryInterceptor } from './apihistory/apihistory.interceptor';
 import { CategoryModule } from './category/category.module';
 import { OrderModule } from './order/order.module';
 import { OrderItemModule } from './orderitem/orderitem.module';
@@ -18,22 +19,16 @@ import { VerificationTokenModule } from './verificationtoken/verificationtoken.m
 import { WarehouseModule } from './warehouse/warehouse.module';
 import { WebhookConfigModule } from './webhookconfig/webhookconfig.module';
 import { HealthModule } from './health/health.module';
-
-// === НА МАЙБУТНЄ (Коли повернеш Redis, прибери "//" з початку двох рядків нижче) ===
-// import { IdempotencyModule, IdempotencyInterceptor } from './common/idempotency/idempotency.module';
-// import { QueueModule } from './common/queue/queue.module';
-
+import { IdempotencyModule } from './common/idempotency/idempotency.module';
+import { QueueModule } from './common/queue/queue.module';
 import { TenantContext } from './prisma/tenant-context';
 import { InvitationModule } from './invitation/invitation.module';
 
 @Module({
   imports: [
     PrismaModule,
-    
-    // === НА МАЙБУТНЄ (Прибери "//" з початку цих двох рядків, коли запустиш Redis) ===
-    // IdempotencyModule, 
-    // QueueModule,        
-    
+    IdempotencyModule,
+    QueueModule,
     InvitationModule,
     AuthModule,
     AccountModule,
@@ -51,15 +46,13 @@ import { InvitationModule } from './invitation/invitation.module';
     VerificationTokenModule,
     WarehouseModule,
     WebhookConfigModule,
-    HealthModule
+    HealthModule,
   ],
   providers: [
-    // === НА МАЙБУТНЄ (Зараз цей блок повністю закоментований через "/*" та "*/") ===
-    // Коли з'явиться Redis, просто видали "/*" рядок вище та "*/" рядок нижче, щоб увімкнути інтерцептор.
-    /* {
+    {
       provide: APP_INTERCEPTOR,
-      useClass: IdempotencyInterceptor,
-    }, */
+      useClass: ApiHistoryInterceptor,
+    },
   ],
 })
 export class AppModule implements NestModule {

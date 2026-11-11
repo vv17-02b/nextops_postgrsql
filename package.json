@@ -2,6 +2,10 @@
   "private": true,
   "name": "nextops_postgrsql",
   "version": "1.0.0",
+  "workspaces": [
+    "nextops-backend",
+    "nextops-frontend"
+  ],
   "scripts": {
     "backend": "cd nextops-backend && yarn start:dev",
     "frontend": "cd nextops-frontend && yarn dev -- --turbo",
@@ -11,5 +15,4 @@
     "@types/jest": "^30.0.0",
     "concurrently": "^9.2.1"
   }
-  
 }

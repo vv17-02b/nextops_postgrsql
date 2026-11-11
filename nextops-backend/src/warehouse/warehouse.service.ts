@@ -15,12 +15,12 @@ export class WarehouseService {
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
-  async create(dto: CreateWarehouseDto): Promise<Warehouse> {
-    const companyId = this.tenantContext.getCompanyId();
-    if (!companyId) throw new ForbiddenException('A business workspace is required.');
+  async create(dto: CreateWarehouseDto, companyId?: string): Promise<Warehouse> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
     return this.prisma.warehouse.create({
       data: {
-        companyId,
+        companyId: activeCompanyId,
         productId: dto.productId,
         location: dto.location,
         quantity: dto.quantity ?? 0,
@@ -28,36 +28,44 @@ export class WarehouseService {
     });
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<Warehouse>> {
+  async findAll(query: PaginationQueryDto, companyId?: string): Promise<PaginatedResponse<Warehouse>> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+
     return paginate(
       query,
-      (skip, take) => this.prisma.warehouse.findMany({
-        skip,
-        take,
-        orderBy: { updatedAt: 'desc' },
-      }),
-      () => this.prisma.warehouse.count(),
+      (skip, take) =>
+        this.prisma.warehouse.findMany({
+          where,
+          skip,
+          take,
+          orderBy: { updatedAt: 'desc' },
+        }),
+      () => this.prisma.warehouse.count({ where }),
     );
   }
 
-  async findOne(id: string): Promise<Warehouse> {
-    const item = await this.prisma.warehouse.findUnique({ where: { id } });
+  async findOne(id: string, companyId?: string): Promise<Warehouse> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const item = await this.prisma.warehouse.findFirst({
+      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+    });
     if (!item) {
       throw new NotFoundException(`Запис складу з ID ${id} не знайдено`);
     }
     return item;
   }
 
-  async update(id: string, dto: UpdateWarehouseDto): Promise<Warehouse> {
-    await this.findOne(id);
+  async update(id: string, dto: UpdateWarehouseDto, companyId?: string): Promise<Warehouse> {
+    await this.findOne(id, companyId);
     return this.prisma.warehouse.update({
       where: { id },
       data: dto,
     });
   }
 
-  async remove(id: string): Promise<Warehouse> {
-    await this.findOne(id);
+  async remove(id: string, companyId?: string): Promise<Warehouse> {
+    await this.findOne(id, companyId);
     return this.prisma.warehouse.delete({ where: { id } });
   }
 }

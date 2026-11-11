@@ -15,14 +15,11 @@ export class SessionService {
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
-  async create(dto: CreateSessionDto): Promise<Session> {
-    const companyId = this.tenantContext.getCompanyId();
-    if (!companyId) throw new ForbiddenException('A business workspace is required.');
-    // 🌟 КУЛЕНЕПРОБИВНА ПЕРЕВІРКА ДАТИ: 
-    // Якщо dto.expires порожній, або спроба створити з нього Date повертає Invalid Date —
-    // примусово ставимо легальну дату на 7 днів вперед.
-    let sessionExpires = dto.expires ? new Date(dto.expires) : null;
+  async create(dto: CreateSessionDto, companyId?: string): Promise<Session> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
 
+    let sessionExpires = dto.expires ? new Date(dto.expires) : null;
     if (!sessionExpires || isNaN(sessionExpires.getTime())) {
       sessionExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     }
@@ -30,34 +27,40 @@ export class SessionService {
     return this.prisma.session.create({
       data: {
         sessionToken: dto.sessionToken,
-        companyId,
+        companyId: activeCompanyId,
         userId: dto.userId,
-        expires: sessionExpires, // Тут тепер гарантовано валідний об'єкт Date
+        expires: sessionExpires,
       },
     });
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<Session>> {
+  async findAll(query: PaginationQueryDto, companyId?: string): Promise<PaginatedResponse<Session>> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+
     return paginate(
       query,
-      (skip, take) => this.prisma.session.findMany({ skip, take }),
-      () => this.prisma.session.count(),
+      (skip, take) => this.prisma.session.findMany({ where, skip, take }),
+      () => this.prisma.session.count({ where }),
     );
   }
 
-  async findOne(id: string): Promise<Session> {
-    const item = await this.prisma.session.findUnique({ where: { id } });
+  async findOne(id: string, companyId?: string): Promise<Session> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const item = await this.prisma.session.findFirst({
+      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+    });
     if (!item) throw new NotFoundException(`Сесію з ID ${id} не знайдено`);
     return item;
   }
 
-  async update(id: string, dto: UpdateSessionDto): Promise<Session> {
-    await this.findOne(id);
-    
+  async update(id: string, dto: UpdateSessionDto, companyId?: string): Promise<Session> {
+    await this.findOne(id, companyId);
+
     const updateData: Prisma.SessionUncheckedUpdateInput = {};
     if (dto.sessionToken) updateData.sessionToken = dto.sessionToken;
     if (dto.userId) updateData.userId = dto.userId;
-    
+
     if (dto.expires) {
       const parsedDate = new Date(dto.expires);
       if (!isNaN(parsedDate.getTime())) {
@@ -71,8 +74,8 @@ export class SessionService {
     });
   }
 
-  async remove(id: string): Promise<Session> {
-    await this.findOne(id);
+  async remove(id: string, companyId?: string): Promise<Session> {
+    await this.findOne(id, companyId);
     return this.prisma.session.delete({ where: { id } });
   }
 }

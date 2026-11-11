@@ -4,30 +4,29 @@ import { Type } from 'class-transformer';
 export class ShippingAddressDto {
   @IsString()
   @IsNotEmpty()
-  country: string;
+  country!: string;
 
   @IsString()
   @IsNotEmpty()
-  city: string;
+  city!: string;
 
   @IsString()
   @IsNotEmpty()
-  street: string;
+  street!: string;
 
   @IsString()
   @IsNotEmpty()
-  zipCode: string;
+  zipCode!: string;
 }
 
 export class OrderItemInputDto {
   @IsString()
   @IsNotEmpty()
-  productId: string;
+  productId!: string;
 
   @IsInt()
   @IsPositive()
-  quantity: number;
-
+  quantity!: number;
 }
 
 export class CreateOrderDto {
@@ -46,5 +45,5 @@ export class CreateOrderDto {
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => OrderItemInputDto)
-  items: OrderItemInputDto[];
+  items!: OrderItemInputDto[];
 }

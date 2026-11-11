@@ -40,7 +40,8 @@ export default function ApiHistoryForm({ onSubmit }: FormProps): React.JSX.Eleme
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-white/10 bg-gray-950/40 backdrop-blur-md p-4 font-sans shadow-2xl sm:p-5">
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl 
+    border border-white/10 bg-gray-950/40 backdrop-blur-md p-4 font-sans shadow-2xl sm:p-5">
       <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider font-mono">
         Форма додавання (ApiHistory)
       </h3>

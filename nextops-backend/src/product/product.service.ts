@@ -16,43 +16,48 @@ export class ProductService {
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
-  async create(dto: CreateProductDto): Promise<Product> {
-    const companyId = this.tenantContext.getCompanyId();
-    if (!companyId) throw new ForbiddenException('A business workspace is required.');
+  async create(dto: CreateProductDto, companyId?: string): Promise<Product> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
     const { price, compareAtPrice, ...productData } = dto;
     return this.prisma.product.create({
       data: {
         ...productData,
         priceMinor: toMinorUnits(price),
         compareAtPriceMinor: compareAtPrice == null ? null : toMinorUnits(compareAtPrice),
-        companyId,
+        companyId: activeCompanyId,
       },
     });
   }
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<Product>> {
+  async findAll(query: PaginationQueryDto, companyId?: string): Promise<PaginatedResponse<Product>> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+
     return paginate(
       query,
       (skip, take) => this.prisma.product.findMany({
+        where,
         skip,
         take,
         include: { category: true },
       }),
-      () => this.prisma.product.count(),
+      () => this.prisma.product.count({ where }),
     );
   }
 
-  async findOne(id: string): Promise<Product> {
-    const item = await this.prisma.product.findUnique({ 
-      where: { id },
-      include: { category: true }
+  async findOne(id: string, companyId?: string): Promise<Product> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const item = await this.prisma.product.findFirst({
+      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+      include: { category: true },
     });
     if (!item) throw new NotFoundException(`Товар з ID ${id} не знайдено`);
     return item;
   }
 
-  async update(id: string, dto: UpdateProductDto): Promise<Product> {
-    await this.findOne(id);
+  async update(id: string, dto: UpdateProductDto, companyId?: string): Promise<Product> {
+    await this.findOne(id, companyId);
     const { price, compareAtPrice, ...productData } = dto;
     return this.prisma.product.update({
       where: { id },
@@ -66,8 +71,8 @@ export class ProductService {
     });
   }
 
-  async remove(id: string): Promise<Product> {
-    await this.findOne(id);
+  async remove(id: string, companyId?: string): Promise<Product> {
+    await this.findOne(id, companyId);
     return this.prisma.product.delete({ where: { id } });
   }
 }
