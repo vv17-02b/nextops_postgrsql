@@ -1,0 +1,27 @@
+yourdomain.com, ://yourdomain.com {
+    # Автоматичне стиснення трафіку для швидкого завантаження інтерфейсу
+    encode gzip zstd
+
+    # Заголовки безпеки рівня продакшену
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # Усі запити /api/* та /uploads/* напряму йдуть на NestJS Backend (порт 3001)
+    handle /api/* {
+        reverse_proxy localhost:3001
+    }
+
+    handle /uploads/* {
+        reverse_proxy localhost:3001
+    }
+
+    # Усі інші запити (інтерфейс кабінету) йдуть на Next.js Frontend (порт 3000)
+    handle {
+        reverse_proxy localhost:3000
+    }
+}
