@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     services:
       postgres:
@@ -29,8 +29,8 @@ jobs:
       DATABASE_URL: postgresql://nextops:ci-only-password@localhost:5432/nextops_ci?schema=public
       JWT_SECRET: ci-only-jwt-secret-minimum-32-characters-long
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: yarn

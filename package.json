@@ -14,7 +14,7 @@
     "db:generate": "yarn --cwd nextops-backend prisma:generate",
     "build": "yarn workspaces run build",
     "typecheck": "yarn workspaces run typecheck",
-    "db:migrate": "yarn --cwd nextops-backend prisma migrate deploy"
+    "db:migrate": "yarn --cwd nextops-backend prisma migrate deploy --schema src/prisma/schema.prisma"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
