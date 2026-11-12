@@ -3,24 +3,25 @@ import {
   ExecutionContext,
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   OnModuleDestroy,
   OnModuleInit,
   SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { Request, Response } from 'express';
+import type { Request } from 'express';
 import { createClient } from 'redis';
 
-export const RATE_LIMIT_KEY = 'nextops:rate_limit';
+export const RATE_LIMIT_KEY = 'rateLimitPolicy';
 
-export interface RateLimitOptions {
+export interface RateLimitPolicy {
   limit: number;
   windowSeconds: number;
 }
 
-export const RateLimit = (limit: number, windowSeconds: number): ReturnType<typeof SetMetadata> =>
-  SetMetadata(RATE_LIMIT_KEY, { limit, windowSeconds } satisfies RateLimitOptions);
+export const RateLimit = (limit: number, windowSeconds: number) =>
+  SetMetadata(RATE_LIMIT_KEY, { limit, windowSeconds } satisfies RateLimitPolicy);
 
 @Injectable()
 export class RedisRateLimitGuard implements CanActivate, OnModuleInit, OnModuleDestroy {
@@ -28,7 +29,10 @@ export class RedisRateLimitGuard implements CanActivate, OnModuleInit, OnModuleD
     ? createClient({ url: process.env.REDIS_URL })
     : null;
 
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    @Inject(Reflector)
+    private readonly reflector: Reflector,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     if (this.redis && !this.redis.isOpen) {
@@ -45,54 +49,41 @@ export class RedisRateLimitGuard implements CanActivate, OnModuleInit, OnModuleD
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (context.getType() !== 'http') return true;
 
-    const options = this.reflector.getAllAndOverride<RateLimitOptions | undefined>(RATE_LIMIT_KEY, [
+    const policy = this.reflector.getAllAndOverride<RateLimitPolicy | undefined>(RATE_LIMIT_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
+    if (!policy) return true;
 
-    if (!options || !this.redis?.isReady) {
+    if (!this.redis?.isReady) {
       return true;
     }
 
-    const http = context.switchToHttp();
-    const request = http.getRequest<Request>();
-    const response = http.getResponse<Response>();
+    const request = context.switchToHttp().getRequest<Request>();
+    const forwarded = request.headers['x-forwarded-for'];
+        const clientIp =
+      (Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0]?.trim()) ||
+      request.ip ||
+      'unknown';
 
-    const forwardedFor = request.headers['x-forwarded-for'];
-    const clientIp = Array.isArray(forwardedFor)
-      ? forwardedFor[0]
-      : typeof forwardedFor === 'string'
-        ? forwardedFor.split(',')[0].trim()
-        : request.ip ?? 'unknown';
+    const routeKey = `${request.method}:${request.baseUrl}${request.path}`;
+    const redisKey = `nextops:ratelimit:${routeKey}:${clientIp}`;
 
-    const routePath = request.route?.path ? String(request.route.path) : request.path;
-    const key = `nextops:ratelimit:${request.method}:${routePath}:${clientIp}`;
+    const currentCount = await this.redis.incr(redisKey);
+    if (currentCount === 1) {
+      await this.redis.expire(redisKey, policy.windowSeconds);
+    }
 
-    try {
-      const current = await this.redis.incr(key);
-      if (current === 1) {
-        await this.redis.expire(key, options.windowSeconds);
-      }
-
-      if (current > options.limit) {
-        const ttl = await this.redis.ttl(key);
-        const retryAfter = ttl > 0 ? ttl : options.windowSeconds;
-        response.setHeader('Retry-After', String(retryAfter));
-        throw new HttpException(
-          {
-            statusCode: HttpStatus.TOO_MANY_REQUESTS,
-            message: 'Too many requests. Please try again later.',
-            errorCode: 'RATE_LIMIT_EXCEEDED',
-            retryAfterSeconds: retryAfter,
-          },
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
-      }
-    } catch (error: unknown) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      // If Redis has a transient error, fail open for rate limiting so valid users are not locked out.
+    if (currentCount > policy.limit) {
+      const ttl = await this.redis.ttl(redisKey);
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          errorCode: 'RATE_LIMIT_EXCEEDED',
+          message: `Too many requests. Please try again in ${Math.max(1, ttl)} seconds.`,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     return true;

@@ -39,19 +39,24 @@ const READ_AND_MUTATE_WHERE_OPERATIONS = new Set([
 ]);
 
 function resolveAppDatabaseUrl(): string | undefined {
-  if (process.env.APP_DATABASE_URL) {
-    return process.env.APP_DATABASE_URL;
-  }
-  const baseUrl = process.env.DATABASE_URL;
-  if (!baseUrl) return undefined;
+  const rawUrl = process.env.APP_DATABASE_URL ?? process.env.DATABASE_URL;
+  if (!rawUrl) return undefined;
 
   try {
-    const parsed = new URL(baseUrl);
-    parsed.username = process.env.APP_DB_USER ?? 'nextops_app';
-    parsed.password = process.env.APP_DB_PASSWORD ?? 'nextops_app_local_password';
+    const parsed = new URL(rawUrl);
+    if (!process.env.APP_DATABASE_URL) {
+      parsed.username = process.env.APP_DB_USER ?? 'nextops_app';
+      parsed.password = process.env.APP_DB_PASSWORD ?? 'nextops_app_local_password';
+    }
+    if (!parsed.searchParams.has('connection_limit')) {
+      parsed.searchParams.set('connection_limit', '25');
+    }
+    if (!parsed.searchParams.has('pool_timeout')) {
+      parsed.searchParams.set('pool_timeout', '20');
+    }
     return parsed.toString();
   } catch {
-    return baseUrl;
+    return rawUrl;
   }
 }
 
@@ -352,6 +357,7 @@ function wrapTenantClient<T extends object>(
                   await applyRlsSessionConfig(txClient, tenantContext);
                   return await executeScopedOperation(txClient);
                 },
+                { maxWait: 10000, timeout: 15000 },
               ]);
             }
 
