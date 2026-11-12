@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject, MethodNotAllowedException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, MethodNotAllowedException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
 import { CreateApiHistoryDto } from './dto/create-apihistory.dto';
@@ -6,15 +6,36 @@ import { UpdateApiHistoryDto } from './dto/update-apihistory.dto';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
 import type { ApiHistory } from '@prisma/client';
+import { createClient } from 'redis';
 
 @Injectable()
-export class ApiHistoryService {
+export class ApiHistoryService implements OnModuleInit, OnModuleDestroy {
+  private readonly redis = process.env.REDIS_URL
+    ? createClient({ url: process.env.REDIS_URL })
+    : null;
+
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
     @Inject(TenantContext)
     private readonly tenantContext: TenantContext,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    if (this.redis && !this.redis.isOpen) {
+      await this.redis.connect().catch(() => undefined);
+    }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.redis?.isOpen) {
+      await this.redis.quit().catch(() => undefined);
+    }
+  }
+
+  private getCountCacheKey(companyId?: string | null): string {
+    return `nextops:apihistory:count:${companyId ?? 'global'}`;
+  }
 
   async create(dto: CreateApiHistoryDto, userId: string, companyId?: string): Promise<ApiHistory> {
     let activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
@@ -30,7 +51,7 @@ export class ApiHistoryService {
       activeCompanyId = user.companyId;
     }
 
-    return this.prisma.apiHistory.create({
+    const created = await this.prisma.apiHistory.create({
       data: {
         userId,
         companyId: activeCompanyId,
@@ -40,6 +61,12 @@ export class ApiHistoryService {
         durationMs: dto.durationMs,
       },
     });
+
+    if (this.redis?.isReady) {
+      await this.redis.del(this.getCountCacheKey(activeCompanyId)).catch(() => undefined);
+    }
+
+    return created;
   }
 
   async findAll(
@@ -58,7 +85,18 @@ export class ApiHistoryService {
           take,
           orderBy: { createdAt: 'desc' },
         }),
-      () => this.prisma.apiHistory.count({ where }),
+      async () => {
+        const cacheKey = this.getCountCacheKey(activeCompanyId);
+        if (this.redis?.isReady) {
+          const cached = await this.redis.get(cacheKey).catch(() => null);
+          if (cached !== null) return Number(cached);
+        }
+        const total = await this.prisma.apiHistory.count({ where });
+        if (this.redis?.isReady) {
+          await this.redis.set(cacheKey, String(total), { EX: 30 }).catch(() => undefined);
+        }
+        return total;
+      },
     );
   }
 

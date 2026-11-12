@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -8,19 +8,47 @@ import { paginate, type PaginatedResponse } from '../common/pagination/paginate'
 import { Prisma } from '@prisma/client';
 import type { Order } from '@prisma/client';
 import { MAX_MINOR_UNITS } from '../common/money';
+import { createClient } from 'redis';
 
 @Injectable()
-export class OrderService {
+export class OrderService implements OnModuleInit, OnModuleDestroy {
+  private readonly redis = process.env.REDIS_URL
+    ? createClient({ url: process.env.REDIS_URL })
+    : null;
+
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
-    @Inject(TenantContext) private readonly tenantContext: TenantContext,
+    @Inject(TenantContext)
+    private readonly tenantContext: TenantContext,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    if (this.redis && !this.redis.isOpen) {
+      await this.redis.connect().catch(() => undefined);
+    }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.redis?.isOpen) {
+      await this.redis.quit().catch(() => undefined);
+    }
+  }
+
+  private getCountCacheKey(companyId?: string | null): string {
+    return `nextops:orders:count:${companyId ?? 'global'}`;
+  }
+
+  private async invalidateCountCache(companyId?: string | null): Promise<void> {
+    if (!this.redis?.isReady) return;
+    await this.redis.del(this.getCountCacheKey(companyId)).catch(() => undefined);
+  }
 
   async create(dto: CreateOrderDto, userId: string, companyId?: string): Promise<Order> {
     const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
     if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
-    return this.prisma.$transaction(async (transaction) => {
+
+    const createdOrder = await this.prisma.$transaction(async (transaction) => {
       const requestedProductIds = [...new Set(dto.items.map((item) => item.productId))];
       const products = await transaction.product.findMany({
         where: { id: { in: requestedProductIds }, isActive: true, companyId: activeCompanyId },
@@ -64,6 +92,9 @@ export class OrderService {
         include: { items: true },
       });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    await this.invalidateCountCache(activeCompanyId);
+    return createdOrder;
   }
 
   async findAll(query: PaginationQueryDto, companyId?: string): Promise<PaginatedResponse<Order>> {
@@ -77,9 +108,21 @@ export class OrderService {
           where,
           skip,
           take,
+          orderBy: { createdAt: 'desc' },
           include: { items: true },
         }),
-      () => this.prisma.order.count({ where }),
+      async () => {
+        const cacheKey = this.getCountCacheKey(activeCompanyId);
+        if (this.redis?.isReady) {
+          const cached = await this.redis.get(cacheKey).catch(() => null);
+          if (cached !== null) return Number(cached);
+        }
+        const total = await this.prisma.order.count({ where });
+        if (this.redis?.isReady) {
+          await this.redis.set(cacheKey, String(total), { EX: 60 }).catch(() => undefined);
+        }
+        return total;
+      },
     );
   }
 
@@ -111,7 +154,9 @@ export class OrderService {
   }
 
   async remove(id: string, companyId?: string): Promise<Order> {
-    await this.findOne(id, companyId);
-    return this.prisma.order.delete({ where: { id } });
+    const existing = await this.findOne(id, companyId);
+    const deleted = await this.prisma.order.delete({ where: { id } });
+    await this.invalidateCountCache(existing.companyId);
+    return deleted;
   }
 }
