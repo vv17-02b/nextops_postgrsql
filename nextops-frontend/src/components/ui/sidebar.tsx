@@ -21,6 +21,7 @@ interface SidebarLink {
 
 const links: SidebarLink[] = [
   { name: 'Billing', href: '/billing', icon: CreditCard },
+  { name: 'AuditLog', href: '/audit', icon: ShieldCheck },
   { name: 'Account', href: '/account', icon: Key },
   { name: 'AgentKnowledgeBase', href: '/agentknowledgebase', icon: Cpu },
   { name: 'ApiHistory', href: '/apihistory', icon: Activity },

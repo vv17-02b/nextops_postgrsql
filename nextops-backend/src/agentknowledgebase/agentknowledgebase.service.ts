@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException, Inject, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
+import { AuditService } from '../audit/audit.service';
 import { CreateAgentKnowledgeBaseDto } from './dto/create-agentknowledgebase.dto';
 import { UpdateAgentKnowledgeBaseDto } from './dto/update-agentknowledgebase.dto';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
