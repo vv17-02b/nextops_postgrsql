@@ -23,7 +23,13 @@ export class TenantContext implements NestMiddleware {
     const store = this.storage.getStore();
     if (store) {
       store.companyId = companyId;
+      return;
     }
+    this.storage.enterWith({ companyId, bypassTenant: false });
+  }
+
+  runWithCompany<T>(companyId: string, fn: () => T): T {
+    return this.storage.run({ companyId, bypassTenant: false }, fn);
   }
 
   isTenantBypassed(): boolean {

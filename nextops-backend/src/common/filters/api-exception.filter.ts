@@ -80,9 +80,18 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const errors = Array.isArray(responseObject.errors)
       ? responseObject.errors as ApiError[]
       : [];
+    const rawExceptionMessage =
+      typeof responseObject.message === 'string'
+        ? responseObject.message
+        : typeof exceptionResponse === 'string'
+          ? exceptionResponse
+          : undefined;
+
     const message = errors.length > 0
       ? 'Request validation failed.'
-      : getSafeMessage(statusCode);
+      : (statusCode === HttpStatus.FORBIDDEN || statusCode === HttpStatus.PAYMENT_REQUIRED) && rawExceptionMessage
+        ? rawExceptionMessage
+        : getSafeMessage(statusCode);
     const errorCode = typeof responseObject.errorCode === 'string'
       ? responseObject.errorCode
       : prismaCode

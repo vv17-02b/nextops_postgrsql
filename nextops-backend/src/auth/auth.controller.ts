@@ -28,16 +28,37 @@ export class AuthController {
     @Inject(TokenRevocationService)
     private readonly tokenRevocation: TokenRevocationService,
     private readonly emailQueue: EmailQueueService,
-  ) { }
+  ) {}
+
+  private async issueSessionCookies(
+    response: Response,
+    user: { id: string; email: string | null; role: string },
+  ): Promise<void> {
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      epoch: await this.tokenRevocation.getSessionEpoch(user.id),
+    };
+    const token = this.jwtService.sign(payload);
+    const csrfToken = randomBytes(32).toString('base64url');
+    response.cookie(SESSION_COOKIE, token, sessionCookieOptions());
+    response.cookie(CSRF_COOKIE, csrfToken, csrfCookieOptions());
+  }
 
   @Post('register')
   @Public()
   @RateLimit(5, 900)
-  async register(@Body() dto: RegisterCredentialsDto, @Req() request: Request): Promise<{
+  async register(
+    @Body() dto: RegisterCredentialsDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<{
     success: true;
     message: string;
     userId: string;
     companyId: string;
+    user: { id: string; email: string | null; role: string; companyId: string };
   }> {
     const email = dto.email.trim().toLowerCase();
     const exists = await this.prisma.runSystemQuery(() =>
@@ -46,10 +67,14 @@ export class AuthController {
     if (exists) throw new ConflictException('An account with this email already exists.');
 
     const passwordHash = await hashPassword(dto.password);
-    const result = await this.prisma.runSystemQuery(() =>
+    const created = await this.prisma.runSystemQuery(() =>
       this.prisma.$transaction(async (tx) => {
         const company = await tx.company.create({
-          data: { name: `${email.split('@')}'s workspace` },
+          data: {
+            name: `${email.split('@')} Workspace`,
+            planCode: 'FREE',
+            subscriptionStatus: 'TRIALING',
+          },
         });
         const user = await tx.user.create({
           data: {
@@ -70,16 +95,34 @@ export class AuthController {
         });
 
         return {
-          success: true as const,
-          message: 'Business workspace created. Sign in to continue.',
           userId: user.id,
           companyId: company.id,
+          email: user.email,
+          role: user.role,
         };
       }),
     );
-    this.tenantContext.setCompanyId(result.companyId);
-    (request as Request & { user?: { id: string } }).user = { id: result.userId };
-    return result;
+
+    this.tenantContext.setCompanyId(created.companyId);
+    (request as Request & { user?: { id: string } }).user = { id: created.userId };
+    await this.issueSessionCookies(response, {
+      id: created.userId,
+      email: created.email,
+      role: created.role,
+    });
+
+    return {
+      success: true,
+      message: 'Business workspace created.',
+      userId: created.userId,
+      companyId: created.companyId,
+      user: {
+        id: created.userId,
+        email: created.email,
+        role: created.role,
+        companyId: created.companyId,
+      },
+    };
   }
 
   @Post('login')
@@ -114,14 +157,11 @@ export class AuthController {
       });
     }
 
-    const payload = {
-      sub: user.id,
+    await this.issueSessionCookies(response, {
+      id: user.id,
       email: user.email,
       role: user.role,
-      epoch: await this.tokenRevocation.getSessionEpoch(user.id),
-    };
-    const token = this.jwtService.sign(payload);
-    response.cookie(SESSION_COOKIE, token, sessionCookieOptions());
+    });
 
     return {
       success: true,
@@ -133,6 +173,7 @@ export class AuthController {
       },
     };
   }
+
   @Get('csrf')
   @Public()
   csrf(
@@ -173,10 +214,6 @@ export class AuthController {
     return { success: true };
   }
 
-  /**
-   * Requests a password reset. Always answers success to avoid account
-   * enumeration; the reset link is only emailed when the account exists.
-   */
   @Post('forgot-password')
   @Public()
   @RateLimit(5, 900)
@@ -219,7 +256,6 @@ export class AuthController {
     return { success: true, message: 'If the account exists, a reset link has been sent.' };
   }
 
-  /** Consumes a reset token hash, sets the new password and revokes all sessions. */
   @Post('reset-password')
   @Public()
   @RateLimit(10, 900)
@@ -251,8 +287,6 @@ export class AuthController {
 
     return { success: true };
   }
-
-  /** Immediately invalidates every session token ever issued for this user. */
   @Post('logout-all')
   async logoutAll(
     @Req() request: Request & { user: { id: string } },

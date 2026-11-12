@@ -1,9 +1,9 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './auth/auth.module';
 import { BillingModule } from './billing/billing.module';
 import { AuditModule } from './audit/audit.module';
-import { AuthModule } from './auth/auth.module';
 import { AccountModule } from './account/account.module';
 import { AgentKnowledgeBaseModule } from './agentknowledgebase/agentknowledgebase.module';
 import { ApiHistoryModule } from './apihistory/apihistory.module';
@@ -29,12 +29,12 @@ import { InvitationModule } from './invitation/invitation.module';
 @Module({
   imports: [
     PrismaModule,
+    AuthModule,
     BillingModule,
     AuditModule,
     IdempotencyModule,
     QueueModule,
     InvitationModule,
-    AuthModule,
     AccountModule,
     AgentKnowledgeBaseModule,
     ApiHistoryModule,
