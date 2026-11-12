@@ -7,6 +7,7 @@ import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
 import { toMinorUnits } from '../common/money';
 import { PlanEnforcementService } from '../billing/plan-enforcement.service';
+import { AuditService } from '../audit/audit.service';
 import type { Product } from '@prisma/client';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class ProductService {
     private readonly prisma: PrismaService,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(PlanEnforcementService) private readonly planEnforcement: PlanEnforcementService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   async create(dto: CreateProductDto, companyId?: string): Promise<Product> {
@@ -62,18 +64,35 @@ export class ProductService {
   }
 
   async update(id: string, dto: UpdateProductDto, companyId?: string): Promise<Product> {
-    await this.findOne(id, companyId);
+    const existing = await this.findOne(id, companyId);
     const { price, compareAtPrice, ...productData } = dto;
-    return this.prisma.product.update({
+    const nextPriceMinor = price === undefined ? undefined : toMinorUnits(price);
+
+    const updated = await this.prisma.product.update({
       where: { id },
       data: {
         ...productData,
-        ...(price === undefined ? {} : { priceMinor: toMinorUnits(price) }),
+        ...(nextPriceMinor === undefined ? {} : { priceMinor: nextPriceMinor }),
         ...(compareAtPrice === undefined
           ? {}
           : { compareAtPriceMinor: compareAtPrice === null ? null : toMinorUnits(compareAtPrice) }),
       },
     });
+
+    if (nextPriceMinor !== undefined && nextPriceMinor !== existing.priceMinor) {
+      await this.audit.record({
+        companyId: existing.companyId,
+        action: 'PRODUCT_PRICE_UPDATED',
+        entityType: 'Product',
+        entityId: id,
+        metadata: {
+          previousPriceMinor: existing.priceMinor,
+          newPriceMinor: nextPriceMinor,
+        },
+      });
+    }
+
+    return updated;
   }
 
   async remove(id: string, companyId?: string): Promise<Product> {

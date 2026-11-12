@@ -6,6 +6,7 @@ const TENANT_MODELS = new Set([
   'account',
   'agentKnowledgeBase',
   'apiHistory',
+  'auditLog',
   'category',
   'invitation',
   'order',

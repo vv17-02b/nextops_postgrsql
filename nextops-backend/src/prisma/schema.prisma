@@ -36,6 +36,7 @@ model Company {
   agentKnowledgeBases AgentKnowledgeBase[]
   apiHistories        ApiHistory[]
   userAiBudgets       UserAiBudget[]
+  auditLogs           AuditLog[]
 }
 
 model Plan {
@@ -255,6 +256,7 @@ model Session {
   @@unique([id, companyId])
   @@index([companyId, userId])
 }
+
 model User {
   id            String         @id @default(uuid())
   companyId     String
@@ -356,4 +358,21 @@ model Invitation {
   @@unique([id, companyId])
   @@unique([companyId, email])
   @@index([companyId, expiresAt])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  companyId   String
+  actorUserId String?
+  actorEmail  String?
+  action      String
+  entityType  String
+  entityId    String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt(sort: Desc)])
+  @@index([companyId, entityType, entityId])
 }

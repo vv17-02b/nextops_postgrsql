@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
+import { AuditService } from '../audit/audit.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
@@ -23,6 +24,8 @@ export class OrderService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     @Inject(TenantContext)
     private readonly tenantContext: TenantContext,
+    @Inject(AuditService)
+    private readonly audit: AuditService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -139,7 +142,7 @@ export class OrderService implements OnModuleInit, OnModuleDestroy {
   }
 
   async update(id: string, dto: UpdateOrderDto, companyId?: string, userRole?: string): Promise<Order> {
-    await this.findOne(id, companyId);
+    const existing = await this.findOne(id, companyId);
 
     const updateData: Prisma.OrderUpdateInput = {};
 
@@ -154,11 +157,27 @@ export class OrderService implements OnModuleInit, OnModuleDestroy {
       updateData.shippingAddress = dto.shippingAddress as unknown as Prisma.InputJsonValue;
     }
 
-    return this.prisma.order.update({
+    const updated = await this.prisma.order.update({
       where: { id },
       data: updateData,
       include: { items: true },
     });
+
+    if (dto.status && dto.status !== existing.status) {
+      await this.audit.record({
+        companyId: existing.companyId,
+        action: 'ORDER_STATUS_UPDATED',
+        entityType: 'Order',
+        entityId: id,
+        metadata: {
+          previousStatus: existing.status,
+          newStatus: dto.status,
+          actorRole: userRole ?? 'UNKNOWN',
+        },
+      });
+    }
+
+    return updated;
   }
 
   async remove(id: string, companyId?: string): Promise<Order> {
