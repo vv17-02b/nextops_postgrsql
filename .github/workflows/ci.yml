@@ -10,8 +10,24 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: nextops
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: nextops_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U nextops -d nextops_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     env:
-      DATABASE_URL: postgresql://nextops:ci-only@localhost:5432/nextops?schema=public
+      DATABASE_URL: postgresql://nextops:ci-only-password@localhost:5432/nextops_ci?schema=public
+      JWT_SECRET: ci-only-jwt-secret-minimum-32-characters-long
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,5 +38,7 @@ jobs:
       - run: yarn install --immutable
       - run: yarn db:validate
       - run: yarn db:generate
+      - run: yarn db:migrate
       - run: yarn build
       - run: yarn typecheck
+      - run: yarn --cwd nextops-backend test

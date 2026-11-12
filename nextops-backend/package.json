@@ -10,7 +10,7 @@
     "prisma:generate": "prisma generate --schema src/prisma/schema.prisma",
     "prisma:validate": "prisma validate --schema src/prisma/schema.prisma",
     "prisma:migrate:deploy": "prisma migrate deploy --schema src/prisma/schema.prisma",
-    "test": "jest"
+    "test": "tsx --test src/**/*.spec.ts"
   },
   "dependencies": {
     "@nestjs/bullmq": "^12.0.0",

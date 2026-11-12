@@ -49,9 +49,10 @@ model Account {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId, companyId], references: [id, companyId], onDelete: Cascade)
 
-  @@unique([provider, providerAccountId])
+  @@unique([companyId, provider, providerAccountId])
   @@unique([id, companyId])
   @@index([companyId, userId])
+
 }
 
 model AgentKnowledgeBase {
@@ -73,7 +74,7 @@ model AgentKnowledgeBase {
 
 model ApiHistory {
   id           String   @id @default(uuid())
-  companyId    String?
+  companyId    String
   userId       String?
   endpoint     String
   method       String
@@ -83,13 +84,14 @@ model ApiHistory {
   durationMs   Int
   createdAt    DateTime @default(now())
 
-  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user    User?    @relation(fields: [userId, companyId], references: [id, companyId], onDelete: SetNull)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId, companyId], references: [id, companyId], onDelete: SetNull)
 
   @@unique([id, companyId])
   @@index([companyId, createdAt(sort: Desc)])
   @@index([companyId, statusCode, createdAt(sort: Desc)])
 }
+
 
 model Category {
   id          String     @id @default(uuid())
