@@ -99,17 +99,19 @@ export class ApiHistoryInterceptor implements NestInterceptor {
       return;
     }
 
-    void this.prisma.apiHistory
-      .create({
-        data: {
-          userId,
-          companyId,
-          endpoint: endpoint.slice(0, 2048),
-          method: method.slice(0, 16),
-          statusCode,
-          durationMs: Math.max(0, Math.round(durationMs)),
-        },
-      })
+    void this.prisma
+      .runSystemQuery(() =>
+        this.prisma.apiHistory.create({
+          data: {
+            userId,
+            companyId,
+            endpoint: endpoint.slice(0, 2048),
+            method: method.slice(0, 16),
+            statusCode,
+            durationMs: Math.max(0, Math.round(durationMs)),
+          },
+        }),
+      )
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : 'Unknown audit write error';
         this.logger.warn(`Failed to write ApiHistory audit log: ${message}`);

@@ -52,10 +52,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { id: true, email: true, companyId: true, role: true },
-    });
+    const user = await this.prisma.runSystemQuery(() =>
+      this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { id: true, email: true, companyId: true, role: true },
+      }),
+    );
     if (!user) throw new UnauthorizedException('The account is no longer available.');
     if (!user.companyId) {
       throw new ForbiddenException('This account is not assigned to a business workspace.');

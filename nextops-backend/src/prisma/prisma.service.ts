@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { TenantContext } from './tenant-context';
 
@@ -19,6 +19,22 @@ const TENANT_MODELS = new Set([
   'verificationToken',
   'warehouse',
   'webhookConfig',
+]);
+
+const READ_AND_MUTATE_WHERE_OPERATIONS = new Set([
+  'findUnique',
+  'findUniqueOrThrow',
+  'findFirst',
+  'findFirstOrThrow',
+  'findMany',
+  'count',
+  'aggregate',
+  'groupBy',
+  'update',
+  'updateMany',
+  'delete',
+  'deleteMany',
+  'upsert',
 ]);
 
 function delegateName(model: string): string {
@@ -172,7 +188,6 @@ function addTenantToData(data: unknown, companyId: string, model?: string): unkn
 
   return data;
 }
-
 function wrapTenantClient<T extends object>(client: T, tenantContext: TenantContext): T {
   return new Proxy(client, {
     get(target, property, receiver) {
@@ -188,6 +203,10 @@ function wrapTenantClient<T extends object>(client: T, tenantContext: TenantCont
               },
               ...options,
             ]);
+          }
+
+          if (!tenantContext.isTenantBypassed() && !tenantContext.getCompanyId()) {
+            throw new ForbiddenException('Batch transactions require an active business workspace.');
           }
 
           return Reflect.apply(value, target, [input, ...options]);
@@ -206,14 +225,26 @@ function wrapTenantClient<T extends object>(client: T, tenantContext: TenantCont
           }
 
           return async (...parameters: unknown[]) => {
-            const companyId = tenantContext.getCompanyId();
-            if (!companyId || !parameters[0] || typeof parameters[0] !== 'object') {
+            if (tenantContext.isTenantBypassed()) {
               return await Reflect.apply(method, delegate, parameters);
             }
 
-            const args = { ...(parameters[0] as Record<string, unknown>) };
-            if (['findUnique', 'findUniqueOrThrow', 'findFirst', 'findFirstOrThrow', 'findMany', 'count', 'aggregate', 'groupBy', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert'].includes(operation)) {
+            const companyId = tenantContext.getCompanyId();
+            if (!companyId) {
+              throw new ForbiddenException(`Access to ${property}.${operation} requires an active business workspace.`);
+            }
+
+            const rawFirstParam = parameters[0];
+            if (rawFirstParam !== undefined && (typeof rawFirstParam !== 'object' || rawFirstParam === null)) {
+              throw new BadRequestException(`Invalid query arguments for ${property}.${operation}.`);
+            }
+
+            const args = rawFirstParam ? { ...(rawFirstParam as Record<string, unknown>) } : {};
+
+            if (READ_AND_MUTATE_WHERE_OPERATIONS.has(operation)) {
               args.where = addTenantToWhere(args.where, companyId);
+            } else if (!['create', 'createMany', 'createManyAndReturn'].includes(operation)) {
+              throw new ForbiddenException(`Operation ${property}.${operation} is not permitted in tenant-scoped mode.`);
             }
 
             if (operation === 'create' || operation === 'createMany' || operation === 'createManyAndReturn') {
@@ -248,9 +279,16 @@ function wrapTenantClient<T extends object>(client: T, tenantContext: TenantCont
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  private readonly tenantContext: TenantContext;
+
   constructor(@Inject(TenantContext) tenantContext: TenantContext) {
     super();
+    this.tenantContext = tenantContext;
     return wrapTenantClient(this, tenantContext);
+  }
+
+  runSystemQuery<T>(fn: () => T): T {
+    return this.tenantContext.runWithoutTenant(fn);
   }
 
   async onModuleInit(): Promise<void> {

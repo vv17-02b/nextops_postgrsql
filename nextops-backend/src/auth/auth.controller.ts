@@ -17,19 +17,17 @@ const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 @Controller('auth')
 export class AuthController {
-   constructor(
-    
+  constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
     @Inject(JwtService)
     private readonly jwtService: JwtService,
     @Inject(TenantContext)
     private readonly tenantContext: TenantContext,
-    @Inject(TokenRevocationService) 
+    @Inject(TokenRevocationService)
     private readonly tokenRevocation: TokenRevocationService,
     private readonly emailQueue: EmailQueueService,
-  ) {}
-
+  ) { }
 
   @Post('register')
   @Public()
@@ -40,39 +38,43 @@ export class AuthController {
     companyId: string;
   }> {
     const email = dto.email.trim().toLowerCase();
-    const exists = await this.prisma.user.findUnique({ where: { email } });
+    const exists = await this.prisma.runSystemQuery(() =>
+      this.prisma.user.findUnique({ where: { email } }),
+    );
     if (exists) throw new ConflictException('An account with this email already exists.');
 
     const passwordHash = await hashPassword(dto.password);
-    const result = await this.prisma.$transaction(async (tx) => {
-      const company = await tx.company.create({
-        data: { name: `${email.split('@')[0]}'s workspace` },
-      });
-      const user = await tx.user.create({
-        data: {
-          email,
-          passwordHash,
-          role: 'OWNER',
-          companyId: company.id,
-        },
-      });
+    const result = await this.prisma.runSystemQuery(() =>
+      this.prisma.$transaction(async (tx) => {
+        const company = await tx.company.create({
+          data: { name: `${email.split('@')[0]}'s workspace` },
+        });
+        const user = await tx.user.create({
+          data: {
+            email,
+            passwordHash,
+            role: 'OWNER',
+            companyId: company.id,
+          },
+        });
 
-      await tx.userAiBudget.create({
-        data: {
+        await tx.userAiBudget.create({
+          data: {
+            userId: user.id,
+            companyId: company.id,
+            monthlyLimitMinor: 1000, // $10.00
+            resetDate: new Date(new Date().setMonth(new Date().getMonth() + 1)),
+          },
+        });
+
+        return {
+          success: true as const,
+          message: 'Business workspace created. Sign in to continue.',
           userId: user.id,
           companyId: company.id,
-          monthlyLimitMinor: 1000, // $10.00
-          resetDate: new Date(new Date().setMonth(new Date().getMonth() + 1)),
-        },
-      });
-
-      return {
-        success: true as const,
-        message: 'Business workspace created. Sign in to continue.',
-        userId: user.id,
-        companyId: company.id,
-      };
-    });
+        };
+      }),
+    );
     this.tenantContext.setCompanyId(result.companyId);
     (request as Request & { user?: { id: string } }).user = { id: result.userId };
     return result;
@@ -85,7 +87,9 @@ export class AuthController {
     user: { id: string; email: string | null; role: string; companyId: string };
   }> {
     const email = dto.email.trim().toLowerCase();
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.runSystemQuery(() =>
+      this.prisma.user.findUnique({ where: { email } }),
+    );
     if (!user?.passwordHash) {
       throw new UnauthorizedException('Invalid email or password.');
     }
@@ -126,7 +130,6 @@ export class AuthController {
       },
     };
   }
-
   @Get('csrf')
   @Public()
   csrf(
@@ -175,18 +178,21 @@ export class AuthController {
   @Public()
   async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<{ success: true; message: string }> {
     const email = dto.email.trim().toLowerCase();
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) {
+    const user = await this.prisma.runSystemQuery(() =>
+      this.prisma.user.findUnique({ where: { email } }),
+    );
+    if (!user || !user.companyId) {
       return { success: true, message: 'If the account exists, a reset link has been sent.' };
     }
 
+    this.tenantContext.setCompanyId(user.companyId);
     const token = randomBytes(32).toString('base64url');
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const expires = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
 
     await this.prisma.verificationToken.create({
       data: {
-        companyId: user.companyId!,
+        companyId: user.companyId,
         identifier: user.email ?? email,
         token: tokenHash,
         expires,
@@ -196,13 +202,10 @@ export class AuthController {
     const resetUrl = new URL('/reset-password', process.env.FRONTEND_URL ?? 'http://localhost:3000');
     resetUrl.searchParams.set('token', token);
 
-    // Delivery uses the invitation email job when SMTP/Redis are configured.
-    // The worker treats `invitationUrl` links as password-reset links only if
-    // companyName starts with 'PASSWORD_RESET'.
     try {
       await this.emailQueue.enqueueInvitation({
         email,
-        companyName: `PASSWORD_RESET:${user.companyId ?? ''}`,
+        companyName: `PASSWORD_RESET:${user.companyId}`,
         invitationUrl: resetUrl.toString(),
       });
     } catch {
@@ -217,11 +220,14 @@ export class AuthController {
   @Public()
   async resetPassword(@Body() dto: ResetPasswordDto): Promise<{ success: true }> {
     const tokenHash = createHash('sha256').update(dto.token).digest('hex');
-    const record = await this.prisma.verificationToken.findUnique({ where: { token: tokenHash } });
+    const record = await this.prisma.runSystemQuery(() =>
+      this.prisma.verificationToken.findUnique({ where: { token: tokenHash } }),
+    );
     if (!record || record.expires.getTime() < Date.now()) {
       throw new UnauthorizedException('This password reset link is invalid or has expired.');
     }
 
+    this.tenantContext.setCompanyId(record.companyId);
     const user = await this.prisma.user.findFirst({
       where: { email: record.identifier },
       select: { id: true },
@@ -236,7 +242,6 @@ export class AuthController {
       this.prisma.verificationToken.delete({ where: { token: tokenHash } }),
     ]);
 
-    // The compromised/old password must not keep old sessions alive.
     await this.tokenRevocation.bumpSessionEpoch(user.id);
 
     return { success: true };

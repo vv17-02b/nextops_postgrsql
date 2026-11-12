@@ -4,6 +4,7 @@ import type { NextFunction, Request, Response } from 'express';
 
 interface TenantStore {
   companyId: string | null;
+  bypassTenant: boolean;
 }
 
 @Injectable()
@@ -11,7 +12,7 @@ export class TenantContext implements NestMiddleware {
   private readonly storage = new AsyncLocalStorage<TenantStore>();
 
   use(_request: Request, _response: Response, next: NextFunction): void {
-    this.storage.run({ companyId: null }, next);
+    this.storage.run({ companyId: null, bypassTenant: false }, next);
   }
 
   getCompanyId(): string | null {
@@ -23,5 +24,17 @@ export class TenantContext implements NestMiddleware {
     if (store) {
       store.companyId = companyId;
     }
+  }
+
+  isTenantBypassed(): boolean {
+    return this.storage.getStore()?.bypassTenant === true;
+  }
+
+  runWithoutTenant<T>(fn: () => T): T {
+    const currentCompanyId = this.getCompanyId();
+    return this.storage.run(
+      { companyId: currentCompanyId, bypassTenant: true },
+      fn,
+    );
   }
 }

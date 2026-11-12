@@ -26,7 +26,9 @@ export class InvitationService {
     if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
 
     const email = dto.email.trim().toLowerCase();
-    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    const existingUser = await this.prisma.runSystemQuery(() =>
+      this.prisma.user.findUnique({ where: { email } }),
+    );
     if (existingUser) throw new ConflictException('An account with this email already exists.');
 
     const role = dto.role ?? 'MEMBER';
@@ -74,7 +76,9 @@ export class InvitationService {
 
   async accept(dto: AcceptInvitationDto): Promise<{ success: true }> {
     const tokenHash = createHash('sha256').update(dto.token).digest('hex');
-    const invitation = await this.prisma.invitation.findUnique({ where: { tokenHash } });
+    const invitation = await this.prisma.runSystemQuery(() =>
+      this.prisma.invitation.findUnique({ where: { tokenHash } }),
+    );
     if (!invitation || invitation.acceptedAt || invitation.expiresAt <= new Date()) {
       throw new NotFoundException('This invitation is invalid or has expired.');
     }
