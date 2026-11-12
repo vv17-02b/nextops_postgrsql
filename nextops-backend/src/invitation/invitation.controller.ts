@@ -2,6 +2,7 @@ import { Body, Controller, Inject, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { Public } from '../auth/public.decorator';
 import { Roles } from '../auth/roles.decorator';
+import { RateLimit } from '../auth/rate-limit.guard';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { InvitationService } from './invitation.service';
@@ -32,6 +33,7 @@ export class InvitationController {
 
   @Post('accept')
   @Public()
+  @RateLimit(10, 900)
   accept(@Body() dto: AcceptInvitationDto): Promise<{ success: true }> {
     return this.service.accept(dto);
   }

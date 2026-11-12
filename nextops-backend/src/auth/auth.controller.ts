@@ -7,6 +7,7 @@ import { TenantContext } from '../prisma/tenant-context';
 import { AuthCredentialsDto } from './dto/auth-credentials.dto';
 import { RegisterCredentialsDto } from './dto/register-credentials.dto';
 import { Public } from './public.decorator';
+import { RateLimit } from './rate-limit.guard';
 import { hashPassword, verifyPassword } from './password-hasher';
 import { clearedSessionCookieOptions, csrfCookieOptions, sessionCookieOptions, SESSION_COOKIE, CSRF_COOKIE, readCookie } from './cookie-session';
 import { TokenRevocationService } from './token-revocation.service';
@@ -31,6 +32,7 @@ export class AuthController {
 
   @Post('register')
   @Public()
+  @RateLimit(5, 900)
   async register(@Body() dto: RegisterCredentialsDto, @Req() request: Request): Promise<{
     success: true;
     message: string;
@@ -47,7 +49,7 @@ export class AuthController {
     const result = await this.prisma.runSystemQuery(() =>
       this.prisma.$transaction(async (tx) => {
         const company = await tx.company.create({
-          data: { name: `${email.split('@')[0]}'s workspace` },
+          data: { name: `${email.split('@')}'s workspace` },
         });
         const user = await tx.user.create({
           data: {
@@ -82,6 +84,7 @@ export class AuthController {
 
   @Post('login')
   @Public()
+  @RateLimit(10, 900)
   async login(@Body() dto: AuthCredentialsDto, @Res({ passthrough: true }) response: Response): Promise<{
     success: true;
     user: { id: string; email: string | null; role: string; companyId: string };
@@ -176,6 +179,7 @@ export class AuthController {
    */
   @Post('forgot-password')
   @Public()
+  @RateLimit(5, 900)
   async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<{ success: true; message: string }> {
     const email = dto.email.trim().toLowerCase();
     const user = await this.prisma.runSystemQuery(() =>
@@ -218,6 +222,7 @@ export class AuthController {
   /** Consumes a reset token hash, sets the new password and revokes all sessions. */
   @Post('reset-password')
   @Public()
+  @RateLimit(10, 900)
   async resetPassword(@Body() dto: ResetPasswordDto): Promise<{ success: true }> {
     const tokenHash = createHash('sha256').update(dto.token).digest('hex');
     const record = await this.prisma.runSystemQuery(() =>
