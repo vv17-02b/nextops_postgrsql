@@ -38,7 +38,7 @@ jobs:
       - run: yarn install --immutable
       - run: yarn db:validate
       - run: yarn db:generate
-      - run: yarn db:migrate
+      - run: yarn --cwd nextops-backend prisma migrate deploy --schema src/prisma/schema.prisma
       - run: yarn build
       - run: yarn typecheck
       - run: yarn --cwd nextops-backend test
