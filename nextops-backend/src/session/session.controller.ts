@@ -1,11 +1,12 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, Req } from '@nestjs/common';
+import { Controller, Get, Param, Delete, Inject, Query, Req, MethodNotAllowedException, Post, Patch } from '@nestjs/common';
 import type { Request } from 'express';
 import { SessionService } from './session.service';
-import { CreateSessionDto } from './dto/create-session.dto';
-import { UpdateSessionDto } from './dto/update-session.dto';
 import type { Session } from '@prisma/client';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
+import { Roles } from '../auth/roles.decorator';
+
+export type SafeSession = Omit<Session, 'sessionToken'>;
 
 interface RequestWithUser extends Request {
   user?: {
@@ -16,7 +17,14 @@ interface RequestWithUser extends Request {
   };
 }
 
+function toSafeSession(session: Session): SafeSession {
+  const { sessionToken: _ignored, ...safe } = session;
+  void _ignored;
+  return safe;
+}
+
 @Controller('session')
+@Roles('OWNER', 'ADMIN')
 export class SessionController {
   constructor(
     @Inject(SessionService)
@@ -24,34 +32,36 @@ export class SessionController {
   ) {}
 
   @Post()
-  create(@Body() dto: CreateSessionDto, @Req() req: RequestWithUser): Promise<Session> {
-    return this.service.create(dto, req.user?.companyId);
+  create(): never {
+    throw new MethodNotAllowedException('Manual session creation via API is disabled for security reasons.');
   }
 
   @Get()
-  findAll(
+  async findAll(
     @Query() query: PaginationQueryDto,
     @Req() req: RequestWithUser,
-  ): Promise<PaginatedResponse<Session>> {
-    return this.service.findAll(query, req.user?.companyId);
+  ): Promise<PaginatedResponse<SafeSession>> {
+    const result = await this.service.findAll(query, req.user?.companyId);
+    return {
+      ...result,
+      data: result.data.map(toSafeSession),
+    };
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<Session> {
-    return this.service.findOne(id, req.user?.companyId);
+  async findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<SafeSession> {
+    const session = await this.service.findOne(id, req.user?.companyId);
+    return toSafeSession(session);
   }
 
   @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body() dto: UpdateSessionDto,
-    @Req() req: RequestWithUser,
-  ): Promise<Session> {
-    return this.service.update(id, dto, req.user?.companyId);
+  update(): never {
+    throw new MethodNotAllowedException('Session modification via API is disabled for security reasons.');
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<Session> {
-    return this.service.remove(id, req.user?.companyId);
+  async remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<SafeSession> {
+    const session = await this.service.remove(id, req.user?.companyId);
+    return toSafeSession(session);
   }
 }

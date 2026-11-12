@@ -1,11 +1,12 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, Req } from '@nestjs/common';
+import { Controller, Get, Param, Delete, Inject, Query, Req, MethodNotAllowedException, Post, Patch } from '@nestjs/common';
 import type { Request } from 'express';
 import { VerificationTokenService } from './verificationtoken.service';
-import { CreateVerificationTokenDto } from './dto/create-verificationtoken.dto';
-import { UpdateVerificationTokenDto } from './dto/update-verificationtoken.dto';
 import type { VerificationToken } from '@prisma/client';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
+import { Roles } from '../auth/roles.decorator';
+
+export type SafeVerificationToken = Omit<VerificationToken, 'token'>;
 
 interface RequestWithUser extends Request {
   user?: {
@@ -16,7 +17,14 @@ interface RequestWithUser extends Request {
   };
 }
 
+function toSafeVerificationToken(record: VerificationToken): SafeVerificationToken {
+  const { token: _ignored, ...safe } = record;
+  void _ignored;
+  return safe;
+}
+
 @Controller('verificationtoken')
+@Roles('OWNER', 'ADMIN')
 export class VerificationTokenController {
   constructor(
     @Inject(VerificationTokenService)
@@ -24,37 +32,36 @@ export class VerificationTokenController {
   ) {}
 
   @Post()
-  async create(
-    @Body() dto: CreateVerificationTokenDto,
-    @Req() req: RequestWithUser,
-  ): Promise<VerificationToken> {
-    return this.service.create(dto, req.user?.companyId);
+  create(): never {
+    throw new MethodNotAllowedException('Manual verification token creation via API is disabled for security reasons.');
   }
 
   @Get()
   async findAll(
     @Query() query: PaginationQueryDto,
     @Req() req: RequestWithUser,
-  ): Promise<PaginatedResponse<VerificationToken>> {
-    return this.service.findAll(query, req.user?.companyId);
+  ): Promise<PaginatedResponse<SafeVerificationToken>> {
+    const result = await this.service.findAll(query, req.user?.companyId);
+    return {
+      ...result,
+      data: result.data.map(toSafeVerificationToken),
+    };
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<VerificationToken> {
-    return this.service.findOne(id, req.user?.companyId);
+  async findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<SafeVerificationToken> {
+    const record = await this.service.findOne(id, req.user?.companyId);
+    return toSafeVerificationToken(record);
   }
 
   @Patch(':id')
-  async update(
-    @Param('id') id: string,
-    @Body() dto: UpdateVerificationTokenDto,
-    @Req() req: RequestWithUser,
-  ): Promise<VerificationToken> {
-    return this.service.update(id, dto, req.user?.companyId);
+  update(): never {
+    throw new MethodNotAllowedException('Verification token modification via API is disabled for security reasons.');
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<VerificationToken> {
-    return this.service.remove(id, req.user?.companyId);
+  async remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<SafeVerificationToken> {
+    const record = await this.service.remove(id, req.user?.companyId);
+    return toSafeVerificationToken(record);
   }
 }

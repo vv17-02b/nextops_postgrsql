@@ -1,11 +1,11 @@
 import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
-import { AccountService } from './account.service';
+import { AccountService, type SafeAccount } from './account.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
-import type { Account } from '@prisma/client';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
+import { Roles } from '../auth/roles.decorator';
 
 interface RequestWithUser extends Request {
   user?: {
@@ -17,6 +17,7 @@ interface RequestWithUser extends Request {
 }
 
 @Controller('account')
+@Roles('OWNER', 'ADMIN')
 export class AccountController {
   constructor(
     @Inject(AccountService)
@@ -24,7 +25,7 @@ export class AccountController {
   ) {}
 
   @Post()
-  create(@Body() dto: CreateAccountDto, @Req() req: RequestWithUser): Promise<Account> {
+  create(@Body() dto: CreateAccountDto, @Req() req: RequestWithUser): Promise<SafeAccount> {
     return this.accountService.create(dto, req.user?.companyId);
   }
 
@@ -32,12 +33,12 @@ export class AccountController {
   findAll(
     @Query() query: PaginationQueryDto,
     @Req() req: RequestWithUser,
-  ): Promise<PaginatedResponse<Account>> {
+  ): Promise<PaginatedResponse<SafeAccount>> {
     return this.accountService.findAll(query, req.user?.companyId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<Account> {
+  findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<SafeAccount> {
     return this.accountService.findOne(id, req.user?.companyId);
   }
 
@@ -46,12 +47,12 @@ export class AccountController {
     @Param('id') id: string,
     @Body() dto: UpdateAccountDto,
     @Req() req: RequestWithUser,
-  ): Promise<Account> {
+  ): Promise<SafeAccount> {
     return this.accountService.update(id, dto, req.user?.companyId);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<Account> {
+  remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<SafeAccount> {
     return this.accountService.remove(id, req.user?.companyId);
   }
 }
