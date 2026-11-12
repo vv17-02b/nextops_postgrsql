@@ -37,6 +37,23 @@ const READ_AND_MUTATE_WHERE_OPERATIONS = new Set([
   'upsert',
 ]);
 
+function resolveAppDatabaseUrl(): string | undefined {
+  if (process.env.APP_DATABASE_URL) {
+    return process.env.APP_DATABASE_URL;
+  }
+  const baseUrl = process.env.DATABASE_URL;
+  if (!baseUrl) return undefined;
+
+  try {
+    const parsed = new URL(baseUrl);
+    parsed.username = process.env.APP_DB_USER ?? 'nextops_app';
+    parsed.password = process.env.APP_DB_PASSWORD ?? 'nextops_app_local_password';
+    return parsed.toString();
+  } catch {
+    return baseUrl;
+  }
+}
+
 function delegateName(model: string): string {
   return model.charAt(0).toLowerCase() + model.slice(1);
 }
@@ -188,7 +205,32 @@ function addTenantToData(data: unknown, companyId: string, model?: string): unkn
 
   return data;
 }
-function wrapTenantClient<T extends object>(client: T, tenantContext: TenantContext): T {
+async function applyRlsSessionConfig(
+  txClient: object,
+  tenantContext: TenantContext,
+): Promise<void> {
+  const executeRaw: unknown = Reflect.get(txClient, '$executeRawUnsafe');
+  if (typeof executeRaw !== 'function') return;
+
+  if (tenantContext.isTenantBypassed()) {
+    await Reflect.apply(executeRaw, txClient, [
+      `SELECT set_config('app.bypass_rls', 'true', true), set_config('app.current_company_id', '', true)`,
+    ]);
+    return;
+  }
+
+  const companyId = tenantContext.getCompanyId() ?? '';
+  await Reflect.apply(executeRaw, txClient, [
+    `SELECT set_config('app.bypass_rls', 'false', true), set_config('app.current_company_id', $1, true)`,
+    companyId,
+  ]);
+}
+
+function wrapTenantClient<T extends object>(
+  client: T,
+  tenantContext: TenantContext,
+  inTransaction = false,
+): T {
   return new Proxy(client, {
     get(target, property, receiver) {
       const value: unknown = Reflect.get(target, property, receiver);
@@ -197,8 +239,13 @@ function wrapTenantClient<T extends object>(client: T, tenantContext: TenantCont
         return (input: unknown, ...options: unknown[]) => {
           if (typeof input === 'function') {
             return Reflect.apply(value, target, [
-              (transactionClient: object) => {
-                const scopedTransaction = wrapTenantClient(transactionClient, tenantContext);
+              async (transactionClient: object) => {
+                await applyRlsSessionConfig(transactionClient, tenantContext);
+                const scopedTransaction = wrapTenantClient(
+                  transactionClient,
+                  tenantContext,
+                  true,
+                );
                 return input(scopedTransaction);
               },
               ...options,
@@ -207,6 +254,23 @@ function wrapTenantClient<T extends object>(client: T, tenantContext: TenantCont
 
           if (!tenantContext.isTenantBypassed() && !tenantContext.getCompanyId()) {
             throw new ForbiddenException('Batch transactions require an active business workspace.');
+          }
+
+          if (Array.isArray(input)) {
+            const rootTransaction: unknown = Reflect.get(target, '$transaction');
+            if (typeof rootTransaction === 'function') {
+              return Reflect.apply(rootTransaction, target, [
+                async (transactionClient: object) => {
+                  await applyRlsSessionConfig(transactionClient, tenantContext);
+                  const results: unknown[] = [];
+                  for (const operationPromise of input) {
+                    results.push(await operationPromise);
+                  }
+                  return results;
+                },
+                ...options,
+              ]);
+            }
           }
 
           return Reflect.apply(value, target, [input, ...options]);
@@ -225,51 +289,72 @@ function wrapTenantClient<T extends object>(client: T, tenantContext: TenantCont
           }
 
           return async (...parameters: unknown[]) => {
-            if (tenantContext.isTenantBypassed()) {
-              return await Reflect.apply(method, delegate, parameters);
-            }
+            const executeScopedOperation = async (activeTarget: object): Promise<unknown> => {
+              const activeDelegate = Reflect.get(activeTarget, property) as object;
+              const activeMethod = Reflect.get(activeDelegate, operation) as Function;
 
-            const companyId = tenantContext.getCompanyId();
-            if (!companyId) {
-              throw new ForbiddenException(`Access to ${property}.${operation} requires an active business workspace.`);
-            }
-
-            const rawFirstParam = parameters[0];
-            if (rawFirstParam !== undefined && (typeof rawFirstParam !== 'object' || rawFirstParam === null)) {
-              throw new BadRequestException(`Invalid query arguments for ${property}.${operation}.`);
-            }
-
-            const args = rawFirstParam ? { ...(rawFirstParam as Record<string, unknown>) } : {};
-
-            if (READ_AND_MUTATE_WHERE_OPERATIONS.has(operation)) {
-              args.where = addTenantToWhere(args.where, companyId);
-            } else if (!['create', 'createMany', 'createManyAndReturn'].includes(operation)) {
-              throw new ForbiddenException(`Operation ${property}.${operation} is not permitted in tenant-scoped mode.`);
-            }
-
-            if (operation === 'create' || operation === 'createMany' || operation === 'createManyAndReturn') {
-              args.data = addTenantToData(args.data, companyId, property);
-            } else if (operation === 'upsert') {
-              args.create = addTenantToData(args.create, companyId, property);
-              if (typeof args.update === 'object' && args.update !== null) {
-                const update = { ...(args.update as Record<string, unknown>) };
-                delete update.companyId;
-                args.update = update;
+              if (tenantContext.isTenantBypassed()) {
+                return await Reflect.apply(activeMethod, activeDelegate, parameters);
               }
-            } else if (typeof args.data === 'object' && args.data !== null) {
-              const data = { ...(args.data as Record<string, unknown>) };
-              delete data.companyId;
-              args.data = data;
+
+              const companyId = tenantContext.getCompanyId();
+              if (!companyId) {
+                throw new ForbiddenException(`Access to ${property}.${operation} requires an active business workspace.`);
+              }
+
+              const rawFirstParam = parameters[0];
+              if (rawFirstParam !== undefined && (typeof rawFirstParam !== 'object' || rawFirstParam === null)) {
+                throw new BadRequestException(`Invalid query arguments for ${property}.${operation}.`);
+              }
+
+              const args = rawFirstParam ? { ...(rawFirstParam as Record<string, unknown>) } : {};
+
+              if (READ_AND_MUTATE_WHERE_OPERATIONS.has(operation)) {
+                args.where = addTenantToWhere(args.where, companyId);
+              } else if (!['create', 'createMany', 'createManyAndReturn'].includes(operation)) {
+                throw new ForbiddenException(`Operation ${property}.${operation} is not permitted in tenant-scoped mode.`);
+              }
+
+              if (operation === 'create' || operation === 'createMany' || operation === 'createManyAndReturn') {
+                args.data = addTenantToData(args.data, companyId, property);
+              } else if (operation === 'upsert') {
+                args.create = addTenantToData(args.create, companyId, property);
+                if (typeof args.update === 'object' && args.update !== null) {
+                  const update = { ...(args.update as Record<string, unknown>) };
+                  delete update.companyId;
+                  args.update = update;
+                }
+              } else if (typeof args.data === 'object' && args.data !== null) {
+                const data = { ...(args.data as Record<string, unknown>) };
+                delete data.companyId;
+                args.data = data;
+              }
+
+              if (['create', 'createMany', 'createManyAndReturn', 'update', 'updateMany'].includes(operation)) {
+                await validateTenantRelations(activeTarget, property, args.data, companyId);
+              } else if (operation === 'upsert') {
+                await validateTenantRelations(activeTarget, property, args.create, companyId);
+                await validateTenantRelations(activeTarget, property, args.update, companyId);
+              }
+
+              return await Reflect.apply(activeMethod, activeDelegate, [args, ...parameters.slice(1)]);
+            };
+
+            if (inTransaction) {
+              return await executeScopedOperation(target);
             }
 
-            if (['create', 'createMany', 'createManyAndReturn', 'update', 'updateMany'].includes(operation)) {
-              await validateTenantRelations(target, property, args.data, companyId);
-            } else if (operation === 'upsert') {
-              await validateTenantRelations(target, property, args.create, companyId);
-              await validateTenantRelations(target, property, args.update, companyId);
+            const rootTransaction: unknown = Reflect.get(target, '$transaction');
+            if (typeof rootTransaction === 'function') {
+              return await Reflect.apply(rootTransaction, target, [
+                async (txClient: object) => {
+                  await applyRlsSessionConfig(txClient, tenantContext);
+                  return await executeScopedOperation(txClient);
+                },
+              ]);
             }
 
-            return await Reflect.apply(method, delegate, [args, ...parameters.slice(1)]);
+            return await executeScopedOperation(target);
           };
         },
       });
@@ -282,9 +367,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly tenantContext: TenantContext;
 
   constructor(@Inject(TenantContext) tenantContext: TenantContext) {
-    super();
+    const appUrl = resolveAppDatabaseUrl();
+    super(appUrl ? { datasources: { db: { url: appUrl } } } : undefined);
     this.tenantContext = tenantContext;
-    return wrapTenantClient(this, tenantContext);
+    return wrapTenantClient(this, tenantContext, false);
   }
 
   runSystemQuery<T>(fn: () => T): T {

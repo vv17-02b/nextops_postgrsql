@@ -5,7 +5,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { TenantContext } from './tenant-context';
 
-describe('Tenant Isolation & Fail-Closed Proxy (Integration)', () => {
+describe('Tenant Isolation, Fail-Closed Proxy & PostgreSQL RLS (Integration)', () => {
   let tenantContext: TenantContext;
   let prisma: PrismaService;
 
@@ -182,5 +182,19 @@ describe('Tenant Isolation & Fail-Closed Proxy (Integration)', () => {
         ),
       BadRequestException,
     );
+  });
+
+  it('enforces PostgreSQL Row-Level Security (RLS) on raw SQL under nextops_app role', async () => {
+    const rawOrders = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM "Order" WHERE id = $1`,
+      orderAId,
+    );
+    assert.equal(rawOrders.length, 0);
+
+    const rawProducts = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM "Product" WHERE id = $1`,
+      productAId,
+    );
+    assert.equal(rawProducts.length, 0);
   });
 });
