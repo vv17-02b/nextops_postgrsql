@@ -9,7 +9,11 @@
   "scripts": {
     "backend": "cd nextops-backend && yarn start:dev",
     "frontend": "cd nextops-frontend && yarn dev -- --turbo",
-    "start:dev": "concurrently \"yarn backend\" \"yarn frontend\""
+    "start:dev": "concurrently \"yarn backend\" \"yarn frontend\"",
+    "db:validate": "yarn --cwd nextops-backend prisma:validate",
+    "db:generate": "yarn --cwd nextops-backend prisma:generate",
+    "build": "yarn workspaces run build",
+    "typecheck": "yarn workspaces run typecheck"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
