@@ -3,50 +3,73 @@
 import React from 'react';
 import { useUser } from '@/hooks/useUser';
 import UserForm from '@/components/user/user-form';
+import { ApiErrorBanner, PaginationControls } from '@/components/common/collection-controls';
 import { Trash2 } from 'lucide-react';
 
 export default function UserPage(): React.JSX.Element {
-  const { data, loading, createItem, deleteItem } = useUser();
+  const {
+    data,
+    loading,
+    error,
+    page,
+    limit,
+    meta,
+    setPage,
+    setLimit,
+    clearError,
+    createItem,
+    deleteItem,
+  } = useUser();
 
   return (
     <div className="space-y-6 font-sans">
-      <div className="bg-white p-6 border rounded-xl shadow-sm">
-        <h1 className="text-xl font-bold text-gray-900">Next.js Сторінка: User</h1>
-        <p className="text-sm text-gray-500">Автоматичний зв&apos;язок з роутом бекенду: <code className="text-blue-600 font-mono">/api/user</code></p>
+      <div className="bg-gray-950/40 backdrop-blur-md p-6 border border-white/10 rounded-xl shadow-2xl">
+        <h1 className="text-xl font-bold text-white font-mono">Next.js Сторінка: User</h1>
+        <p className="text-sm text-gray-400 font-mono">
+          Автоматичний зв&apos;язок з роутом бекенду:{' '}
+          <code className="text-blue-400 font-mono">/api/user</code>
+        </p>
       </div>
+
+      <ApiErrorBanner error={error} onDismiss={clearError} />
 
       <UserForm onSubmit={createItem} />
 
-      <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
-        <div className="p-4 border-b bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Записи з бази PostgreSQL
+      <div className="bg-gray-950/40 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden shadow-2xl">
+        <div className="border-b border-white/10 bg-gray-900/30 p-4">
+          <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 font-mono">
+            Записи з бази PostgreSQL
+          </div>
         </div>
-        
+
         {loading ? (
-          <div className="p-8 text-center text-gray-400 text-sm">Виконується запит до сервера...</div>
+          <div className="p-8 text-center text-gray-400 text-sm font-mono">
+            Виконується запит до сервера...
+          </div>
         ) : data.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left border-collapse">
-              <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase border-b">
+              <thead className="bg-gray-900/50 text-xs font-semibold text-gray-400 uppercase border-b border-white/10 font-mono">
                 <tr>
-                  <th className="px-4 py-3 text-left">ID Документа</th>
-                  <th className="px-4 py-3 text-left">Ім&apos;я користувача</th>
-            <th className="px-4 py-3 text-left">Email</th>
-            <th className="px-4 py-3 text-left">Роль (USER/ADMIN)</th>
-                  <th className="px-4 py-3 text-right">Дії</th>
+                  <th scope="col" className="px-4 py-3 text-left">ID Документа</th>
+                  <th scope="col" className="px-4 py-3 text-left">Ім&apos;я користувача</th>
+                  <th scope="col" className="px-4 py-3 text-left">Email</th>
+                  <th scope="col" className="px-4 py-3 text-left">Роль (OWNER/ADMIN/MEMBER)</th>
+                  <th scope="col" className="px-4 py-3 text-right">Дії</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-white/5 font-mono text-gray-200">
                 {data.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50/50 transition text-[13px]">
-                    <td className="px-4 py-3 font-mono text-xs text-blue-600"> {item.id} </td>
-                    <td className="px-4 py-3 text-gray-700"> {String(item.name || '-')} </td>
-                <td className="px-4 py-3 text-gray-700"> {String(item.email || '-')} </td>
-                <td className="px-4 py-3 text-gray-700"> {String(item.role || '-')} </td>
-                    <td className="px-4 py-3 text-right">
-                      <button 
+                  <tr key={item.id} className="hover:bg-white/5 transition text-[13px]">
+                    <td className="max-w-40 break-all px-4 py-3 text-xs text-blue-400">{item.id}</td>
+                    <td className="max-w-64 break-words px-4 py-3">{String(item.name || '-')}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-gray-300">{String(item.email || '-')}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-emerald-400">{String(item.role || '-')}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                      <button
+                        type="button"
                         onClick={() => deleteItem(item.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 rounded-md transition inline-flex"
+                        className="p-1.5 text-gray-400 hover:text-red-400 rounded-md transition inline-flex cursor-pointer"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -57,9 +80,22 @@ export default function UserPage(): React.JSX.Element {
             </table>
           </div>
         ) : (
-          <div className="p-8 text-center text-gray-400 text-sm">
+          <div className="p-8 text-center text-gray-400 text-sm font-mono">
             Колекція порожня. Заповніть форму вище, щоб додати перший документ.
           </div>
+        )}
+
+        {!error && (
+          <PaginationControls
+            meta={meta}
+            dataLength={data.length}
+            page={page}
+            limit={limit}
+            loading={loading}
+            ariaLabel="Пагінація користувачів"
+            onPageChange={setPage}
+            onLimitChange={setLimit}
+          />
         )}
       </div>
     </div>
