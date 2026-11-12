@@ -6,6 +6,7 @@ import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
 import type { User } from '@prisma/client';
 import { TenantContext } from '../prisma/tenant-context';
+import { PlanEnforcementService } from '../billing/plan-enforcement.service';
 
 export type SafeUser = Omit<User, 'passwordHash'>;
 
@@ -21,11 +22,15 @@ export class UserService {
     private readonly prisma: PrismaService,
     @Inject(TenantContext)
     private readonly tenantContext: TenantContext,
+    @Inject(PlanEnforcementService)
+    private readonly planEnforcement: PlanEnforcementService,
   ) {}
 
   async create(dto: CreateUserDto): Promise<SafeUser> {
     const companyId = this.tenantContext.getCompanyId();
     if (!companyId) throw new ForbiddenException('A business workspace is required.');
+
+    await this.planEnforcement.assertUserSeatLimit(companyId);
 
     const user = await this.prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({

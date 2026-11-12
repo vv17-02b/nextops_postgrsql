@@ -1,0 +1,63 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Inject,
+  Post,
+  Req,
+} from '@nestjs/common';
+import type { Request } from 'express';
+import { IsNotEmpty, IsString } from 'class-validator';
+import { Public } from '../auth/public.decorator';
+import { Roles } from '../auth/roles.decorator';
+import { BillingService, type BillingWebhookPayload } from './billing.service';
+
+export class CreateCheckoutDto {
+  @IsString()
+  @IsNotEmpty()
+  planCode!: string;
+}
+
+interface RequestWithUser extends Request {
+  user?: {
+    id: string;
+    email?: string;
+    role?: string;
+    companyId?: string;
+  };
+  rawBody?: Buffer;
+}
+
+@Controller('billing')
+export class BillingController {
+  constructor(
+    @Inject(BillingService)
+    private readonly billingService: BillingService,
+  ) {}
+
+  @Get('status')
+  getStatus(@Req() req: RequestWithUser) {
+    return this.billingService.getStatus(req.user?.companyId);
+  }
+
+  @Post('checkout')
+  @Roles('OWNER', 'ADMIN')
+  createCheckout(
+    @Body() dto: CreateCheckoutDto,
+    @Req() req: RequestWithUser,
+  ): Promise<{ checkoutUrl: string }> {
+    return this.billingService.createCheckout(dto.planCode, req.user?.companyId);
+  }
+
+  @Post('webhook')
+  @Public()
+  handleWebhook(
+    @Headers('x-billing-signature') signature: string | undefined,
+    @Body() payload: BillingWebhookPayload,
+    @Req() req: RequestWithUser,
+  ): Promise<{ received: true; deduplicated?: boolean }> {
+    const rawBody = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(payload ?? {});
+    return this.billingService.processSignedWebhook(rawBody, signature, payload);
+  }
+}

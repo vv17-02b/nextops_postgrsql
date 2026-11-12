@@ -53,7 +53,7 @@ export class OrderController {
     @Body() dto: UpdateOrderDto,
     @Req() request: RequestWithUser,
   ): Promise<Order> {
-    return this.service.update(id, dto, request.user.companyId);
+    return this.service.update(id, dto, request.user.companyId, request.user.role);
   }
 
   @Delete(':id')

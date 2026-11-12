@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
 import { EmailQueueService } from '../common/queue/email-queue.service';
 import { hashPassword } from '../auth/password-hasher';
+import { PlanEnforcementService } from '../billing/plan-enforcement.service';
 import type { CreateInvitationDto } from './dto/create-invitation.dto';
 import type { AcceptInvitationDto } from './dto/accept-invitation.dto';
 
@@ -14,6 +15,7 @@ export class InvitationService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
+    @Inject(PlanEnforcementService) private readonly planEnforcement: PlanEnforcementService,
     private readonly emailQueue: EmailQueueService,
   ) {}
 
@@ -39,6 +41,11 @@ export class InvitationService {
     const existingInvitation = await this.prisma.invitation.findFirst({
       where: { companyId: activeCompanyId, email, acceptedAt: null },
     });
+
+    if (!existingInvitation) {
+      await this.planEnforcement.assertUserSeatLimit(activeCompanyId);
+    }
+
     const token = randomBytes(32).toString('base64url');
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const expiresAt = new Date(Date.now() + INVITATION_LIFETIME_MS);

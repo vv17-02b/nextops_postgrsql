@@ -6,6 +6,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
 import { toMinorUnits } from '../common/money';
+import { PlanEnforcementService } from '../billing/plan-enforcement.service';
 import type { Product } from '@prisma/client';
 
 @Injectable()
@@ -14,11 +15,15 @@ export class ProductService {
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
+    @Inject(PlanEnforcementService) private readonly planEnforcement: PlanEnforcementService,
   ) {}
 
   async create(dto: CreateProductDto, companyId?: string): Promise<Product> {
     const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
     if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
+
+    await this.planEnforcement.assertProductLimit(activeCompanyId);
+
     const { price, compareAtPrice, ...productData } = dto;
     return this.prisma.product.create({
       data: {

@@ -20,6 +20,7 @@ interface SidebarLink {
 }
 
 const links: SidebarLink[] = [
+  { name: 'Billing', href: '/billing', icon: CreditCard },
   { name: 'Account', href: '/account', icon: Key },
   { name: 'AgentKnowledgeBase', href: '/agentknowledgebase', icon: Cpu },
   { name: 'ApiHistory', href: '/apihistory', icon: Activity },
@@ -120,8 +121,8 @@ export default function Sidebar(): React.JSX.Element {
                   onClick={() => setIsMobileOpen(false)}
                   aria-current={isActive ? 'page' : undefined}
                   className={`flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg font-mono transition-all duration-150 ${isActive
-                      ? 'bg-blue-600 text-white shadow-md shadow-blue-950/50 border border-blue-500/40'
-                      : 'hover:bg-slate-800/40 text-slate-400 hover:text-white border border-transparent'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-950/50 border border-blue-500/40'
+                    : 'hover:bg-slate-800/40 text-slate-400 hover:text-white border border-transparent'
                     }`}
                 >
                   <IconComponent className={`h-4 w-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-blue-400'}`} />

@@ -10,6 +10,8 @@ import type { Order } from '@prisma/client';
 import { MAX_MINOR_UNITS } from '../common/money';
 import { createClient } from 'redis';
 
+const ADMIN_ROLES = new Set(['OWNER', 'ADMIN']);
+
 @Injectable()
 export class OrderService implements OnModuleInit, OnModuleDestroy {
   private readonly redis = process.env.REDIS_URL
@@ -136,12 +138,18 @@ export class OrderService implements OnModuleInit, OnModuleDestroy {
     return item;
   }
 
-  async update(id: string, dto: UpdateOrderDto, companyId?: string): Promise<Order> {
+  async update(id: string, dto: UpdateOrderDto, companyId?: string, userRole?: string): Promise<Order> {
     await this.findOne(id, companyId);
 
     const updateData: Prisma.OrderUpdateInput = {};
 
-    if (dto.status) updateData.status = dto.status;
+    if (dto.status) {
+      if (!userRole || !ADMIN_ROLES.has(userRole)) {
+        throw new ForbiddenException('Only a workspace owner or administrator can change the order status.');
+      }
+      updateData.status = dto.status;
+    }
+
     if (dto.shippingAddress) {
       updateData.shippingAddress = dto.shippingAddress as unknown as Prisma.InputJsonValue;
     }

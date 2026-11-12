@@ -10,25 +10,54 @@ generator client {
 }
 
 model Company {
-  id                 String               @id @default(uuid())
-  name               String
-  createdAt          DateTime             @default(now())
-  users              User[]
-  accounts           Account[]
-  knowledgeBase      AgentKnowledgeBase[]
-  apiHistory         ApiHistory[]
-  categories         Category[]
-  orders             Order[]
-  orderItems         OrderItem[]
-  products           Product[]
-  projects           Project[]
-  reviews            Review[]
-  sessions           Session[]
-  aiBudgets          UserAiBudget[]
-  verificationTokens VerificationToken[]
-  warehouses         Warehouse[]
-  webhookConfigs     WebhookConfig[]
-  invitations        Invitation[]
+  id                    String    @id @default(uuid())
+  name                  String
+  planCode              String    @default("FREE")
+  subscriptionStatus    String    @default("TRIALING")
+  billingCustomerId     String?   @unique
+  billingSubscriptionId String?   @unique
+  currentPeriodEnd      DateTime?
+  createdAt             DateTime  @default(now())
+
+  plan                Plan                 @relation(fields: [planCode], references: [code])
+  users               User[]
+  accounts            Account[]
+  sessions            Session[]
+  verificationTokens  VerificationToken[]
+  invitations         Invitation[]
+  projects            Project[]
+  categories          Category[]
+  products            Product[]
+  orders              Order[]
+  orderItems          OrderItem[]
+  reviews             Review[]
+  warehouses          Warehouse[]
+  webhookConfigs      WebhookConfig[]
+  agentKnowledgeBases AgentKnowledgeBase[]
+  apiHistories        ApiHistory[]
+  userAiBudgets       UserAiBudget[]
+}
+
+model Plan {
+  code          String    @id
+  name          String
+  priceMinor    Int
+  currency      String    @default("USD")
+  maxUsers      Int
+  maxProducts   Int
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+
+  companies     Company[]
+}
+
+model ProcessedWebhookEvent {
+  id          String   @id
+  provider    String
+  eventType   String
+  processedAt DateTime @default(now())
+
+  @@index([provider, processedAt(sort: Desc)])
 }
 
 model Account {

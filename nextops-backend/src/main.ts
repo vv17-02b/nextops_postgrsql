@@ -87,7 +87,7 @@ async function bootstrap() {
         !csrfCookie
         || !origin
         || (!allowedOrigins.has(origin) && !isLocalDevelopmentOrigin)
-        || !matchesCsrfToken(csrfCookie, request.get(CSRF_HEADER))
+        || !matchesCsrfToken(csrfCookie, request.header(CSRF_HEADER))
       )
     ) {
       response.status(403).json({
