@@ -2,13 +2,16 @@
 import React, { useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Terminal, Menu, X, Database, Search,
   User, ShieldCheck, Key, FolderHeart, Cpu, BarChart3,
   Layers, MessageSquare, ShieldAlert, ShoppingBag,
-  Coins, Box, Activity, Sliders, CreditCard, LucideIcon
+  Coins, Box, Activity, Sliders, CreditCard, Building2,
+  Pencil, Check, LogOut, LucideIcon
 } from 'lucide-react';
+import { useWorkspace } from '@/context/WorkspaceContext';
+import { apiFetch, getApiUrl } from '@/lib/api';
 
 const WorkspacePostman = dynamic(() => import('@/components/WorkspacePostman'), { ssr: false });
 const WorkspaceDb = dynamic(() => import('@/components/WorkspaceDb'), { ssr: false });
@@ -42,16 +45,44 @@ const links: SidebarLink[] = [
 
 export default function Sidebar(): React.JSX.Element {
   const pathname = usePathname();
+  const router = useRouter();
+  const { currentUser, updateWorkspaceName } = useWorkspace();
+
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isPostmanOpen, setIsPostmanOpen] = useState<boolean>(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState<boolean>(false);
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
+  const [isEditingCompany, setIsEditingCompany] = useState<boolean>(false);
+  const [companyDraft, setCompanyDraft] = useState<string>('');
+  const [isSavingCompany, setIsSavingCompany] = useState<boolean>(false);
 
   const filteredLinks = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     if (!query) return links;
     return links.filter((link: SidebarLink) => link.name.toLowerCase().includes(query));
   }, [searchQuery]);
+
+  async function handleSaveCompanyName(): Promise<void> {
+    if (!companyDraft.trim() || isSavingCompany) return;
+    setIsSavingCompany(true);
+    try {
+      await updateWorkspaceName(companyDraft);
+      setIsEditingCompany(false);
+    } catch {
+      // Keep edit input open on validation error.
+    } finally {
+      setIsSavingCompany(false);
+    }
+  }
+
+  async function handleLogout(): Promise<void> {
+    await apiFetch(getApiUrl('/api/auth/logout'), { method: 'POST' }).catch(() => null);
+    setIsMobileOpen(false);
+    router.replace('/login');
+    router.refresh();
+  }
+
+  const canEditWorkspace = currentUser?.role === 'OWNER' || currentUser?.role === 'ADMIN';
 
   return (
     <>
@@ -88,9 +119,86 @@ export default function Sidebar(): React.JSX.Element {
             className="p-5 border-b border-slate-800/60 flex items-center gap-3 text-white font-bold h-16 shrink-0 select-none hover:bg-slate-900/50 transition-colors"
           >
             <LayoutDashboard className="h-5 w-5 text-blue-400" />
-            {/* ВИПРАВЛЕНО: Повернуто чистий оригінальний текст без зайвих пробілів */}
-            <span className="tracking-wide bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">NextOps Studio</span>
+            <span className="tracking-wide bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+              NextOps Studio
+            </span>
           </Link>
+
+          {/* Картка поточної компанії / робочого простору */}
+          {currentUser && (
+            <div className="px-4 py-3 border-b border-slate-800/60 bg-slate-900/60 shrink-0">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                  <Building2 className="h-3 w-3 text-blue-400" />
+                  Робочий простір
+                </span>
+                {currentUser.planCode && (
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                    {currentUser.planCode}
+                  </span>
+                )}
+              </div>
+
+              {isEditingCompany ? (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <input
+                    type="text"
+                    value={companyDraft}
+                    maxLength={100}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCompanyDraft(e.target.value)}
+                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                      if (e.key === 'Enter') void handleSaveCompanyName();
+                      if (e.key === 'Escape') setIsEditingCompany(false);
+                    }}
+                    className="w-full rounded border border-blue-500/60 bg-slate-950 px-2 py-1 text-xs text-white outline-none"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    disabled={isSavingCompany}
+                    onClick={() => void handleSaveCompanyName()}
+                    className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-500 cursor-pointer"
+                    title="Зберегти назву"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingCompany(false)}
+                    className="p-1 rounded bg-slate-800 text-slate-300 hover:text-white cursor-pointer"
+                    title="Скасувати"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-white truncate" title={currentUser.companyName ?? 'Системний акаунт'}>
+                    {currentUser.companyName ?? 'Без компанії (System)'}
+                  </p>
+                  {canEditWorkspace && currentUser.companyId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCompanyDraft(currentUser.companyName ?? '');
+                        setIsEditingCompany(true);
+                      }}
+                      className="p-1 text-slate-400 hover:text-blue-400 transition-colors cursor-pointer shrink-0"
+                      title="Перейменувати компанію"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {currentUser.email && (
+                <p className="text-[11px] text-slate-400 truncate mt-0.5 font-mono">
+                  {currentUser.email}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="p-4 border-b border-slate-800/40 shrink-0">
             <div className="relative flex items-center bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5 focus-within:border-blue-500/50 transition-colors">
@@ -107,6 +215,7 @@ export default function Sidebar(): React.JSX.Element {
               )}
             </div>
           </div>
+
           <nav className="flex-1 overflow-y-auto p-4 space-y-1 min-h-0 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent bg-slate-950/20">
             <span className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2 select-none">
               Згенеровані модулі ({filteredLinks.length})
@@ -137,13 +246,12 @@ export default function Sidebar(): React.JSX.Element {
             )}
           </nav>
 
-          <div className="p-4 border-t border-slate-800/60 bg-slate-950/60 mt-auto shrink-0 space-y-3">
-
+          <div className="p-4 border-t border-slate-800/60 bg-slate-950/60 mt-auto shrink-0 space-y-2.5">
             <div className="group relative rounded-xl p-[1px] bg-slate-800 hover:bg-gradient-to-r hover:from-violet-500 hover:to-fuchsia-500 transition-all duration-200 shadow-md">
               <button
                 type="button"
                 onClick={() => { setIsPostmanOpen(true); setIsMobileOpen(false); }}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-white font-mono text-xs font-bold rounded-[11px] transition group-hover:bg-slate-900/90 cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 text-white font-mono text-xs font-bold rounded-[11px] transition group-hover:bg-slate-900/90 cursor-pointer"
               >
                 <Terminal className="h-4 w-4 text-violet-400" />
                 <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">WEBHOOK ORCHESTRATOR</span>
@@ -154,13 +262,23 @@ export default function Sidebar(): React.JSX.Element {
               <button
                 type="button"
                 onClick={() => { setIsTerminalOpen(true); setIsMobileOpen(false); }}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-white font-mono text-xs font-bold rounded-[11px] transition group-hover:bg-slate-900/90 cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 text-white font-mono text-xs font-bold rounded-[11px] transition group-hover:bg-slate-900/90 cursor-pointer"
               >
                 <Database className="h-4 w-4 text-amber-400" />
                 <span className="bg-gradient-to-r from-amber-400 to-yellow-400 bg-clip-text text-transparent">POSTGRESQL_CONSOLE</span>
               </button>
             </div>
 
+            {currentUser && (
+              <button
+                type="button"
+                onClick={() => void handleLogout()}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-slate-800 bg-slate-900/80 text-xs font-mono text-slate-300 hover:border-red-500/40 hover:bg-red-950/30 hover:text-red-300 transition cursor-pointer"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>Вийти з акаунта</span>
+              </button>
+            )}
           </div>
         </div>
       </aside>
@@ -189,3 +307,4 @@ export default function Sidebar(): React.JSX.Element {
     </>
   );
 }
+

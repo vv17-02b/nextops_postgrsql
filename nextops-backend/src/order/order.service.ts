@@ -32,7 +32,7 @@ export class OrderService implements OnModuleInit, OnModuleDestroy {
     private readonly webhookQueue: WebhookQueueService,
     @Inject(TelegramNotifierService)
     private readonly telegramNotifier: TelegramNotifierService,
-  ) {}
+  ) { }
 
   async onModuleInit(): Promise<void> {
     if (this.redis && !this.redis.isOpen) {
@@ -59,50 +59,71 @@ export class OrderService implements OnModuleInit, OnModuleDestroy {
     const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
     if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
 
-    const createdOrder = await this.prisma.$transaction(async (transaction) => {
-      const requestedProductIds = [...new Set(dto.items.map((item) => item.productId))];
-      const products = await transaction.product.findMany({
-        where: { id: { in: requestedProductIds }, isActive: true, companyId: activeCompanyId },
-        select: { id: true, priceMinor: true },
-      });
-      if (products.length !== requestedProductIds.length) {
-        throw new NotFoundException('One or more products are unavailable in this workspace.');
-      }
-
-      const productPrices = new Map(products.map((product) => [product.id, product.priceMinor]));
-      const items = dto.items.map((item) => {
-        const priceMinor = productPrices.get(item.productId);
-        if (priceMinor === undefined) {
+    const createdOrder = await this.tenantContext.runWithCompany(activeCompanyId, () =>
+      this.prisma.$transaction(async (transaction) => {
+        const requestedProductIds = [...new Set(dto.items.map((item) => item.productId))];
+        const products = await transaction.product.findMany({
+          where: { id: { in: requestedProductIds }, isActive: true, companyId: activeCompanyId },
+          select: { id: true, priceMinor: true },
+        });
+        if (products.length !== requestedProductIds.length) {
           throw new NotFoundException('One or more products are unavailable in this workspace.');
         }
-        return {
-          productId: item.productId,
-          quantity: item.quantity,
-          priceMinor,
-        };
-      });
-      const totalAmountMinor = items.reduce((total, item) => total + item.quantity * item.priceMinor, 0);
-      if (!Number.isSafeInteger(totalAmountMinor) || totalAmountMinor > MAX_MINOR_UNITS) {
-        throw new BadRequestException('The calculated order amount exceeds the supported range.');
-      }
 
-      return transaction.order.create({
-        data: {
-          companyId: activeCompanyId,
-          userId,
-          totalAmountMinor,
-          currency: dto.currency || 'UAH',
-          shippingAddress: dto.shippingAddress
-            ? (dto.shippingAddress as unknown as Prisma.InputJsonValue)
-            : {},
-          status: 'PENDING',
-          paymentStatus: 'UNPAID',
-          paymentMethod: 'CARD',
-          items: items.length ? { create: items } : undefined,
-        },
-        include: { items: true },
-      });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        const productPrices = new Map(products.map((product) => [product.id, product.priceMinor]));
+        const items = dto.items.map((item) => {
+          const priceMinor = productPrices.get(item.productId);
+          if (priceMinor === undefined) {
+            throw new NotFoundException('One or more products are unavailable in this workspace.');
+          }
+          return {
+            productId: item.productId,
+            quantity: item.quantity,
+            priceMinor,
+          };
+        });
+        const totalAmountMinor = items.reduce((total, item) => total + item.quantity * item.priceMinor, 0);
+        if (!Number.isSafeInteger(totalAmountMinor) || totalAmountMinor > MAX_MINOR_UNITS) {
+          throw new BadRequestException('The calculated order amount exceeds the supported range.');
+        }
+
+        const order = await transaction.order.create({
+          data: {
+            companyId: activeCompanyId,
+            userId,
+            totalAmountMinor,
+            currency: dto.currency || 'UAH',
+            shippingAddress: dto.shippingAddress
+              ? (dto.shippingAddress as unknown as Prisma.InputJsonValue)
+              : {},
+            status: 'PENDING',
+            paymentStatus: 'UNPAID',
+            paymentMethod: 'CARD',
+          },
+        });
+
+        if (items.length > 0) {
+          await transaction.orderItem.createMany({
+            data: items.map((item) => ({
+              companyId: activeCompanyId,
+              orderId: order.id,
+              productId: item.productId,
+              quantity: item.quantity,
+              priceMinor: item.priceMinor,
+            })),
+          });
+        }
+
+        const fullOrder = await transaction.order.findUnique({
+          where: { id: order.id },
+          include: { items: true },
+        });
+        if (!fullOrder) {
+          throw new NotFoundException('Created order could not be loaded.');
+        }
+        return fullOrder;
+      }),
+    );
 
     await this.invalidateCountCache(activeCompanyId);
 
@@ -112,8 +133,7 @@ export class OrderService implements OnModuleInit, OnModuleDestroy {
       currency: createdOrder.currency,
       status: createdOrder.status,
     });
-
-    void this.telegramNotifier.notifyNewOrder(activeCompanyId, {
+    await this.telegramNotifier.notifyNewOrder(activeCompanyId, {
       orderId: createdOrder.id,
       totalAmountMinor: createdOrder.totalAmountMinor,
       currency: createdOrder.currency,

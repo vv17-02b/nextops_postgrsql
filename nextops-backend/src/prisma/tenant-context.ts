@@ -12,7 +12,8 @@ export class TenantContext implements NestMiddleware {
   private readonly storage = new AsyncLocalStorage<TenantStore>();
 
   use(_request: Request, _response: Response, next: NextFunction): void {
-    this.storage.run({ companyId: null, bypassTenant: false }, next);
+    this.storage.enterWith({ companyId: null, bypassTenant: false });
+    next();
   }
 
   getCompanyId(): string | null {

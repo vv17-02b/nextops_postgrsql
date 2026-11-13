@@ -43,23 +43,25 @@ export class PlanEnforcementService {
       throw new ForbiddenException('Workspace not found.');
     }
 
-    const { usersCount, pendingInvitesCount, productsCount } = await this.prisma.$transaction(
-      async (tx) => {
-        const users = await tx.user.count({ where: { companyId: activeCompanyId } });
-        const pendingInvites = await tx.invitation.count({
-          where: {
-            companyId: activeCompanyId,
-            acceptedAt: null,
-            expiresAt: { gt: new Date() },
-          },
-        });
-        const products = await tx.product.count({ where: { companyId: activeCompanyId } });
-        return {
-          usersCount: users,
-          pendingInvitesCount: pendingInvites,
-          productsCount: products,
-        };
-      },
+    const { usersCount, pendingInvitesCount, productsCount } = await this.tenantContext.runWithCompany(
+      activeCompanyId,
+      () =>
+        this.prisma.$transaction(async (tx) => {
+          const users = await tx.user.count({ where: { companyId: activeCompanyId } });
+          const pendingInvites = await tx.invitation.count({
+            where: {
+              companyId: activeCompanyId,
+              acceptedAt: null,
+              expiresAt: { gt: new Date() },
+            },
+          });
+          const products = await tx.product.count({ where: { companyId: activeCompanyId } });
+          return {
+            usersCount: users,
+            pendingInvitesCount: pendingInvites,
+            productsCount: products,
+          };
+        }),
     );
 
     return {

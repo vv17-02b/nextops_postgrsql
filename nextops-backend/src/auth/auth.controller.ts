@@ -1,20 +1,56 @@
-import { Controller, Post, Body, UnauthorizedException, Inject, ConflictException, Req, Get, Res } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Patch,
+  Body,
+  UnauthorizedException,
+  Inject,
+  ConflictException,
+  ForbiddenException,
+  Req,
+  Get,
+  Res,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes } from 'node:crypto';
 import type { Request, Response } from 'express';
+import { IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
 import { AuthCredentialsDto } from './dto/auth-credentials.dto';
 import { RegisterCredentialsDto } from './dto/register-credentials.dto';
 import { Public } from './public.decorator';
+import { Roles } from './roles.decorator';
 import { RateLimit } from './rate-limit.guard';
 import { hashPassword, verifyPassword } from './password-hasher';
-import { clearedSessionCookieOptions, csrfCookieOptions, sessionCookieOptions, SESSION_COOKIE, CSRF_COOKIE, readCookie } from './cookie-session';
+import {
+  clearedSessionCookieOptions,
+  csrfCookieOptions,
+  sessionCookieOptions,
+  SESSION_COOKIE,
+  CSRF_COOKIE,
+  readCookie,
+} from './cookie-session';
 import { TokenRevocationService } from './token-revocation.service';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-recovery.dto';
 import { EmailQueueService } from '../common/queue/email-queue.service';
 
 const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+export class UpdateWorkspaceDto {
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(2)
+  @MaxLength(100)
+  name!: string;
+}
+
+interface AuthenticatedRequestUser {
+  id: string;
+  email: string | null;
+  role: string;
+  companyId: string;
+}
 
 @Controller('auth')
 export class AuthController {
@@ -28,7 +64,7 @@ export class AuthController {
     @Inject(TokenRevocationService)
     private readonly tokenRevocation: TokenRevocationService,
     private readonly emailQueue: EmailQueueService,
-  ) {}
+  ) { }
 
   private async issueSessionCookies(
     response: Response,
@@ -58,7 +94,8 @@ export class AuthController {
     message: string;
     userId: string;
     companyId: string;
-    user: { id: string; email: string | null; role: string; companyId: string };
+    companyName: string;
+    user: { id: string; email: string | null; role: string; companyId: string; companyName: string };
   }> {
     const email = dto.email.trim().toLowerCase();
     const exists = await this.prisma.runSystemQuery(() =>
@@ -66,12 +103,15 @@ export class AuthController {
     );
     if (exists) throw new ConflictException('An account with this email already exists.');
 
+    const defaultPrefix = email.split('@')[0] ?? 'Business';
+    const resolvedCompanyName = dto.companyName?.trim() || `${defaultPrefix} Workspace`;
+
     const passwordHash = await hashPassword(dto.password);
     const created = await this.prisma.runSystemQuery(() =>
       this.prisma.$transaction(async (tx) => {
         const company = await tx.company.create({
           data: {
-            name: `${email.split('@')} Workspace`,
+            name: resolvedCompanyName,
             planCode: 'FREE',
             subscriptionStatus: 'TRIALING',
           },
@@ -97,6 +137,7 @@ export class AuthController {
         return {
           userId: user.id,
           companyId: company.id,
+          companyName: company.name,
           email: user.email,
           role: user.role,
         };
@@ -116,25 +157,32 @@ export class AuthController {
       message: 'Business workspace created.',
       userId: created.userId,
       companyId: created.companyId,
+      companyName: created.companyName,
       user: {
         id: created.userId,
         email: created.email,
         role: created.role,
         companyId: created.companyId,
+        companyName: created.companyName,
       },
     };
   }
-
   @Post('login')
   @Public()
   @RateLimit(10, 900)
-  async login(@Body() dto: AuthCredentialsDto, @Res({ passthrough: true }) response: Response): Promise<{
+  async login(
+    @Body() dto: AuthCredentialsDto,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<{
     success: true;
-    user: { id: string; email: string | null; role: string; companyId: string };
+    user: { id: string; email: string | null; role: string; companyId: string; companyName: string };
   }> {
     const email = dto.email.trim().toLowerCase();
     const user = await this.prisma.runSystemQuery(() =>
-      this.prisma.user.findUnique({ where: { email } }),
+      this.prisma.user.findUnique({
+        where: { email },
+        include: { company: { select: { name: true } } },
+      }),
     );
     if (!user?.passwordHash) {
       throw new UnauthorizedException('Invalid email or password.');
@@ -170,6 +218,7 @@ export class AuthController {
         email: user.email,
         role: user.role,
         companyId: user.companyId,
+        companyName: user.company?.name ?? 'Workspace',
       },
     };
   }
@@ -180,18 +229,72 @@ export class AuthController {
     @Req() request: Request & { csrfToken?: string },
     @Res({ passthrough: true }) response: Response,
   ): { csrfToken: string } {
-    const csrfToken = request.csrfToken ?? readCookie(request, CSRF_COOKIE) ?? randomBytes(32).toString('base64url');
+    const csrfToken =
+      request.csrfToken ?? readCookie(request, CSRF_COOKIE) ?? randomBytes(32).toString('base64url');
     response.cookie(CSRF_COOKIE, csrfToken, csrfCookieOptions());
     return { csrfToken };
   }
 
   @Get('me')
-  currentUser(
-    @Req() request: Request & {
-      user: { id: string; email: string | null; role: string; companyId: string };
-    },
-  ): { user: { id: string; email: string | null; role: string; companyId: string } } {
-    return { user: request.user };
+  async currentUser(
+    @Req() request: Request & { user: AuthenticatedRequestUser },
+  ): Promise<{
+    user: AuthenticatedRequestUser & {
+      companyName: string | null;
+      planCode: string | null;
+    };
+  }> {
+    const companyId = request.user.companyId;
+    if (!companyId) {
+      return {
+        user: {
+          ...request.user,
+          companyName: null,
+          planCode: null,
+        },
+      };
+    }
+
+    const company = await this.prisma.runSystemQuery(() =>
+      this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: { name: true, planCode: true },
+      }),
+    );
+
+    return {
+      user: {
+        ...request.user,
+        companyName: company?.name ?? null,
+        planCode: company?.planCode ?? null,
+      },
+    };
+  }
+
+  @Patch('workspace')
+  @Roles('OWNER', 'ADMIN')
+  async updateWorkspace(
+    @Body() dto: UpdateWorkspaceDto,
+    @Req() request: Request & { user: AuthenticatedRequestUser },
+  ): Promise<{ success: true; companyId: string; companyName: string }> {
+    const companyId = request.user.companyId;
+    if (!companyId) {
+      throw new ForbiddenException('A business workspace is required.');
+    }
+
+    const updated = await this.prisma.runSystemQuery(() =>
+      this.prisma.company.update({
+        where: { id: companyId },
+        data: { name: dto.name.trim() },
+        select: { id: true, name: true },
+      }),
+    );
+
+    return {
+      success: true,
+      companyId: updated.id,
+      companyName: updated.name,
+    };
   }
 
   @Post('logout')
@@ -213,7 +316,6 @@ export class AuthController {
     response.clearCookie(SESSION_COOKIE, clearedSessionCookieOptions());
     return { success: true };
   }
-
   @Post('forgot-password')
   @Public()
   @RateLimit(5, 900)
@@ -287,6 +389,7 @@ export class AuthController {
 
     return { success: true };
   }
+
   @Post('logout-all')
   async logoutAll(
     @Req() request: Request & { user: { id: string } },

@@ -32,6 +32,7 @@ function getSafeReturnPath(): string {
 export default function LoginPage(): JSX.Element {
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>("login");
+  const [companyName, setCompanyName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -44,10 +45,15 @@ export default function LoginPage(): JSX.Element {
 
     try {
       if (mode === "register") {
+        const trimmedCompany = companyName.trim();
         const registration = await apiFetch(getApiUrl("/api/auth/register"), {
           method: "POST",
           headers: getApiHeaders(true),
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({
+            email,
+            password,
+            ...(trimmedCompany.length >= 2 ? { companyName: trimmedCompany } : {}),
+          }),
         });
         if (!registration.ok) throw new Error(await getErrorMessage(registration));
       }
@@ -83,6 +89,22 @@ export default function LoginPage(): JSX.Element {
         </p>
 
         <form className="mt-6 space-y-4" onSubmit={submit}>
+          {mode === "register" && (
+            <label className="block text-sm">
+              <span className="mb-1.5 block text-slate-300">Company / Workspace name</span>
+              <input
+                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-white outline-none focus:border-blue-500"
+                type="text"
+                autoComplete="organization"
+                placeholder="Напр. Технології та Інновації або Rozetka"
+                minLength={2}
+                maxLength={100}
+                required
+                value={companyName}
+                onChange={(event) => setCompanyName(event.target.value)}
+              />
+            </label>
+          )}
           <label className="block text-sm">
             <span className="mb-1.5 block text-slate-300">Email</span>
             <input
