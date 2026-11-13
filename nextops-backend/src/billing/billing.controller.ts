@@ -19,6 +19,16 @@ export class CreateCheckoutDto {
   planCode!: string;
 }
 
+export class ConfigureTelegramDto {
+  @IsString()
+  @IsNotEmpty()
+  botToken!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  chatId!: string;
+}
+
 interface RequestWithUser extends Request {
   user?: {
     id: string;
@@ -48,6 +58,15 @@ export class BillingController {
     @Req() req: RequestWithUser,
   ): Promise<{ checkoutUrl: string }> {
     return this.billingService.createCheckout(dto.planCode, req.user?.companyId);
+  }
+
+  @Post('telegram')
+  @Roles('OWNER', 'ADMIN')
+  configureTelegram(
+    @Body() dto: ConfigureTelegramDto,
+    @Req() req: RequestWithUser,
+  ): Promise<{ connected: boolean; chatId: string }> {
+    return this.billingService.configureTelegram(dto.botToken, dto.chatId, true, req.user?.companyId);
   }
 
   @Post('webhook')

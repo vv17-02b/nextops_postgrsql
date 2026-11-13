@@ -19,7 +19,7 @@ export class TelegramNotifierService {
   ) {}
 
   async sendMessage(botToken: string, chatId: string, text: string): Promise<boolean> {
-    const endpoint = `https://telegram.org{encodeURIComponent(botToken)}/sendMessage`;
+    const endpoint = `https://api.telegram.org/bot${encodeURIComponent(botToken)}/sendMessage`;
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
