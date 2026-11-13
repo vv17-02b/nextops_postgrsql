@@ -49,7 +49,7 @@ export class BillingController {
   constructor(
     @Inject(BillingService)
     private readonly billingService: BillingService,
-  ) { }
+  ) {}
 
   @Get('status')
   getStatus(@Req() req: RequestWithUser) {
@@ -82,6 +82,14 @@ export class BillingController {
     @Req() req: RequestWithUser,
   ): Promise<{ connected: boolean; chatId: string }> {
     return this.billingService.configureTelegram(dto.botToken, dto.chatId, true, req.user?.companyId);
+  }
+
+  @Post('telegram/connect-env')
+  @Roles('OWNER', 'ADMIN')
+  connectPlatformTelegram(
+    @Req() req: RequestWithUser,
+  ): Promise<{ connected: boolean; chatId: string }> {
+    return this.billingService.connectPlatformTelegramFromEnv(req.user?.companyId);
   }
 
   @Post('webhook')

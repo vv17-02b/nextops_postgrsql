@@ -36,6 +36,9 @@ export interface TelegramConfigSnapshot {
   connected: boolean;
   chatId: string | null;
   maskedToken: string | null;
+  platformBotUsername: string | null;
+  deepLinkUrl: string | null;
+  envQuickConnectAvailable: boolean;
 }
 
 export interface NotificationSoundOption {
@@ -177,17 +180,18 @@ export class BillingService {
     telegram: TelegramConfigSnapshot;
   }> {
     const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
-    const [billing, plans, companyTg] = await Promise.all([
+    const [billing, plans, companyTg, botUsername] = await Promise.all([
       this.planEnforcement.getBillingSnapshot(activeCompanyId ?? undefined),
       this.listPlans(),
       activeCompanyId
         ? this.prisma.runSystemQuery(() =>
-          this.prisma.company.findUnique({
-            where: { id: activeCompanyId },
-            select: { telegramBotToken: true, telegramChatId: true },
-          }),
-        )
+            this.prisma.company.findUnique({
+              where: { id: activeCompanyId },
+              select: { telegramBotToken: true, telegramChatId: true },
+            }),
+          )
         : Promise.resolve(null),
+      this.telegramNotifier.getPlatformBotUsername(),
     ]);
 
     const rawToken = companyTg?.telegramBotToken ?? null;
@@ -198,6 +202,15 @@ export class BillingService {
           ? '••••••••'
           : null;
 
+    const deepLinkUrl =
+      botUsername && activeCompanyId
+        ? `https://t.me{botUsername}?start=connect_${activeCompanyId}`
+        : null;
+
+    const envQuickConnectAvailable = Boolean(
+      process.env.TELEGRAM_BOT_TOKEN?.trim() && process.env.TELEGRAM_CHAT_ID?.trim(),
+    );
+
     return {
       billing,
       plans,
@@ -206,8 +219,24 @@ export class BillingService {
         connected: Boolean(rawToken && companyTg?.telegramChatId),
         chatId: companyTg?.telegramChatId ?? null,
         maskedToken,
+        platformBotUsername: botUsername,
+        deepLinkUrl,
+        envQuickConnectAvailable,
       },
     };
+  }
+
+  async connectPlatformTelegramFromEnv(
+    companyId?: string,
+  ): Promise<{ connected: boolean; chatId: string }> {
+    const envToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
+    const envChatId = process.env.TELEGRAM_CHAT_ID?.trim();
+    if (!envToken || !envChatId) {
+      throw new BadRequestException(
+        'Системний TELEGRAM_BOT_TOKEN або TELEGRAM_CHAT_ID не задано у .env сервера.',
+      );
+    }
+    return this.configureTelegram(envToken, envChatId, true, companyId);
   }
 
   async configureTelegram(
