@@ -16,6 +16,8 @@ model Company {
   subscriptionStatus    String    @default("TRIALING")
   billingCustomerId     String?   @unique
   billingSubscriptionId String?   @unique
+  telegramBotToken      String?
+  telegramChatId        String?
   currentPeriodEnd      DateTime?
   createdAt             DateTime  @default(now())
 

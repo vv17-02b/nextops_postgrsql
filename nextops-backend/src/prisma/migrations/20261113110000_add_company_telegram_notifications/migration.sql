@@ -1,0 +1,2 @@
+ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "telegramBotToken" TEXT;
+ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "telegramChatId" TEXT;

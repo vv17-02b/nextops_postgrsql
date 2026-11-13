@@ -8,6 +8,7 @@ import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
 import { Prisma } from '@prisma/client';
 import type { WebhookConfig } from '@prisma/client';
+import { signWebhookPayload } from '../common/queue/webhook-queue.service';
 
 @Injectable()
 export class WebhookConfigService {
@@ -34,24 +35,28 @@ export class WebhookConfigService {
     let attempts = 0;
     let success = false;
 
-    const targetUrl = config.url || 'http://localhost:3000/fallback-webhook';
-    const eventName = config.events.length > 0 ? config.events : 'ai.task.completed';
+    const targetUrl = config.url;
+    const eventName = config.events.length > 0 ? config.events[0] : 'ORDER_CREATED';
 
     while (attempts < maxRetries && !success) {
       attempts++;
       try {
+        const rawBody = JSON.stringify({
+          event: eventName,
+          projectId: config.projectId,
+          timestamp: new Date().toISOString(),
+          data: Object.keys(payload).length > 0 ? payload : { status: 'completed', test: true },
+        });
+
         const response = await fetch(targetUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-NextOps-Signature': config.secret || 'sha256-mock-secure-signature-key',
+            'X-NextOps-Event': eventName,
+            'X-NextOps-Signature': signWebhookPayload(rawBody, config.secret),
           },
-          body: JSON.stringify({
-            event: eventName,
-            projectId: config.projectId,
-            timestamp: new Date().toISOString(),
-            data: Object.keys(payload).length > 0 ? payload : { status: 'completed', test: true },
-          }),
+          body: rawBody,
+          signal: AbortSignal.timeout(10_000),
         });
 
         if (response.ok) {

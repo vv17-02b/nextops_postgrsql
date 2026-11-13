@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -9,6 +9,14 @@ import { toMinorUnits } from '../common/money';
 import { PlanEnforcementService } from '../billing/plan-enforcement.service';
 import { AuditService } from '../audit/audit.service';
 import type { Product } from '@prisma/client';
+
+function escapeCsvCell(value: unknown): string {
+  const str = value == null ? '' : String(value);
+  if (/[",\n\r]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
 
 @Injectable()
 export class ProductService {
@@ -35,6 +43,77 @@ export class ProductService {
         companyId: activeCompanyId,
       },
     });
+  }
+
+  async bulkImport(
+    items: CreateProductDto[],
+    companyId?: string,
+  ): Promise<{ imported: number }> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
+
+    await this.planEnforcement.assertProductLimit(activeCompanyId);
+
+    const categoryIds = [...new Set(items.map((item) => item.categoryId))];
+    const categories = await this.prisma.category.findMany({
+      where: { id: { in: categoryIds }, companyId: activeCompanyId },
+      select: { id: true },
+    });
+    if (categories.length !== categoryIds.length) {
+      throw new BadRequestException('Одна або декілька вказаних категорій не існують у вашому робочому просторі.');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      let createdCount = 0;
+      for (const item of items) {
+        const { price, compareAtPrice, ...productData } = item;
+        await tx.product.create({
+          data: {
+            ...productData,
+            priceMinor: toMinorUnits(price),
+            compareAtPriceMinor: compareAtPrice == null ? null : toMinorUnits(compareAtPrice),
+            companyId: activeCompanyId,
+          },
+        });
+        createdCount++;
+      }
+      return createdCount;
+    });
+
+    await this.audit.record({
+      companyId: activeCompanyId,
+      action: 'PRODUCTS_CSV_IMPORTED',
+      entityType: 'Product',
+      entityId: activeCompanyId,
+      metadata: { importedCount: result },
+    });
+
+    return { imported: result };
+  }
+
+  async exportCsv(companyId?: string): Promise<string> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
+
+    const products = await this.prisma.product.findMany({
+      where: { companyId: activeCompanyId },
+      orderBy: { createdAt: 'desc' },
+      take: 5000,
+    });
+
+    const headers = ['id', 'name', 'slug', 'price', 'compareAtPrice', 'isActive', 'categoryId', 'description'];
+    const rows = products.map((p) => [
+      escapeCsvCell(p.id),
+      escapeCsvCell(p.name),
+      escapeCsvCell(p.slug),
+      escapeCsvCell((p.priceMinor / 100).toFixed(2)),
+      escapeCsvCell(p.compareAtPriceMinor == null ? '' : (p.compareAtPriceMinor / 100).toFixed(2)),
+      escapeCsvCell(p.isActive ? 'true' : 'false'),
+      escapeCsvCell(p.categoryId),
+      escapeCsvCell(p.description ?? ''),
+    ].join(','));
+
+    return `\uFEFF${headers.join(',')}\n${rows.join('\n')}`;
   }
 
   async findAll(query: PaginationQueryDto, companyId?: string): Promise<PaginatedResponse<Product>> {

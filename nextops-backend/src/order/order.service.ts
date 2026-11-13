@@ -2,6 +2,8 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException,
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
 import { AuditService } from '../audit/audit.service';
+import { WebhookQueueService } from '../common/queue/webhook-queue.service';
+import { TelegramNotifierService } from '../common/queue/telegram-notifier.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
@@ -26,6 +28,10 @@ export class OrderService implements OnModuleInit, OnModuleDestroy {
     private readonly tenantContext: TenantContext,
     @Inject(AuditService)
     private readonly audit: AuditService,
+    @Inject(WebhookQueueService)
+    private readonly webhookQueue: WebhookQueueService,
+    @Inject(TelegramNotifierService)
+    private readonly telegramNotifier: TelegramNotifierService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -99,6 +105,22 @@ export class OrderService implements OnModuleInit, OnModuleDestroy {
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     await this.invalidateCountCache(activeCompanyId);
+
+    await this.webhookQueue.dispatchCompanyEvent(activeCompanyId, 'ORDER_CREATED', {
+      orderId: createdOrder.id,
+      totalAmountMinor: createdOrder.totalAmountMinor,
+      currency: createdOrder.currency,
+      status: createdOrder.status,
+    });
+
+    void this.telegramNotifier.notifyNewOrder(activeCompanyId, {
+      orderId: createdOrder.id,
+      totalAmountMinor: createdOrder.totalAmountMinor,
+      currency: createdOrder.currency,
+      itemsCount: createdOrder.items.length,
+      status: createdOrder.status,
+    });
+
     return createdOrder;
   }
 
@@ -174,6 +196,12 @@ export class OrderService implements OnModuleInit, OnModuleDestroy {
           newStatus: dto.status,
           actorRole: userRole ?? 'UNKNOWN',
         },
+      });
+
+      await this.webhookQueue.dispatchCompanyEvent(existing.companyId, 'ORDER_STATUS_UPDATED', {
+        orderId: id,
+        previousStatus: existing.status,
+        newStatus: dto.status,
       });
     }
 

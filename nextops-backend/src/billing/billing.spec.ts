@@ -1,3 +1,4 @@
+import { TelegramNotifierService } from '../common/queue/telegram-notifier.service';
 import 'dotenv/config';
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,7 +25,7 @@ describe('SaaS Billing, Plan Enforcement & Signed Webhooks (Integration)', () =>
     prisma = new PrismaService(tenantContext);
     await prisma.$connect();
     planEnforcement = new PlanEnforcementService(prisma, tenantContext);
-    billingService = new BillingService(prisma, tenantContext, planEnforcement);
+    billingService = new BillingService(prisma, tenantContext, planEnforcement, new TelegramNotifierService(prisma));
 
     await prisma.runSystemQuery(async () => {
       await prisma.processedWebhookEvent.deleteMany({ where: { id: testEventId } });

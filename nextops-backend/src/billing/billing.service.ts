@@ -11,6 +11,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Plan } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
+import { TelegramNotifierService } from '../common/queue/telegram-notifier.service';
 import { PlanEnforcementService, type WorkspaceBillingSnapshot } from './plan-enforcement.service';
 
 export interface BillingWebhookPayload {
@@ -29,6 +30,12 @@ export interface BillingWebhookPayload {
   };
 }
 
+export interface TelegramConfigSnapshot {
+  connected: boolean;
+  chatId: string | null;
+  maskedToken: string | null;
+}
+
 @Injectable()
 export class BillingService {
   constructor(
@@ -38,6 +45,8 @@ export class BillingService {
     private readonly tenantContext: TenantContext,
     @Inject(PlanEnforcementService)
     private readonly planEnforcement: PlanEnforcementService,
+    @Inject(TelegramNotifierService)
+    private readonly telegramNotifier: TelegramNotifierService,
   ) {}
 
   async listPlans(): Promise<Plan[]> {
@@ -53,17 +62,75 @@ export class BillingService {
     billing: WorkspaceBillingSnapshot;
     plans: Plan[];
     providerConfigured: boolean;
+    telegram: TelegramConfigSnapshot;
   }> {
-    const [billing, plans] = await Promise.all([
-      this.planEnforcement.getBillingSnapshot(companyId),
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const [billing, plans, companyTg] = await Promise.all([
+      this.planEnforcement.getBillingSnapshot(activeCompanyId ?? undefined),
       this.listPlans(),
+      activeCompanyId
+        ? this.prisma.runSystemQuery(() =>
+            this.prisma.company.findUnique({
+              where: { id: activeCompanyId },
+              select: { telegramBotToken: true, telegramChatId: true },
+            }),
+          )
+        : Promise.resolve(null),
     ]);
+
+    const rawToken = companyTg?.telegramBotToken ?? null;
+    const maskedToken =
+      rawToken && rawToken.length >= 8
+        ? `${rawToken.slice(0, 4)}••••${rawToken.slice(-4)}`
+        : rawToken
+          ? '••••••••'
+          : null;
 
     return {
       billing,
       plans,
       providerConfigured: Boolean(process.env.BILLING_WEBHOOK_SECRET && process.env.STRIPE_SECRET_KEY),
+      telegram: {
+        connected: Boolean(rawToken && companyTg?.telegramChatId),
+        chatId: companyTg?.telegramChatId ?? null,
+        maskedToken,
+      },
     };
+  }
+
+  async configureTelegram(
+    botToken: string,
+    chatId: string,
+    sendTest: boolean,
+    companyId?: string,
+  ): Promise<{ connected: boolean; chatId: string }> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) {
+      throw new ForbiddenException('A business workspace is required.');
+    }
+
+    const trimmedToken = botToken.trim();
+    const trimmedChatId = chatId.trim();
+
+    if (sendTest) {
+      await this.telegramNotifier.sendMessage(
+        trimmedToken,
+        trimmedChatId,
+        '✅ <b>NextOps підключено!</b> Тепер сюди миттєво надходитимуть чеки про нові замовлення.',
+      );
+    }
+
+    await this.prisma.runSystemQuery(() =>
+      this.prisma.company.update({
+        where: { id: activeCompanyId },
+        data: {
+          telegramBotToken: trimmedToken,
+          telegramChatId: trimmedChatId,
+        },
+      }),
+    );
+
+    return { connected: true, chatId: trimmedChatId };
   }
 
   async createCheckout(
@@ -138,7 +205,6 @@ export class BillingService {
 
     return { checkoutUrl: sessionPayload.url };
   }
-
   verifyWebhookSignature(rawBody: string, signatureHeader?: string): void {
     const secret = process.env.BILLING_WEBHOOK_SECRET;
     if (!secret) {

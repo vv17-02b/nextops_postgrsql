@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, Req, Header } from '@nestjs/common';
 import type { Request } from 'express';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { ImportProductsDto } from './dto/import-products.dto';
 import type { Product } from '@prisma/client';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
@@ -26,6 +27,21 @@ export class ProductController {
   @Post()
   async create(@Body() dto: CreateProductDto, @Req() req: RequestWithUser): Promise<Product> {
     return this.service.create(dto, req.user?.companyId);
+  }
+
+  @Post('import/csv')
+  async importCsv(
+    @Body() dto: ImportProductsDto,
+    @Req() req: RequestWithUser,
+  ): Promise<{ imported: number }> {
+    return this.service.bulkImport(dto.items, req.user?.companyId);
+  }
+
+  @Get('export/csv')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="nextops-products.csv"')
+  async exportCsv(@Req() req: RequestWithUser): Promise<string> {
+    return this.service.exportCsv(req.user?.companyId);
   }
 
   @Get()
