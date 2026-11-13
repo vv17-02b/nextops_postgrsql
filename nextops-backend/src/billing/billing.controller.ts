@@ -11,7 +11,12 @@ import type { Request } from 'express';
 import { IsNotEmpty, IsString } from 'class-validator';
 import { Public } from '../auth/public.decorator';
 import { Roles } from '../auth/roles.decorator';
-import { BillingService, type BillingWebhookPayload } from './billing.service';
+import {
+  BillingService,
+  type BillingWebhookPayload,
+  type NotificationSoundOption,
+  type TelegramNotificationEvent,
+} from './billing.service';
 
 export class CreateCheckoutDto {
   @IsString()
@@ -44,11 +49,21 @@ export class BillingController {
   constructor(
     @Inject(BillingService)
     private readonly billingService: BillingService,
-  ) {}
+  ) { }
 
   @Get('status')
   getStatus(@Req() req: RequestWithUser) {
     return this.billingService.getStatus(req.user?.companyId);
+  }
+
+  @Get('sounds')
+  listSounds(): Promise<{ sounds: NotificationSoundOption[] }> {
+    return this.billingService.listNotificationSounds();
+  }
+
+  @Get('notifications')
+  listNotifications(@Req() req: RequestWithUser): Promise<{ events: TelegramNotificationEvent[] }> {
+    return this.billingService.getRecentTelegramNotifications(req.user?.companyId);
   }
 
   @Post('checkout')

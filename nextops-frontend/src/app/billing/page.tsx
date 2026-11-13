@@ -1,10 +1,14 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch, getApiHeaders, getApiUrl } from '@/lib/api';
 import { ApiErrorBanner } from '@/components/common/collection-controls';
 import { useWorkspace } from '@/context/WorkspaceContext';
-import { CheckCircle2, CreditCard, Sparkles, Users, Box, Send } from 'lucide-react';
+import {
+  isNotificationSoundMuted,
+  setNotificationSoundMuted,
+} from '@/lib/notification-sound';
+import { CheckCircle2, CreditCard, Sparkles, Users, Box, Send, Volume2, VolumeX } from 'lucide-react';
 
 interface PlanItem {
   code: string;
@@ -44,34 +48,52 @@ interface BillingStatusResponse {
 
 export default function BillingPage(): React.JSX.Element {
   const { refreshWorkspace } = useWorkspace();
+  const refreshWorkspaceRef = useRef(refreshWorkspace);
+  refreshWorkspaceRef.current = refreshWorkspace;
+
   const [statusData, setStatusData] = useState<BillingStatusResponse | null>(null);
+  const [isSoundMuted, setIsSoundMuted] = useState<boolean>(false);
+  const [tgTokenInput, setTgTokenInput] = useState<string>('');
+  const [tgChatIdInput, setTgChatIdInput] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [submittingPlan, setSubmittingPlan] = useState<string | null>(null);
   const [savingTelegram, setSavingTelegram] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const loadBilling = useCallback(async (): Promise<void> => {
-    setLoading(true);
+  const loadBilling = useCallback(async (silent = false): Promise<void> => {
+    if (!silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const res = await apiFetch(getApiUrl('/api/billing/status'), {
+      const resStatus = await apiFetch(getApiUrl('/api/billing/status'), {
         headers: getApiHeaders(),
       });
-      if (!res.ok) {
-        setError(`Не вдалося завантажити статус підписки (HTTP ${res.status}).`);
+
+      if (!resStatus.ok) {
+        setError(`Не вдалося завантажити статус підписки (HTTP ${resStatus.status}).`);
         return;
       }
-      const payload = (await res.json()) as BillingStatusResponse;
+      const payload = (await resStatus.json()) as BillingStatusResponse;
       setStatusData(payload);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Помилка мережі при завантаженні білінгу.');
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
+    setIsSoundMuted(isNotificationSoundMuted());
+
+    const syncMuteState = (): void => {
+      setIsSoundMuted(isNotificationSoundMuted());
+    };
+    window.addEventListener('nextops:sound-mute-changed', syncMuteState);
+
     const params = new URLSearchParams(window.location.search);
     const checkoutState = params.get('checkout');
     const activatedPlan = params.get('plan');
@@ -83,14 +105,18 @@ export default function BillingPage(): React.JSX.Element {
           : 'Оплату підтверджено! Ваш тарифний план оновлено.',
       );
       window.history.replaceState({}, '', '/billing');
-      void refreshWorkspace();
+      void refreshWorkspaceRef.current();
     } else if (checkoutState === 'canceled') {
       setError('Оплату скасовано. Ви можете обрати тариф повторно у будь-який момент.');
       window.history.replaceState({}, '', '/billing');
     }
 
-    void loadBilling();
-  }, [loadBilling, refreshWorkspace]);
+    void loadBilling(false);
+
+    return () => {
+      window.removeEventListener('nextops:sound-mute-changed', syncMuteState);
+    };
+  }, [loadBilling]);
 
   const handleSelectPlan = async (planCode: string): Promise<void> => {
     setSubmittingPlan(planCode);
@@ -112,7 +138,7 @@ export default function BillingPage(): React.JSX.Element {
       if (payload.checkoutUrl) {
         if (payload.checkoutUrl.includes('upgraded=FREE')) {
           setNotice('Тарифний план успішно оновлено до Starter Free.');
-          await Promise.all([loadBilling(), refreshWorkspace()]);
+          await Promise.all([loadBilling(true), refreshWorkspaceRef.current()]);
         } else {
           window.location.href = payload.checkoutUrl;
         }
@@ -124,13 +150,13 @@ export default function BillingPage(): React.JSX.Element {
     }
   };
 
-  const handleSaveTelegram = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    const botToken = String(formData.get('botToken') ?? '').trim();
-    const chatId = String(formData.get('chatId') ?? '').trim();
-    if (!botToken || !chatId) return;
+  const handleSaveTelegram = async (): Promise<void> => {
+    const botToken = tgTokenInput.trim();
+    const chatId = (tgChatIdInput || statusData?.telegram?.chatId || '').trim();
+    if (!botToken || !chatId) {
+      setError('Введіть Telegram Bot Token та Telegram Chat ID.');
+      return;
+    }
 
     setSavingTelegram(true);
     setError(null);
@@ -146,9 +172,9 @@ export default function BillingPage(): React.JSX.Element {
         setError(body.message ?? 'Не вдалося перевірити токен Telegram-бота.');
         return;
       }
-      form.reset();
+      setTgTokenInput('');
       setNotice('Telegram-бота підключено! Тестове повідомлення надіслано у ваш чат.');
-      await loadBilling();
+      await loadBilling(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Помилка мережі при налаштуванні Telegram.');
     } finally {
@@ -248,6 +274,7 @@ export default function BillingPage(): React.JSX.Element {
               </div>
             </div>
           </div>
+
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             {statusData.plans.map((plan) => {
               const isCurrent = plan.code === billing.planCode;
@@ -315,39 +342,64 @@ export default function BillingPage(): React.JSX.Element {
             })}
           </div>
 
-          <div className="bg-gray-950/40 backdrop-blur-md border border-white/10 rounded-xl p-6 shadow-2xl font-mono">
+          <div className="bg-gray-950/40 backdrop-blur-md border border-white/10 rounded-xl p-6 shadow-2xl font-mono space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
               <div>
                 <h2 className="text-base font-bold text-white flex items-center gap-2">
                   <Send className="h-4 w-4 text-sky-400" />
-                  Миттєві сповіщення в Telegram про нові замовлення
+                  Миттєві сповіщення в Telegram та зворотний зв&apos;язок
                 </h2>
                 <p className="text-xs text-gray-400 mt-1">
-                  Вкажіть токен свого бота від @BotFather та ваш Chat ID — чеки замовлень приходитимуть у телефон за 1 секунду
+                  Вкажіть токен бота від @BotFather та Chat ID — чеки замовлень летять у телефон, а вхідні повідомлення спливають на екрані
                 </p>
               </div>
-              <span
-                className={`rounded-lg border px-3 py-1 text-xs font-semibold ${statusData.telegram?.connected
-                    ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
-                    : 'border-white/10 bg-white/5 text-gray-400'
-                  }`}
-              >
-                {statusData.telegram?.connected
-                  ? `● Підключено (Chat: ${statusData.telegram.chatId})`
-                  : '○ Не налаштовано'}
-              </span>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextMuted = !isSoundMuted;
+                    setIsSoundMuted(nextMuted);
+                    setNotificationSoundMuted(nextMuted);
+                    window.dispatchEvent(new Event('nextops:sound-mute-changed'));
+                  }}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-semibold transition cursor-pointer ${isSoundMuted
+                      ? 'border-red-500/30 bg-red-500/15 text-red-300 hover:bg-red-500/25'
+                      : 'border-blue-500/30 bg-blue-500/15 text-blue-300 hover:bg-blue-500/25'
+                    }`}
+                >
+                  {isSoundMuted ? (
+                    <>
+                      <VolumeX className="h-3.5 w-3.5" />
+                      <span>Без звуку</span>
+                    </>
+                  ) : (
+                    <>
+                      <Volume2 className="h-3.5 w-3.5" />
+                      <span>Звук сповіщень увімкнено</span>
+                    </>
+                  )}
+                </button>
+                <span
+                  className={`rounded-lg border px-3 py-1 text-xs font-semibold ${statusData.telegram?.connected
+                      ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+                      : 'border-white/10 bg-white/5 text-gray-400'
+                    }`}
+                >
+                  {statusData.telegram?.connected
+                    ? `● Підключено (Chat: ${statusData.telegram.chatId})`
+                    : '○ Не налаштовано'}
+                </span>
+              </div>
             </div>
 
-            <form
-              onSubmit={(e) => void handleSaveTelegram(e)}
-              className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3 items-end"
-            >
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3 items-end">
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">Telegram Bot Token</label>
                 <input
-                  name="botToken"
                   type="password"
-                  required
+                  value={tgTokenInput}
+                  onChange={(e) => setTgTokenInput(e.target.value)}
                   placeholder={statusData.telegram?.maskedToken ?? '123456789:AAH...'}
                   className="w-full rounded-lg border border-white/10 bg-gray-900/70 px-3 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500"
                 />
@@ -355,25 +407,27 @@ export default function BillingPage(): React.JSX.Element {
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">Telegram Chat ID</label>
                 <input
-                  name="chatId"
                   type="text"
-                  required
-                  defaultValue={statusData.telegram?.chatId ?? ''}
+                  value={tgChatIdInput || statusData.telegram?.chatId || ''}
+                  onChange={(e) => setTgChatIdInput(e.target.value)}
                   placeholder="Напр. 384920194 або -100..."
                   className="w-full rounded-lg border border-white/10 bg-gray-900/70 px-3 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500"
                 />
               </div>
               <button
-                type="submit"
+                type="button"
                 disabled={savingTelegram}
+                onClick={() => void handleSaveTelegram()}
                 className="rounded-lg border border-blue-500 bg-blue-600/30 px-4 py-2 text-xs font-semibold text-blue-200 hover:bg-blue-600/50 transition cursor-pointer disabled:opacity-40"
               >
                 {savingTelegram ? 'Перевірка бота...' : 'Зберегти та надіслати тест'}
               </button>
-            </form>
+            </div>
           </div>
         </>
       ) : null}
     </div>
   );
 }
+
+

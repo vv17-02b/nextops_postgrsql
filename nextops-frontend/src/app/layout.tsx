@@ -2,6 +2,7 @@ import './globals.css';
 import React from 'react';
 import Sidebar from '@/components/ui/sidebar';
 import SessionNotice from '@/components/SessionNotice';
+import TelegramLiveToast from '@/components/TelegramLiveToast';
 import { WorkspaceProvider } from '@/context/WorkspaceContext';
 
 export const metadata = {
@@ -28,6 +29,7 @@ export default function RootLayout({
             </main>
           </div>
           <SessionNotice />
+          <TelegramLiveToast />
         </WorkspaceProvider>
       </body>
     </html>

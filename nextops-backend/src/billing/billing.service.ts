@@ -8,6 +8,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { readdir } from 'node:fs/promises';
+import { extname, join } from 'node:path';
 import type { Plan } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
@@ -36,6 +38,29 @@ export interface TelegramConfigSnapshot {
   maskedToken: string | null;
 }
 
+export interface NotificationSoundOption {
+  id: string;
+  label: string;
+  type: 'file' | 'synth' | 'mute';
+  url?: string;
+}
+
+export interface TelegramNotificationEvent {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  sender: string;
+  summary: string;
+  text: string | null;
+  newStatus: string | null;
+  createdAt: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 @Injectable()
 export class BillingService {
   constructor(
@@ -56,6 +81,93 @@ export class BillingService {
         orderBy: { priceMinor: 'asc' },
       }),
     );
+  }
+
+  async listNotificationSounds(): Promise<{ sounds: NotificationSoundOption[] }> {
+    const sounds: NotificationSoundOption[] = [];
+    const voiceDir = join(process.cwd(), 'uploads', 'voice');
+    const allowedExt = new Set(['.mp3', '.wav', '.ogg', '.m4a']);
+
+    try {
+      const entries = await readdir(voiceDir);
+      const audioFiles = entries
+        .filter((file) => allowedExt.has(extname(file).toLowerCase()))
+        .sort((a, b) => a.localeCompare(b));
+
+      for (const fileName of audioFiles) {
+        const cleanTitle = fileName
+          .replace(/\.[^/.]+$/, '')
+          .replace(/[-_]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        sounds.push({
+          id: `file:${fileName}`,
+          label: cleanTitle ? `🎵 ${cleanTitle}` : `🎵 ${fileName}`,
+          type: 'file',
+          url: `/uploads/voice/${encodeURIComponent(fileName)}`,
+        });
+      }
+    } catch {
+      // Directory may be empty or missing in fresh environments; built-in presets follow below.
+    }
+
+    sounds.push(
+      { id: 'synth:glass', label: '🔔 Crisp Glass Ping (Вбудований)', type: 'synth' },
+      { id: 'synth:chime', label: '✨ Soft SaaS Chime (Вбудований)', type: 'synth' },
+      { id: 'mute', label: '🔇 Без звуку (Mute)', type: 'mute' },
+    );
+
+    return { sounds };
+  }
+
+  async getRecentTelegramNotifications(
+    companyId?: string,
+  ): Promise<{ events: TelegramNotificationEvent[] }> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) {
+      return { events: [] };
+    }
+
+    const rows = await this.prisma.runSystemQuery(() =>
+      this.prisma.auditLog.findMany({
+        where: {
+          companyId: activeCompanyId,
+          action: { in: ['TELEGRAM_INCOMING_MESSAGE', 'TELEGRAM_ORDER_ACTION'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 25,
+      }),
+    );
+
+    const events: TelegramNotificationEvent[] = rows.map((row) => {
+      const meta = isRecord(row.metadata) ? row.metadata : {};
+      const sender =
+        typeof meta.sender === 'string'
+          ? meta.sender
+          : row.actorEmail ?? 'Telegram';
+      const summary =
+        typeof meta.summary === 'string'
+          ? meta.summary
+          : row.action === 'TELEGRAM_ORDER_ACTION'
+            ? `Оновлено статус замовлення через Telegram`
+            : `Нове повідомлення з Telegram`;
+      const text = typeof meta.text === 'string' ? meta.text : null;
+      const newStatus = typeof meta.newStatus === 'string' ? meta.newStatus : null;
+
+      return {
+        id: row.id,
+        action: row.action,
+        entityType: row.entityType,
+        entityId: row.entityId,
+        sender,
+        summary,
+        text,
+        newStatus,
+        createdAt: row.createdAt.toISOString(),
+      };
+    });
+
+    return { events };
   }
 
   async getStatus(companyId?: string): Promise<{
@@ -199,7 +311,6 @@ export class BillingService {
 
     const stripeKey = process.env.STRIPE_SECRET_KEY?.trim();
 
-    // Якщо ключ Stripe не задано — активуємо миттєвий Sandbox / Demo Checkout
     if (!stripeKey) {
       const nextPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       await this.prisma.runSystemQuery(() =>
@@ -227,11 +338,11 @@ export class BillingService {
 
     const body = new URLSearchParams({
       mode: 'subscription',
-      'line_items[0][price_data][currency]': plan.currency.toLowerCase(),
-      'line_items[0][price_data][unit_amount]': String(plan.priceMinor),
-      'line_items[0][price_data][recurring][interval]': 'month',
-      'line_items[0][price_data][product_data][name]': `NextOps ${plan.name}`,
-      'line_items[0][quantity]': '1',
+      'line_items[price_data][currency]': plan.currency.toLowerCase(),
+      'line_items[price_data][unit_amount]': String(plan.priceMinor),
+      'line_items[price_data][recurring][interval]': 'month',
+      'line_items[price_data][product_data][name]': `NextOps ${plan.name}`,
+      'line_items[quantity]': '1',
       client_reference_id: activeCompanyId,
       'metadata[companyId]': activeCompanyId,
       'metadata[planCode]': plan.code,
