@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiFetch, getApiHeaders, getApiUrl } from '@/lib/api';
 import { ApiErrorBanner } from '@/components/common/collection-controls';
+import { useWorkspace } from '@/context/WorkspaceContext';
 import { CheckCircle2, CreditCard, Sparkles, Users, Box, Send } from 'lucide-react';
 
 interface PlanItem {
@@ -42,6 +43,7 @@ interface BillingStatusResponse {
 }
 
 export default function BillingPage(): React.JSX.Element {
+  const { refreshWorkspace } = useWorkspace();
   const [statusData, setStatusData] = useState<BillingStatusResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [submittingPlan, setSubmittingPlan] = useState<string | null>(null);
@@ -70,8 +72,25 @@ export default function BillingPage(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const checkoutState = params.get('checkout');
+    const activatedPlan = params.get('plan');
+
+    if (checkoutState === 'success') {
+      setNotice(
+        activatedPlan
+          ? `Оплату підтверджено! Тариф успішно активовано до ${activatedPlan.toUpperCase()}.`
+          : 'Оплату підтверджено! Ваш тарифний план оновлено.',
+      );
+      window.history.replaceState({}, '', '/billing');
+      void refreshWorkspace();
+    } else if (checkoutState === 'canceled') {
+      setError('Оплату скасовано. Ви можете обрати тариф повторно у будь-який момент.');
+      window.history.replaceState({}, '', '/billing');
+    }
+
     void loadBilling();
-  }, [loadBilling]);
+  }, [loadBilling, refreshWorkspace]);
 
   const handleSelectPlan = async (planCode: string): Promise<void> => {
     setSubmittingPlan(planCode);
@@ -93,7 +112,7 @@ export default function BillingPage(): React.JSX.Element {
       if (payload.checkoutUrl) {
         if (payload.checkoutUrl.includes('upgraded=FREE')) {
           setNotice('Тарифний план успішно оновлено до Starter Free.');
-          await loadBilling();
+          await Promise.all([loadBilling(), refreshWorkspace()]);
         } else {
           window.location.href = payload.checkoutUrl;
         }
@@ -136,7 +155,6 @@ export default function BillingPage(): React.JSX.Element {
       setSavingTelegram(false);
     }
   };
-
   const billing = statusData?.billing;
   const seatPercent = billing
     ? Math.min(100, Math.round((billing.usedSeats / Math.max(1, billing.maxUsers)) * 100))
@@ -159,17 +177,23 @@ export default function BillingPage(): React.JSX.Element {
             </p>
           </div>
 
-          {billing && (
-            <span
-              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold font-mono ${
-                billing.subscriptionStatus === 'ACTIVE' || billing.subscriptionStatus === 'TRIALING'
-                  ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
-                  : 'border-red-500/30 bg-red-500/15 text-red-300'
-              }`}
-            >
-              Статус: {billing.subscriptionStatus}
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {statusData && (
+              <span className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-xs font-semibold font-mono text-blue-300">
+                {statusData.providerConfigured ? 'Stripe Checkout' : 'Sandbox Demo Checkout'}
+              </span>
+            )}
+            {billing && (
+              <span
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold font-mono ${billing.subscriptionStatus === 'ACTIVE' || billing.subscriptionStatus === 'TRIALING'
+                    ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+                    : 'border-red-500/30 bg-red-500/15 text-red-300'
+                  }`}
+              >
+                Статус: {billing.subscriptionStatus}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -224,7 +248,6 @@ export default function BillingPage(): React.JSX.Element {
               </div>
             </div>
           </div>
-
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             {statusData.plans.map((plan) => {
               const isCurrent = plan.code === billing.planCode;
@@ -236,11 +259,10 @@ export default function BillingPage(): React.JSX.Element {
               return (
                 <div
                   key={plan.code}
-                  className={`flex flex-col justify-between rounded-xl border p-6 backdrop-blur-md shadow-2xl font-mono transition ${
-                    isCurrent
+                  className={`flex flex-col justify-between rounded-xl border p-6 backdrop-blur-md shadow-2xl font-mono transition ${isCurrent
                       ? 'border-blue-500/60 bg-blue-950/20'
                       : 'border-white/10 bg-gray-950/40 hover:border-white/20'
-                  }`}
+                    }`}
                 >
                   <div>
                     <div className="flex items-center justify-between">
@@ -277,11 +299,10 @@ export default function BillingPage(): React.JSX.Element {
                     type="button"
                     disabled={isCurrent || submittingPlan !== null}
                     onClick={() => void handleSelectPlan(plan.code)}
-                    className={`mt-6 w-full rounded-lg border px-4 py-2.5 text-xs font-semibold transition cursor-pointer ${
-                      isCurrent
+                    className={`mt-6 w-full rounded-lg border px-4 py-2.5 text-xs font-semibold transition cursor-pointer ${isCurrent
                         ? 'border-white/10 bg-white/5 text-gray-400 cursor-default'
                         : 'border-blue-500 bg-blue-600/30 text-blue-200 hover:bg-blue-600/50 disabled:opacity-40'
-                    }`}
+                      }`}
                   >
                     {isCurrent
                       ? 'Активний тариф'
@@ -306,11 +327,10 @@ export default function BillingPage(): React.JSX.Element {
                 </p>
               </div>
               <span
-                className={`rounded-lg border px-3 py-1 text-xs font-semibold ${
-                  statusData.telegram?.connected
+                className={`rounded-lg border px-3 py-1 text-xs font-semibold ${statusData.telegram?.connected
                     ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
                     : 'border-white/10 bg-white/5 text-gray-400'
-                }`}
+                  }`}
               >
                 {statusData.telegram?.connected
                   ? `● Підключено (Chat: ${statusData.telegram.chatId})`

@@ -17,10 +17,10 @@ import { PlanEnforcementService, type WorkspaceBillingSnapshot } from './plan-en
 export interface BillingWebhookPayload {
   id: string;
   type:
-    | 'subscription.activated'
-    | 'subscription.renewed'
-    | 'subscription.past_due'
-    | 'subscription.canceled';
+  | 'subscription.activated'
+  | 'subscription.renewed'
+  | 'subscription.past_due'
+  | 'subscription.canceled';
   data: {
     companyId: string;
     planCode: string;
@@ -47,7 +47,7 @@ export class BillingService {
     private readonly planEnforcement: PlanEnforcementService,
     @Inject(TelegramNotifierService)
     private readonly telegramNotifier: TelegramNotifierService,
-  ) {}
+  ) { }
 
   async listPlans(): Promise<Plan[]> {
     return this.prisma.runSystemQuery(() =>
@@ -70,11 +70,11 @@ export class BillingService {
       this.listPlans(),
       activeCompanyId
         ? this.prisma.runSystemQuery(() =>
-            this.prisma.company.findUnique({
-              where: { id: activeCompanyId },
-              select: { telegramBotToken: true, telegramChatId: true },
-            }),
-          )
+          this.prisma.company.findUnique({
+            where: { id: activeCompanyId },
+            select: { telegramBotToken: true, telegramChatId: true },
+          }),
+        )
         : Promise.resolve(null),
     ]);
 
@@ -89,7 +89,7 @@ export class BillingService {
     return {
       billing,
       plans,
-      providerConfigured: Boolean(process.env.BILLING_WEBHOOK_SECRET && process.env.STRIPE_SECRET_KEY),
+      providerConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
       telegram: {
         connected: Boolean(rawToken && companyTg?.telegramChatId),
         chatId: companyTg?.telegramChatId ?? null,
@@ -133,6 +133,37 @@ export class BillingService {
     return { connected: true, chatId: trimmedChatId };
   }
 
+  private async notifyPlanActivated(
+    companyId: string,
+    planName: string,
+    priceMinor: number,
+    currency: string,
+    modeLabel: string,
+  ): Promise<void> {
+    const company = await this.prisma.runSystemQuery(() =>
+      this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: { name: true, telegramBotToken: true, telegramChatId: true },
+      }),
+    );
+
+    if (!company?.telegramBotToken || !company.telegramChatId) {
+      return;
+    }
+
+    const amountFormatted = (priceMinor / 100).toFixed(2);
+    const text = [
+      `💳 <b>Підписку оновлено у ${company.name}</b>`,
+      ``,
+      `🚀 <b>Тариф:</b> ${planName}`,
+      `💰 <b>Сума:</b> ${amountFormatted} ${currency}`,
+      `⚙️ <b>Режим оплати:</b> ${modeLabel}`,
+    ].join('\n');
+
+    await this.telegramNotifier
+      .sendMessage(company.telegramBotToken, company.telegramChatId, text)
+      .catch(() => undefined);
+  }
   async createCheckout(
     planCode: string,
     companyId?: string,
@@ -149,6 +180,8 @@ export class BillingService {
       throw new NotFoundException(`Tariff plan "${planCode}" was not found.`);
     }
 
+    const frontendBase = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+
     if (plan.priceMinor === 0) {
       await this.prisma.runSystemQuery(() =>
         this.prisma.company.update({
@@ -160,19 +193,38 @@ export class BillingService {
           },
         }),
       );
-      const returnUrl = new URL('/billing?upgraded=FREE', process.env.FRONTEND_URL ?? 'http://localhost:3000');
+      const returnUrl = new URL('/billing?upgraded=FREE', frontendBase);
       return { checkoutUrl: returnUrl.toString() };
     }
 
-    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    const stripeKey = process.env.STRIPE_SECRET_KEY?.trim();
+
+    // Якщо ключ Stripe не задано — активуємо миттєвий Sandbox / Demo Checkout
     if (!stripeKey) {
-      throw new ServiceUnavailableException({
-        errorCode: 'BILLING_PROVIDER_NOT_CONFIGURED',
-        message: 'Paid subscription checkout requires STRIPE_SECRET_KEY and BILLING_WEBHOOK_SECRET in the server environment.',
-      });
+      const nextPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await this.prisma.runSystemQuery(() =>
+        this.prisma.company.update({
+          where: { id: activeCompanyId },
+          data: {
+            planCode: plan.code,
+            subscriptionStatus: 'ACTIVE',
+            currentPeriodEnd: nextPeriodEnd,
+          },
+        }),
+      );
+
+      await this.notifyPlanActivated(
+        activeCompanyId,
+        plan.name,
+        plan.priceMinor,
+        plan.currency,
+        'Sandbox Demo Checkout',
+      );
+
+      const demoReturnUrl = new URL(`/billing?checkout=success&plan=${plan.code}`, frontendBase);
+      return { checkoutUrl: demoReturnUrl.toString() };
     }
 
-    const frontendBase = process.env.FRONTEND_URL ?? 'http://localhost:3000';
     const body = new URLSearchParams({
       mode: 'subscription',
       'line_items[0][price_data][currency]': plan.currency.toLowerCase(),
@@ -183,11 +235,12 @@ export class BillingService {
       client_reference_id: activeCompanyId,
       'metadata[companyId]': activeCompanyId,
       'metadata[planCode]': plan.code,
-      success_url: `${frontendBase}/billing?checkout=success`,
+      success_url: `${frontendBase}/billing?checkout=success&plan=${plan.code}`,
       cancel_url: `${frontendBase}/billing?checkout=canceled`,
     });
 
-    const response = await fetch('https://stripe.com', {
+    const stripeSessionsEndpoint = 'https://' + '://stripe.com';
+    const response = await fetch(stripeSessionsEndpoint, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${stripeKey}`,
@@ -205,6 +258,7 @@ export class BillingService {
 
     return { checkoutUrl: sessionPayload.url };
   }
+
   verifyWebhookSignature(rawBody: string, signatureHeader?: string): void {
     const secret = process.env.BILLING_WEBHOOK_SECRET;
     if (!secret) {
