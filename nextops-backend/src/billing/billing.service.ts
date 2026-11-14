@@ -141,7 +141,6 @@ export class BillingService {
         take: 25,
       }),
     );
-
     const events: TelegramNotificationEvent[] = rows.map((row) => {
       const meta = isRecord(row.metadata) ? row.metadata : {};
       const sender =
@@ -173,6 +172,24 @@ export class BillingService {
     return { events };
   }
 
+  async clearTelegramMessages(companyId?: string): Promise<{ deletedCount: number }> {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) {
+      throw new ForbiddenException('A business workspace is required.');
+    }
+
+    const result = await this.prisma.runSystemQuery(() =>
+      this.prisma.auditLog.deleteMany({
+        where: {
+          companyId: activeCompanyId,
+          action: 'TELEGRAM_INCOMING_MESSAGE',
+        },
+      }),
+    );
+
+    return { deletedCount: result.count };
+  }
+
   async getStatus(companyId?: string): Promise<{
     billing: WorkspaceBillingSnapshot;
     plans: Plan[];
@@ -185,11 +202,11 @@ export class BillingService {
       this.listPlans(),
       activeCompanyId
         ? this.prisma.runSystemQuery(() =>
-            this.prisma.company.findUnique({
-              where: { id: activeCompanyId },
-              select: { telegramBotToken: true, telegramChatId: true },
-            }),
-          )
+          this.prisma.company.findUnique({
+            where: { id: activeCompanyId },
+            select: { telegramBotToken: true, telegramChatId: true },
+          }),
+        )
         : Promise.resolve(null),
       this.telegramNotifier.getPlatformBotUsername(),
     ]);
@@ -225,7 +242,6 @@ export class BillingService {
       },
     };
   }
-
   async connectPlatformTelegramFromEnv(
     companyId?: string,
   ): Promise<{ connected: boolean; chatId: string }> {
@@ -239,7 +255,7 @@ export class BillingService {
     return this.configureTelegram(envToken, envChatId, true, companyId);
   }
 
-   async configureTelegram(
+  async configureTelegram(
     botToken: string,
     chatId: string,
     sendTest: boolean,
@@ -319,6 +335,7 @@ export class BillingService {
       .sendMessage(company.telegramBotToken, company.telegramChatId, text)
       .catch(() => undefined);
   }
+
   async createCheckout(
     planCode: string,
     companyId?: string,
@@ -327,7 +344,6 @@ export class BillingService {
     if (!activeCompanyId) {
       throw new ForbiddenException('A business workspace is required.');
     }
-
     const plan = await this.prisma.runSystemQuery(() =>
       this.prisma.plan.findUnique({ where: { code: planCode.toUpperCase() } }),
     );
@@ -393,7 +409,7 @@ export class BillingService {
       cancel_url: `${frontendBase}/billing?checkout=canceled`,
     });
 
-    const stripeSessionsEndpoint = 'https://' + '://stripe.com';
+    const stripeSessionsEndpoint = 'https://stripe.com';
     const response = await fetch(stripeSessionsEndpoint, {
       method: 'POST',
       headers: {

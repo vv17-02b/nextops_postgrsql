@@ -60,7 +60,7 @@ export class DashboardService {
     private readonly tenantContext: TenantContext,
     @Inject(PlanEnforcementService)
     private readonly planEnforcement: PlanEnforcementService,
-  ) {}
+  ) { }
 
   async getOverview(companyId?: string): Promise<DashboardOverviewResponse> {
     const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
@@ -105,6 +105,10 @@ export class DashboardService {
       }),
       this.prisma.userAiBudget.findMany({
         where: { companyId: activeCompanyId },
+        select: {
+          monthlyLimitMinor: true,
+          currentUsageMinor: true,
+        },
       }),
       this.planEnforcement.getBillingSnapshot(activeCompanyId),
     ]);

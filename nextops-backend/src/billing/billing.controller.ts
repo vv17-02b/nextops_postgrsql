@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   Inject,
@@ -49,7 +50,7 @@ export class BillingController {
   constructor(
     @Inject(BillingService)
     private readonly billingService: BillingService,
-  ) {}
+  ) { }
 
   @Get('status')
   getStatus(@Req() req: RequestWithUser) {
@@ -64,6 +65,12 @@ export class BillingController {
   @Get('notifications')
   listNotifications(@Req() req: RequestWithUser): Promise<{ events: TelegramNotificationEvent[] }> {
     return this.billingService.getRecentTelegramNotifications(req.user?.companyId);
+  }
+
+  @Delete('notifications')
+  @Roles('OWNER', 'ADMIN')
+  clearTelegramNotifications(@Req() req: RequestWithUser): Promise<{ deletedCount: number }> {
+    return this.billingService.clearTelegramMessages(req.user?.companyId);
   }
 
   @Post('checkout')

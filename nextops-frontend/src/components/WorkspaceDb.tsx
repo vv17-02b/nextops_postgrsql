@@ -68,7 +68,7 @@ export default function WorkspaceDb({ isOpen, onCloseAction }: WorkspaceDbProps)
   }, [logs]);
 
   // Завантаження початкових глобальних метрик для нових карток
-  const updateGlobalMetrics = async () => {
+  const updateGlobalMetrics = async (): Promise<void> => {
     try {
       const entityRows = await Promise.all(
         DATABASE_ENTITIES.map((entity) => fetchEntityRows(entity)),
@@ -76,15 +76,17 @@ export default function WorkspaceDb({ isOpen, onCloseAction }: WorkspaceDbProps)
 
       const rowCount = entityRows.reduce((total, rows) => total + countRows(rows), 0);
       const currentProjects = entityRows[DATABASE_ENTITIES.indexOf("project")];
-      const currentAiBudgets = entityRows[DATABASE_ENTITIES.indexOf("useraibudget")] as any[];
+      const currentAiBudgets = entityRows[DATABASE_ENTITIES.indexOf("useraibudget")] as Array<{
+        currentUsageMinor?: number;
+      }>;
 
       setProjectCount(countRows(currentProjects));
       setTotalRows(rowCount);
       setDatabaseOnline(true);
 
       if (currentAiBudgets && currentAiBudgets.length > 0) {
-        const usage = currentAiBudgets.reduce((acc, b) => acc + (b.currentUsageMinor || 0), 0);
-        setAiUsage(usage / 100); 
+        const usage = currentAiBudgets.reduce((acc, b) => acc + (b.currentUsageMinor ?? 0), 0);
+        setAiUsage(usage / 100);
       } else {
         setAiUsage(0);
       }
@@ -92,6 +94,7 @@ export default function WorkspaceDb({ isOpen, onCloseAction }: WorkspaceDbProps)
       setDatabaseOnline(false);
     }
   };
+
 
   useEffect(() => {
     void updateGlobalMetrics();
@@ -167,8 +170,8 @@ export default function WorkspaceDb({ isOpen, onCloseAction }: WorkspaceDbProps)
   return (
     <div className="space-y-4 rounded-xl border border-white/10 bg-gray-900/10
      backdrop-blur-md p-4 font-sans shadow-2xl sm:p-5 w-full">
-      
-          {/* Шапка компонента (Мінімалізм / Преміум-строгість) */}
+
+      {/* Шапка компонента (Мінімалізм / Преміум-строгість) */}
       <div className="flex justify-between items-center border-b border-white/5 pb-3 select-none">
         <div className="flex items-center gap-2">
           <BarChart3 className="w-4 h-4 text-gray-400" />
@@ -176,16 +179,14 @@ export default function WorkspaceDb({ isOpen, onCloseAction }: WorkspaceDbProps)
             postgresql_console
           </h3>
         </div>
-        
+
         <div className="flex items-center gap-3 font-mono text-xs">
           <span className="text-gray-500">Database status</span>
           <div className="flex items-center gap-1.5 bg-neutral-900 border border-white/5 px-2 py-0.5 rounded">
-            <span className={`h-1.5 w-1.5 rounded-full ${
-              databaseOnline === null ? "bg-amber-500" : databaseOnline ? "bg-emerald-500" : "bg-red-500"
-            }`} />
-            <span className={`text-[10px] font-bold uppercase ${
-              databaseOnline === null ? "text-amber-500" : databaseOnline ? "text-emerald-500" : "text-red-500"
-            }`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${databaseOnline === null ? "bg-amber-500" : databaseOnline ? "bg-emerald-500" : "bg-red-500"
+              }`} />
+            <span className={`text-[10px] font-bold uppercase ${databaseOnline === null ? "text-amber-500" : databaseOnline ? "text-emerald-500" : "text-red-500"
+              }`}>
               {databaseOnline === null ? "Checking" : databaseOnline ? "Online" : "Offline"}
             </span>
           </div>
@@ -205,14 +206,13 @@ export default function WorkspaceDb({ isOpen, onCloseAction }: WorkspaceDbProps)
         </div>
       </div>
 
-         {/* Термінал виводу логів (ЗАХИЩЕНИЙ ВІД ПЕРЕПОВНЕННЯ ТА ВИЛАЗІННЯ) */}
+      {/* Термінал виводу логів (ЗАХИЩЕНИЙ ВІД ПЕРЕПОВНЕННЯ ТА ВИЛАЗІННЯ) */}
       <div className="bg-gray-950/60 rounded-lg border border-white/5 p-3 h-[250px] max-h-[350px] overflow-y-auto overflow-x-hidden font-mono text-xs text-gray-300 space-y-1.5 scrollbar-thin scrollbar-thumb-white/10">
         {logs.map((log, index) => (
-          <p 
-            key={`${index}-${log.text}`} 
-            className={`whitespace-pre-wrap break-all leading-relaxed ${
-              log.type === "cmd" ? "text-blue-400 font-bold border-l-2 border-blue-500 pl-1.5" : "text-gray-300"
-            }`}
+          <p
+            key={`${index}-${log.text}`}
+            className={`whitespace-pre-wrap break-all leading-relaxed ${log.type === "cmd" ? "text-blue-400 font-bold border-l-2 border-blue-500 pl-1.5" : "text-gray-300"
+              }`}
           >
             {log.type === "cmd" ? `> ${log.text}` : log.text}
           </p>
