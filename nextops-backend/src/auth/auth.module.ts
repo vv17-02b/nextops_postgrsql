@@ -9,6 +9,9 @@ import { jwtSecret } from './jwt-secret';
 import { RolesGuard } from './roles.guard';
 import { TokenRevocationService } from './token-revocation.service';
 import { RedisRateLimitGuard } from './rate-limit.guard';
+import { ApiKeyService } from './api-key.service';
+import { ApiKeyController } from './api-key.controller';
+import { ScopeGuard } from './scope.guard';
 
 @Global()
 @Module({
@@ -19,17 +22,27 @@ import { RedisRateLimitGuard } from './rate-limit.guard';
       signOptions: { expiresIn: '7d' },
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, ApiKeyController],
   providers: [
     JwtStrategy,
+    ApiKeyService,
     JwtAuthGuard,
     RolesGuard,
+    ScopeGuard,
     TokenRevocationService,
     RedisRateLimitGuard,
     { provide: APP_GUARD, useExisting: RedisRateLimitGuard },
     { provide: APP_GUARD, useExisting: JwtAuthGuard },
     { provide: APP_GUARD, useExisting: RolesGuard },
+    { provide: APP_GUARD, useExisting: ScopeGuard },
   ],
-  exports: [PassportModule, JwtModule, TokenRevocationService, RedisRateLimitGuard],
+  exports: [
+    PassportModule,
+    JwtModule,
+    TokenRevocationService,
+    RedisRateLimitGuard,
+    ApiKeyService,
+    ScopeGuard,
+  ],
 })
 export class AuthModule {}

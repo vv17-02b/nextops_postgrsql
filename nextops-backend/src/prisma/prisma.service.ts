@@ -8,6 +8,7 @@ const TENANT_MODELS = new Set([
   'apiHistory',
   'auditLog',
   'category',
+  'companyApiKey',
   'invitation',
   'order',
   'orderItem',

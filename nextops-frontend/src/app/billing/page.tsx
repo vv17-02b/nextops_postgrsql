@@ -8,7 +8,21 @@ import {
   isNotificationSoundMuted,
   setNotificationSoundMuted,
 } from '@/lib/notification-sound';
-import { CheckCircle2, CreditCard, Sparkles, Users, Box, Send, Volume2, VolumeX } from 'lucide-react';
+import {
+  CheckCircle2,
+  CreditCard,
+  Sparkles,
+  Users,
+  Box,
+  Send,
+  Volume2,
+  VolumeX,
+  Key,
+  Copy,
+  Check,
+  Trash2,
+  Plus,
+} from 'lucide-react';
 
 interface PlanItem {
   code: string;
@@ -46,12 +60,30 @@ interface BillingStatusResponse {
   };
 }
 
+interface ApiKeySummary {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  isActive: boolean;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
 export default function BillingPage(): React.JSX.Element {
   const { refreshWorkspace } = useWorkspace();
   const refreshWorkspaceRef = useRef(refreshWorkspace);
   refreshWorkspaceRef.current = refreshWorkspace;
 
   const [statusData, setStatusData] = useState<BillingStatusResponse | null>(null);
+  const [apiKeys, setApiKeys] = useState<ApiKeySummary[]>([]);
+  const [newKeyName, setNewKeyName] = useState<string>('');
+  const [revealedRawKey, setRevealedRawKey] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<boolean>(false);
+  const [creatingKey, setCreatingKey] = useState<boolean>(false);
+  const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
+
   const [isSoundMuted, setIsSoundMuted] = useState<boolean>(false);
   const [tgTokenInput, setTgTokenInput] = useState<string>('');
   const [tgChatIdInput, setTgChatIdInput] = useState<string>('');
@@ -61,30 +93,50 @@ export default function BillingPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const loadBilling = useCallback(async (silent = false): Promise<void> => {
-    if (!silent) {
-      setLoading(true);
-    }
-    setError(null);
+  const loadApiKeys = useCallback(async (): Promise<void> => {
     try {
-      const resStatus = await apiFetch(getApiUrl('/api/billing/status'), {
+      const res = await apiFetch(getApiUrl('/api/api-keys'), {
         headers: getApiHeaders(),
       });
-
-      if (!resStatus.ok) {
-        setError(`Не вдалося завантажити статус підписки (HTTP ${resStatus.status}).`);
-        return;
+      if (res.ok) {
+        const data = (await res.json()) as { keys?: ApiKeySummary[] };
+        setApiKeys(Array.isArray(data.keys) ? data.keys : []);
       }
-      const payload = (await resStatus.json()) as BillingStatusResponse;
-      setStatusData(payload);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Помилка мережі при завантаженні білінгу.');
-    } finally {
-      if (!silent) {
-        setLoading(false);
-      }
+    } catch {
+      // Ignore if current user role does not have key management permissions
     }
   }, []);
+
+  const loadBilling = useCallback(
+    async (silent = false): Promise<void> => {
+      if (!silent) {
+        setLoading(true);
+      }
+      setError(null);
+      try {
+        const [resStatus] = await Promise.all([
+          apiFetch(getApiUrl('/api/billing/status'), {
+            headers: getApiHeaders(),
+          }),
+          loadApiKeys(),
+        ]);
+
+        if (!resStatus.ok) {
+          setError(`Не вдалося завантажити статус підписки (HTTP ${resStatus.status}).`);
+          return;
+        }
+        const payload = (await resStatus.json()) as BillingStatusResponse;
+        setStatusData(payload);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Помилка мережі при завантаженні білінгу.');
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
+      }
+    },
+    [loadApiKeys],
+  );
 
   useEffect(() => {
     setIsSoundMuted(isNotificationSoundMuted());
@@ -150,7 +202,8 @@ export default function BillingPage(): React.JSX.Element {
     }
   };
 
-  const handleSaveTelegram = async (): Promise<void> => {
+  const handleSaveTelegram = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    e.preventDefault();
     const botToken = tgTokenInput.trim();
     const chatId = (tgChatIdInput || statusData?.telegram?.chatId || '').trim();
 
@@ -185,6 +238,72 @@ export default function BillingPage(): React.JSX.Element {
     }
   };
 
+  const handleCreateApiKey = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    e.preventDefault();
+    const trimmedName = newKeyName.trim();
+    if (!trimmedName) {
+      setError('Вкажіть назву підключення (наприклад, "Інтернет-магазин на телефоні").');
+      return;
+    }
+
+    setCreatingKey(true);
+    setError(null);
+    setNotice(null);
+    setRevealedRawKey(null);
+    setCopiedKey(false);
+
+    try {
+      const res = await apiFetch(getApiUrl('/api/api-keys'), {
+        method: 'POST',
+        headers: getApiHeaders(true),
+        body: JSON.stringify({
+          name: trimmedName,
+          scopes: ['read:products', 'write:orders', 'write:reviews'],
+        }),
+      });
+
+      const payload = (await res.json()) as { apiKey?: string; message?: string };
+      if (!res.ok || !payload.apiKey) {
+        setError(payload.message ?? `Не вдалося створити API-ключ (HTTP ${res.status}).`);
+        return;
+      }
+
+      setRevealedRawKey(payload.apiKey);
+      setNewKeyName('');
+      setNotice('Новий API-ключ створено! Скопіюйте його зараз — повторно він не відображатиметься.');
+      await loadApiKeys();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Помилка мережі при створенні API-ключа.');
+    } finally {
+      setCreatingKey(false);
+    }
+  };
+
+  const handleRevokeApiKey = async (keyId: string): Promise<void> => {
+    if (!window.confirm('Відкликати цей API-ключ? Зовнішні сайти з цим ключем миттєво втратять доступ.')) {
+      return;
+    }
+
+    setRevokingKeyId(keyId);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await apiFetch(getApiUrl(`/api/api-keys/${encodeURIComponent(keyId)}`), {
+        method: 'DELETE',
+        headers: getApiHeaders(),
+      });
+      if (!res.ok) {
+        setError(`Не вдалося відкликати ключ (HTTP ${res.status}).`);
+        return;
+      }
+      setNotice('API-ключ успішно відкликано, кеш Redis очищено.');
+      await loadApiKeys();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Помилка мережі при відкликанні ключа.');
+    } finally {
+      setRevokingKeyId(null);
+    }
+  };
   const billing = statusData?.billing;
   const seatPercent = billing
     ? Math.min(100, Math.round((billing.usedSeats / Math.max(1, billing.maxUsers)) * 100))
@@ -200,10 +319,10 @@ export default function BillingPage(): React.JSX.Element {
           <div>
             <h1 className="text-xl font-bold text-white font-mono flex items-center gap-2">
               <CreditCard className="h-5 w-5 text-blue-400" />
-              Тарифи та підписка платформи
+              Тарифи, API-ключі та інтеграції платформи
             </h1>
             <p className="text-sm text-gray-400 font-mono mt-1">
-              Керування планом робочого простору, лімітами команди та статусом оплати
+              Керування планом робочого простору, підключенням зовнішніх вітрин по X-Api-Key та Telegram
             </p>
           </div>
 
@@ -216,8 +335,8 @@ export default function BillingPage(): React.JSX.Element {
             {billing && (
               <span
                 className={`rounded-lg border px-3 py-1.5 text-xs font-semibold font-mono ${billing.subscriptionStatus === 'ACTIVE' || billing.subscriptionStatus === 'TRIALING'
-                  ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
-                  : 'border-red-500/30 bg-red-500/15 text-red-300'
+                    ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+                    : 'border-red-500/30 bg-red-500/15 text-red-300'
                   }`}
               >
                 Статус: {billing.subscriptionStatus}
@@ -291,8 +410,8 @@ export default function BillingPage(): React.JSX.Element {
                 <div
                   key={plan.code}
                   className={`flex flex-col justify-between rounded-xl border p-6 backdrop-blur-md shadow-2xl font-mono transition ${isCurrent
-                    ? 'border-blue-500/60 bg-blue-950/20'
-                    : 'border-white/10 bg-gray-950/40 hover:border-white/20'
+                      ? 'border-blue-500/60 bg-blue-950/20'
+                      : 'border-white/10 bg-gray-950/40 hover:border-white/20'
                     }`}
                 >
                   <div>
@@ -331,8 +450,8 @@ export default function BillingPage(): React.JSX.Element {
                     disabled={isCurrent || submittingPlan !== null}
                     onClick={() => void handleSelectPlan(plan.code)}
                     className={`mt-6 w-full rounded-lg border px-4 py-2.5 text-xs font-semibold transition cursor-pointer ${isCurrent
-                      ? 'border-white/10 bg-white/5 text-gray-400 cursor-default'
-                      : 'border-blue-500 bg-blue-600/30 text-blue-200 hover:bg-blue-600/50 disabled:opacity-40'
+                        ? 'border-white/10 bg-white/5 text-gray-400 cursor-default'
+                        : 'border-blue-500 bg-blue-600/30 text-blue-200 hover:bg-blue-600/50 disabled:opacity-40'
                       }`}
                   >
                     {isCurrent
@@ -346,6 +465,116 @@ export default function BillingPage(): React.JSX.Element {
             })}
           </div>
 
+          {/* Блок керування API-ключами (X-Api-Key) для підключення зовнішніх сайтів */}
+          <div className="bg-gray-950/40 backdrop-blur-md border border-white/10 rounded-xl p-6 shadow-2xl font-mono space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  <Key className="h-4 w-4 text-amber-400" />
+                  API-ключі для підключення зовнішніх вітрин (X-Api-Key)
+                </h2>
+                <p className="text-xs text-gray-400 mt-1">
+                  Використовуйте заголовок X-Api-Key для підключення інтернет-магазинів і мобільних застосунків до /api/public/v1/*
+                </p>
+              </div>
+              <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">
+                SHA-256 + Redis Cache + RLS
+              </span>
+            </div>
+
+            <form
+              onSubmit={(e) => void handleCreateApiKey(e)}
+              className="grid grid-cols-1 gap-4 md:grid-cols-3 items-end"
+            >
+              <div className="md:col-span-2">
+                <label htmlFor="new-api-key-name" className="block text-xs text-gray-400 mb-1.5">
+                  Назва інтеграції або магазину
+                </label>
+                <input
+                  id="new-api-key-name"
+                  name="apiKeyName"
+                  type="text"
+                  value={newKeyName}
+                  onChange={(e) => setNewKeyName(e.target.value)}
+                  placeholder="Напр. Storefront Web & Mobile App #1"
+                  className="w-full rounded-lg border border-white/10 bg-gray-900/70 px-3 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-amber-400"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={creatingKey}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-500/50 bg-amber-500/20 px-4 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/30 transition cursor-pointer disabled:opacity-40"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>{creatingKey ? 'Генерація...' : 'Згенерувати API-ключ'}</span>
+              </button>
+            </form>
+
+            {revealedRawKey && (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-4 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-amber-300">
+                    ⚠️ Скопіюйте ваш секретний API-ключ зараз (він більше не показуватиметься):
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(revealedRawKey);
+                      setCopiedKey(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/50 bg-amber-500/20 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-500/30 cursor-pointer"
+                  >
+                    {copiedKey ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                    <span>{copiedKey ? 'Скопійовано!' : 'Скопіювати ключ'}</span>
+                  </button>
+                </div>
+                <code className="block w-full overflow-x-auto rounded-lg bg-black/50 px-3 py-2 text-xs text-emerald-300 select-all">
+                  {revealedRawKey}
+                </code>
+              </div>
+            )}
+
+            {apiKeys.length > 0 && (
+              <div className="overflow-x-auto border border-white/10 rounded-xl">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 bg-gray-900/40 text-gray-400">
+                      <th className="p-3">Назва</th>
+                      <th className="p-3">Префікс ключа</th>
+                      <th className="p-3">Дозволи (Scopes)</th>
+                      <th className="p-3">Останнє використання</th>
+                      <th className="p-3 text-right">Дія</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-gray-200">
+                    {apiKeys.map((item) => (
+                      <tr key={item.id} className="hover:bg-white/5">
+                        <td className="p-3 font-semibold text-white">{item.name}</td>
+                        <td className="p-3 text-amber-300">{item.prefix}••••••••</td>
+                        <td className="p-3 text-gray-400">{item.scopes.join(', ')}</td>
+                        <td className="p-3 text-gray-400">
+                          {item.lastUsedAt ? new Date(item.lastUsedAt).toLocaleString() : 'Ще не використовувався'}
+                        </td>
+                        <td className="p-3 text-right">
+                          <button
+                            type="button"
+                            disabled={revokingKeyId === item.id}
+                            onClick={() => void handleRevokeApiKey(item.id)}
+                            className="inline-flex items-center gap-1 rounded border border-red-500/30 bg-red-500/15 px-2.5 py-1 text-red-300 hover:bg-red-500/25 cursor-pointer disabled:opacity-40"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            <span>Відкликати</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Блок сповіщень Telegram */}
           <div className="bg-gray-950/40 backdrop-blur-md border border-white/10 rounded-xl p-6 shadow-2xl font-mono space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
               <div>
@@ -368,8 +597,8 @@ export default function BillingPage(): React.JSX.Element {
                     window.dispatchEvent(new Event('nextops:sound-mute-changed'));
                   }}
                   className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-semibold transition cursor-pointer ${isSoundMuted
-                    ? 'border-red-500/30 bg-red-500/15 text-red-300 hover:bg-red-500/25'
-                    : 'border-blue-500/30 bg-blue-500/15 text-blue-300 hover:bg-blue-500/25'
+                      ? 'border-red-500/30 bg-red-500/15 text-red-300 hover:bg-red-500/25'
+                      : 'border-blue-500/30 bg-blue-500/15 text-blue-300 hover:bg-blue-500/25'
                     }`}
                 >
                   {isSoundMuted ? (
@@ -386,8 +615,8 @@ export default function BillingPage(): React.JSX.Element {
                 </button>
                 <span
                   className={`rounded-lg border px-3 py-1 text-xs font-semibold ${statusData.telegram?.connected
-                    ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
-                    : 'border-white/10 bg-white/5 text-gray-400'
+                      ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+                      : 'border-white/10 bg-white/5 text-gray-400'
                     }`}
                 >
                   {statusData.telegram?.connected
@@ -397,11 +626,19 @@ export default function BillingPage(): React.JSX.Element {
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3 items-end">
+            <form
+              onSubmit={(e) => void handleSaveTelegram(e)}
+              className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3 items-end"
+            >
               <div>
-                <label className="block text-xs text-gray-400 mb-1.5">Telegram Bot Token</label>
+                <label htmlFor="telegram-bot-token-input" className="block text-xs text-gray-400 mb-1.5">
+                  Telegram Bot Token
+                </label>
                 <input
+                  id="telegram-bot-token-input"
+                  name="telegramBotToken"
                   type="password"
+                  autoComplete="new-password"
                   value={tgTokenInput}
                   onChange={(e) => setTgTokenInput(e.target.value)}
                   placeholder={statusData.telegram?.maskedToken ?? '123456789:AAH...'}
@@ -409,8 +646,12 @@ export default function BillingPage(): React.JSX.Element {
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1.5">Telegram Chat ID</label>
+                <label htmlFor="telegram-chat-id-input" className="block text-xs text-gray-400 mb-1.5">
+                  Telegram Chat ID
+                </label>
                 <input
+                  id="telegram-chat-id-input"
+                  name="telegramChatId"
                   type="text"
                   value={tgChatIdInput || statusData.telegram?.chatId || ''}
                   onChange={(e) => setTgChatIdInput(e.target.value)}
@@ -419,19 +660,17 @@ export default function BillingPage(): React.JSX.Element {
                 />
               </div>
               <button
-                type="button"
+                type="submit"
                 disabled={savingTelegram}
-                onClick={() => void handleSaveTelegram()}
                 className="rounded-lg border border-blue-500 bg-blue-600/30 px-4 py-2 text-xs font-semibold text-blue-200 hover:bg-blue-600/50 transition cursor-pointer disabled:opacity-40"
               >
                 {savingTelegram ? 'Перевірка бота...' : 'Зберегти та надіслати тест'}
               </button>
-            </div>
+            </form>
           </div>
         </>
       ) : null}
     </div>
   );
 }
-
 

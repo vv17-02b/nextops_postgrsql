@@ -39,6 +39,8 @@ model Company {
   apiHistories        ApiHistory[]
   userAiBudgets       UserAiBudget[]
   auditLogs           AuditLog[]
+  apiKeys             CompanyApiKey[]
+
 }
 
 model Plan {
@@ -377,4 +379,24 @@ model AuditLog {
 
   @@index([companyId, createdAt(sort: Desc)])
   @@index([companyId, entityType, entityId])
+}
+
+model CompanyApiKey {
+  id         String    @id @default(uuid())
+  companyId  String
+  name       String
+  keyHash    String    @unique
+  prefix     String
+  scopes     String[]  @default(["read:products", "write:orders"])
+  isActive   Boolean   @default(true)
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([id, companyId])
+  @@index([companyId])
+  @@index([keyHash])
 }

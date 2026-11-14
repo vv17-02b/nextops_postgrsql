@@ -26,6 +26,7 @@ import { QueueModule } from './common/queue/queue.module';
 import { TenantContext } from './prisma/tenant-context';
 import { InvitationModule } from './invitation/invitation.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { StorefrontModule } from './storefront/storefront.module';
 
 @Module({
   imports: [
@@ -52,8 +53,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
     WarehouseModule,
     WebhookConfigModule,
     HealthModule,
-    DashboardModule
-
+    DashboardModule,
+    StorefrontModule,
   ],
   providers: [
     {
