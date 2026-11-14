@@ -298,40 +298,73 @@ export default function ExecutiveDashboardPage(): React.JSX.Element {
                 </span>
               </div>
 
-              <div className="grid grid-cols-7 gap-2 md:gap-3 items-end h-48 pt-6 border-b border-white/10 pb-3">
+                          <div className="grid grid-cols-7 gap-2 md:gap-4 items-end h-56 pt-6 border-b border-white/10 pb-3">
                 {data.dailyRevenue.map((point) => {
-                  const heightPercent =
-                    point.revenueMinor > 0
-                      ? Math.max(12, Math.round((point.revenueMinor / maxDailyRevenue) * 100))
-                      : 6;
+                  const hasRevenue = point.revenueMinor > 0;
+                  const heightPercent = hasRevenue
+                    ? Math.max(18, Math.round((point.revenueMinor / maxDailyRevenue) * 100))
+                    : 5;
 
                   return (
                     <div
                       key={point.date}
-                      className="flex flex-col items-center justify-end h-full group"
+                      className="flex flex-col items-center justify-end h-full group cursor-pointer"
                     >
-                      <span className="text-[10px] font-mono text-gray-300 mb-1.5 opacity-80 group-hover:text-white transition">
-                        {point.revenueMinor > 0
-                          ? `$${(point.revenueMinor / 100).toFixed(0)}`
-                          : '$0'}
-                      </span>
-                      <div className="w-full max-w-[44px] h-32 flex items-end justify-center bg-white/[0.03] rounded-t-lg overflow-hidden">
-                        <div
-                          style={{ height: `${heightPercent}%` }}
-                          title={`${point.label}: ${formatMoney(point.revenueMinor, data.kpis.currency)} (${point.ordersCount} зам.)`}
-                          className={`w-full rounded-t-lg transition-all duration-500 ${point.revenueMinor > 0
-                            ? 'bg-gradient-to-t from-blue-600 to-cyan-400 group-hover:brightness-110'
-                            : 'bg-gray-800/70'
-                            }`}
-                        />
+                      <div className="mb-2 text-center transition-transform duration-300 group-hover:-translate-y-1">
+                        <span
+                          className={`block text-[11px] font-mono font-bold ${
+                            hasRevenue
+                              ? 'text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]'
+                              : 'text-gray-500'
+                          }`}
+                        >
+                          {hasRevenue ? `$${(point.revenueMinor / 100).toFixed(0)}` : '$0'}
+                        </span>
+                        {point.ordersCount > 0 && (
+                          <span className="block text-[9px] font-mono text-blue-300/80">
+                            {point.ordersCount} зам.
+                          </span>
+                        )}
                       </div>
-                      <span className="text-[11px] font-mono text-gray-400 mt-2">
+
+                      {/* Скляна колба з живою рідиною */}
+                      <div
+                        title={`${point.label}: ${formatMoney(point.revenueMinor, data.kpis.currency)} (${point.ordersCount} зам.)`}
+                        className="liquid-flask w-full max-w-[48px] h-36 rounded-2xl transition-all duration-300 group-hover:scale-105 group-hover:border-cyan-400/60"
+                      >
+                        {hasRevenue ? (
+                          <div style={{ height: `${heightPercent}%` }} className="liquid-fill">
+                            <div className="liquid-wave-back" />
+                            <div className="liquid-wave" />
+                            <span
+                              className="liquid-bubble w-1.5 h-1.5 left-[28%]"
+                              style={{ animationDelay: '0s' }}
+                            />
+                            <span
+                              className="liquid-bubble w-1 h-1 left-[64%]"
+                              style={{ animationDelay: '1.2s' }}
+                            />
+                            <span
+                              className="liquid-bubble w-1.5 h-1.5 left-[45%]"
+                              style={{ animationDelay: '2.1s' }}
+                            />
+                          </div>
+                        ) : (
+                          <div
+                            style={{ height: '6%' }}
+                            className="absolute bottom-0 left-0 right-0 bg-slate-800/70 border-t border-white/10"
+                          />
+                        )}
+                      </div>
+
+                      <span className="text-[11px] font-mono text-gray-400 group-hover:text-white mt-2.5 transition-colors">
                         {point.label}
                       </span>
                     </div>
                   );
                 })}
               </div>
+
             </div>
 
             {/* Розподіл замовлень за статусами */}
