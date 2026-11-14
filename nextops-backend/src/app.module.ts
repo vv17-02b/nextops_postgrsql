@@ -25,7 +25,7 @@ import { IdempotencyModule } from './common/idempotency/idempotency.module';
 import { QueueModule } from './common/queue/queue.module';
 import { TenantContext } from './prisma/tenant-context';
 import { InvitationModule } from './invitation/invitation.module';
-
+import { DashboardModule } from './dashboard/dashboard.module';
 @Module({
   imports: [
     PrismaModule,
@@ -51,6 +51,7 @@ import { InvitationModule } from './invitation/invitation.module';
     WarehouseModule,
     WebhookConfigModule,
     HealthModule,
+    DashboardModule
   ],
   providers: [
     {
