@@ -8,7 +8,7 @@ import {
   Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { Public } from '../auth/public.decorator';
 import { Roles } from '../auth/roles.decorator';
 import {
@@ -26,8 +26,8 @@ export class CreateCheckoutDto {
 
 export class ConfigureTelegramDto {
   @IsString()
-  @IsNotEmpty()
-  botToken!: string;
+  @IsOptional()
+  botToken?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -81,7 +81,7 @@ export class BillingController {
     @Body() dto: ConfigureTelegramDto,
     @Req() req: RequestWithUser,
   ): Promise<{ connected: boolean; chatId: string }> {
-    return this.billingService.configureTelegram(dto.botToken, dto.chatId, true, req.user?.companyId);
+    return this.billingService.configureTelegram(dto.botToken ?? '', dto.chatId, true, req.user?.companyId);
   }
 
   @Post('telegram/connect-env')

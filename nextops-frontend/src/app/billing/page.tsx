@@ -153,27 +153,30 @@ export default function BillingPage(): React.JSX.Element {
   const handleSaveTelegram = async (): Promise<void> => {
     const botToken = tgTokenInput.trim();
     const chatId = (tgChatIdInput || statusData?.telegram?.chatId || '').trim();
-    if (!botToken || !chatId) {
-      setError('Введіть Telegram Bot Token та Telegram Chat ID.');
-      return;
-    }
 
     setSavingTelegram(true);
     setError(null);
     setNotice(null);
     try {
-      const res = await apiFetch(getApiUrl('/api/billing/telegram'), {
+      const endpoint =
+        !botToken && !chatId
+          ? getApiUrl('/api/billing/telegram/connect-env')
+          : getApiUrl('/api/billing/telegram');
+
+      const res = await apiFetch(endpoint, {
         method: 'POST',
         headers: getApiHeaders(true),
         body: JSON.stringify({ botToken, chatId }),
       });
+
       const body = (await res.json()) as { message?: string };
       if (!res.ok) {
-        setError(body.message ?? 'Не вдалося перевірити токен Telegram-бота.');
+        setError(body.message ?? 'Не вдалося перевірити підключення Telegram-бота.');
         return;
       }
+
       setTgTokenInput('');
-      setNotice('Telegram-бота підключено! Тестове повідомлення надіслано у ваш чат.');
+      setNotice('Тестове повідомлення успішно надіслано в Telegram!');
       await loadBilling(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Помилка мережі при налаштуванні Telegram.');
@@ -181,6 +184,7 @@ export default function BillingPage(): React.JSX.Element {
       setSavingTelegram(false);
     }
   };
+
   const billing = statusData?.billing;
   const seatPercent = billing
     ? Math.min(100, Math.round((billing.usedSeats / Math.max(1, billing.maxUsers)) * 100))
@@ -212,8 +216,8 @@ export default function BillingPage(): React.JSX.Element {
             {billing && (
               <span
                 className={`rounded-lg border px-3 py-1.5 text-xs font-semibold font-mono ${billing.subscriptionStatus === 'ACTIVE' || billing.subscriptionStatus === 'TRIALING'
-                    ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
-                    : 'border-red-500/30 bg-red-500/15 text-red-300'
+                  ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+                  : 'border-red-500/30 bg-red-500/15 text-red-300'
                   }`}
               >
                 Статус: {billing.subscriptionStatus}
@@ -287,8 +291,8 @@ export default function BillingPage(): React.JSX.Element {
                 <div
                   key={plan.code}
                   className={`flex flex-col justify-between rounded-xl border p-6 backdrop-blur-md shadow-2xl font-mono transition ${isCurrent
-                      ? 'border-blue-500/60 bg-blue-950/20'
-                      : 'border-white/10 bg-gray-950/40 hover:border-white/20'
+                    ? 'border-blue-500/60 bg-blue-950/20'
+                    : 'border-white/10 bg-gray-950/40 hover:border-white/20'
                     }`}
                 >
                   <div>
@@ -327,8 +331,8 @@ export default function BillingPage(): React.JSX.Element {
                     disabled={isCurrent || submittingPlan !== null}
                     onClick={() => void handleSelectPlan(plan.code)}
                     className={`mt-6 w-full rounded-lg border px-4 py-2.5 text-xs font-semibold transition cursor-pointer ${isCurrent
-                        ? 'border-white/10 bg-white/5 text-gray-400 cursor-default'
-                        : 'border-blue-500 bg-blue-600/30 text-blue-200 hover:bg-blue-600/50 disabled:opacity-40'
+                      ? 'border-white/10 bg-white/5 text-gray-400 cursor-default'
+                      : 'border-blue-500 bg-blue-600/30 text-blue-200 hover:bg-blue-600/50 disabled:opacity-40'
                       }`}
                   >
                     {isCurrent
@@ -364,8 +368,8 @@ export default function BillingPage(): React.JSX.Element {
                     window.dispatchEvent(new Event('nextops:sound-mute-changed'));
                   }}
                   className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-semibold transition cursor-pointer ${isSoundMuted
-                      ? 'border-red-500/30 bg-red-500/15 text-red-300 hover:bg-red-500/25'
-                      : 'border-blue-500/30 bg-blue-500/15 text-blue-300 hover:bg-blue-500/25'
+                    ? 'border-red-500/30 bg-red-500/15 text-red-300 hover:bg-red-500/25'
+                    : 'border-blue-500/30 bg-blue-500/15 text-blue-300 hover:bg-blue-500/25'
                     }`}
                 >
                   {isSoundMuted ? (
@@ -382,8 +386,8 @@ export default function BillingPage(): React.JSX.Element {
                 </button>
                 <span
                   className={`rounded-lg border px-3 py-1 text-xs font-semibold ${statusData.telegram?.connected
-                      ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
-                      : 'border-white/10 bg-white/5 text-gray-400'
+                    ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+                    : 'border-white/10 bg-white/5 text-gray-400'
                     }`}
                 >
                   {statusData.telegram?.connected

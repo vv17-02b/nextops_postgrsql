@@ -239,7 +239,7 @@ export class BillingService {
     return this.configureTelegram(envToken, envChatId, true, companyId);
   }
 
-  async configureTelegram(
+   async configureTelegram(
     botToken: string,
     chatId: string,
     sendTest: boolean,
@@ -250,12 +250,26 @@ export class BillingService {
       throw new ForbiddenException('A business workspace is required.');
     }
 
-    const trimmedToken = botToken.trim();
+    let resolvedToken = botToken.trim();
+    if (!resolvedToken) {
+      const existing = await this.prisma.runSystemQuery(() =>
+        this.prisma.company.findUnique({
+          where: { id: activeCompanyId },
+          select: { telegramBotToken: true },
+        }),
+      );
+      resolvedToken = existing?.telegramBotToken?.trim() || process.env.TELEGRAM_BOT_TOKEN?.trim() || '';
+    }
+
+    if (!resolvedToken) {
+      throw new BadRequestException('Вкажіть Telegram Bot Token або задайте TELEGRAM_BOT_TOKEN у .env.');
+    }
+
     const trimmedChatId = chatId.trim();
 
     if (sendTest) {
       await this.telegramNotifier.sendMessage(
-        trimmedToken,
+        resolvedToken,
         trimmedChatId,
         '✅ <b>NextOps підключено!</b> Тепер сюди миттєво надходитимуть чеки про нові замовлення.',
       );
@@ -265,7 +279,7 @@ export class BillingService {
       this.prisma.company.update({
         where: { id: activeCompanyId },
         data: {
-          telegramBotToken: trimmedToken,
+          telegramBotToken: resolvedToken,
           telegramChatId: trimmedChatId,
         },
       }),

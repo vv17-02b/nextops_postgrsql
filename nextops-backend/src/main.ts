@@ -102,6 +102,17 @@ async function bootstrap() {
 
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
     prefix: '/uploads',
+    etag: true,
+    lastModified: true,
+    setHeaders: (res: Response, filePath: string) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      const normalizedPath = filePath.replace(/\\/g, '/');
+      if (normalizedPath.includes('/uploads/voice/')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+      }
+    },
   });
 
   const prismaService = app.get(PrismaService);

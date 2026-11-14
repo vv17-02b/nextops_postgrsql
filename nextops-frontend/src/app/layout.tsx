@@ -7,7 +7,11 @@ import { WorkspaceProvider } from '@/context/WorkspaceContext';
 
 export const metadata = {
   title: 'NextOps Studio',
-  description: 'Панель керування low-code архітектурою',
+  description: 'Low-code architecture control panel',
+  icons: {
+    icon: '/images/favicon.ico',
+    shortcut: '/images/favicon.ico',
+  },
 };
 
 export default function RootLayout({
