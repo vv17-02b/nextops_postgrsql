@@ -9,9 +9,13 @@ import {
   Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Roles } from './roles.decorator';
-import { ApiKeyService, type ApiKeySummary } from './api-key.service';
+import {
+  ApiKeyService,
+  type ApiKeyQuotaSummary,
+  type ApiKeySummary,
+} from './api-key.service';
 
 export class CreateApiKeyDto {
   @IsString()
@@ -22,6 +26,12 @@ export class CreateApiKeyDto {
   @IsString({ each: true })
   @IsOptional()
   scopes?: string[];
+
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  @IsOptional()
+  expiresInDays?: number;
 }
 
 interface RequestWithUser extends Request {
@@ -40,7 +50,9 @@ export class ApiKeyController {
 
   @Get()
   @Roles('OWNER', 'ADMIN')
-  listKeys(@Req() req: RequestWithUser): Promise<{ keys: ApiKeySummary[] }> {
+  listKeys(
+    @Req() req: RequestWithUser,
+  ): Promise<{ keys: ApiKeySummary[]; quota: ApiKeyQuotaSummary }> {
     return this.apiKeyService.listKeys(req.user?.companyId);
   }
 
@@ -50,7 +62,12 @@ export class ApiKeyController {
     @Body() dto: CreateApiKeyDto,
     @Req() req: RequestWithUser,
   ): Promise<ApiKeySummary & { apiKey: string }> {
-    return this.apiKeyService.createKey(dto.name, dto.scopes, req.user?.companyId);
+    return this.apiKeyService.createKey(
+      dto.name,
+      dto.scopes,
+      req.user?.companyId,
+      dto.expiresInDays,
+    );
   }
 
   @Delete(':id')

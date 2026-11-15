@@ -71,6 +71,12 @@ interface ApiKeySummary {
   createdAt: string;
 }
 
+interface ApiKeyQuotaSummary {
+  used: number;
+  limit: number;
+  planCode: string;
+}
+
 export default function BillingPage(): React.JSX.Element {
   const { refreshWorkspace } = useWorkspace();
   const refreshWorkspaceRef = useRef(refreshWorkspace);
@@ -78,7 +84,9 @@ export default function BillingPage(): React.JSX.Element {
 
   const [statusData, setStatusData] = useState<BillingStatusResponse | null>(null);
   const [apiKeys, setApiKeys] = useState<ApiKeySummary[]>([]);
+  const [apiKeyQuota, setApiKeyQuota] = useState<ApiKeyQuotaSummary | null>(null);
   const [newKeyName, setNewKeyName] = useState<string>('');
+  const [newKeyExpiresInDays, setNewKeyExpiresInDays] = useState<string>('90');
   const [revealedRawKey, setRevealedRawKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<boolean>(false);
   const [creatingKey, setCreatingKey] = useState<boolean>(false);
@@ -99,8 +107,14 @@ export default function BillingPage(): React.JSX.Element {
         headers: getApiHeaders(),
       });
       if (res.ok) {
-        const data = (await res.json()) as { keys?: ApiKeySummary[] };
+        const data = (await res.json()) as {
+          keys?: ApiKeySummary[];
+          quota?: ApiKeyQuotaSummary;
+        };
         setApiKeys(Array.isArray(data.keys) ? data.keys : []);
+        if (data.quota) {
+          setApiKeyQuota(data.quota);
+        }
       }
     } catch {
       // Ignore if current user role does not have key management permissions
@@ -252,14 +266,25 @@ export default function BillingPage(): React.JSX.Element {
     setRevealedRawKey(null);
     setCopiedKey(false);
 
+    const parsedDays = Number(newKeyExpiresInDays);
+    const requestPayload: {
+      name: string;
+      scopes: string[];
+      expiresInDays?: number;
+    } = {
+      name: trimmedName,
+      scopes: ['read:products', 'write:orders', 'write:reviews'],
+    };
+
+    if (Number.isInteger(parsedDays) && parsedDays > 0) {
+      requestPayload.expiresInDays = parsedDays;
+    }
+
     try {
       const res = await apiFetch(getApiUrl('/api/api-keys'), {
         method: 'POST',
         headers: getApiHeaders(true),
-        body: JSON.stringify({
-          name: trimmedName,
-          scopes: ['read:products', 'write:orders', 'write:reviews'],
-        }),
+        body: JSON.stringify(requestPayload),
       });
 
       const payload = (await res.json()) as { apiKey?: string; message?: string };
@@ -304,6 +329,7 @@ export default function BillingPage(): React.JSX.Element {
       setRevokingKeyId(null);
     }
   };
+
   const billing = statusData?.billing;
   const seatPercent = billing
     ? Math.min(100, Math.round((billing.usedSeats / Math.max(1, billing.maxUsers)) * 100))
@@ -397,7 +423,6 @@ export default function BillingPage(): React.JSX.Element {
               </div>
             </div>
           </div>
-
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             {statusData.plans.map((plan) => {
               const isCurrent = plan.code === billing.planCode;
@@ -465,7 +490,6 @@ export default function BillingPage(): React.JSX.Element {
             })}
           </div>
 
-          {/* Блок керування API-ключами (X-Api-Key) для підключення зовнішніх сайтів */}
           <div className="bg-gray-950/40 backdrop-blur-md border border-white/10 rounded-xl p-6 shadow-2xl font-mono space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
               <div>
@@ -477,14 +501,21 @@ export default function BillingPage(): React.JSX.Element {
                   Використовуйте заголовок X-Api-Key для підключення інтернет-магазинів і мобільних застосунків до /api/public/v1/*
                 </p>
               </div>
-              <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">
-                SHA-256 + Redis Cache + RLS
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {apiKeyQuota && (
+                  <span className="rounded-lg border border-amber-500/30 bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-300">
+                    Ключів: {apiKeyQuota.used} / {apiKeyQuota.limit} ({apiKeyQuota.planCode})
+                  </span>
+                )}
+                <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">
+                  SHA-256 + Redis Cache + RLS
+                </span>
+              </div>
             </div>
 
             <form
               onSubmit={(e) => void handleCreateApiKey(e)}
-              className="grid grid-cols-1 gap-4 md:grid-cols-3 items-end"
+              className="grid grid-cols-1 gap-4 md:grid-cols-4 items-end"
             >
               <div className="md:col-span-2">
                 <label htmlFor="new-api-key-name" className="block text-xs text-gray-400 mb-1.5">
@@ -500,6 +531,25 @@ export default function BillingPage(): React.JSX.Element {
                   className="w-full rounded-lg border border-white/10 bg-gray-900/70 px-3 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-amber-400"
                 />
               </div>
+
+              <div>
+                <label htmlFor="new-api-key-ttl" className="block text-xs text-gray-400 mb-1.5">
+                  Термін дії (ротація)
+                </label>
+                <select
+                  id="new-api-key-ttl"
+                  name="apiKeyExpiresInDays"
+                  value={newKeyExpiresInDays}
+                  onChange={(e) => setNewKeyExpiresInDays(e.target.value)}
+                  className="w-full rounded-lg border border-white/10 bg-gray-900/70 px-3 py-2 text-xs text-white outline-none focus:border-amber-400"
+                >
+                  <option value="30">30 днів</option>
+                  <option value="90">90 днів (SOC2 стандарт)</option>
+                  <option value="365">1 рік (365 днів)</option>
+                  <option value="0">Безстроково</option>
+                </select>
+              </div>
+
               <button
                 type="submit"
                 disabled={creatingKey}
@@ -509,7 +559,6 @@ export default function BillingPage(): React.JSX.Element {
                 <span>{creatingKey ? 'Генерація...' : 'Згенерувати API-ключ'}</span>
               </button>
             </form>
-
             {revealedRawKey && (
               <div className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-4 space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -542,39 +591,55 @@ export default function BillingPage(): React.JSX.Element {
                       <th className="p-3">Назва</th>
                       <th className="p-3">Префікс ключа</th>
                       <th className="p-3">Дозволи (Scopes)</th>
+                      <th className="p-3">Діє до</th>
                       <th className="p-3">Останнє використання</th>
                       <th className="p-3 text-right">Дія</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/10 text-gray-200">
-                    {apiKeys.map((item) => (
-                      <tr key={item.id} className="hover:bg-white/5">
-                        <td className="p-3 font-semibold text-white">{item.name}</td>
-                        <td className="p-3 text-amber-300">{item.prefix}••••••••</td>
-                        <td className="p-3 text-gray-400">{item.scopes.join(', ')}</td>
-                        <td className="p-3 text-gray-400">
-                          {item.lastUsedAt ? new Date(item.lastUsedAt).toLocaleString() : 'Ще не використовувався'}
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            type="button"
-                            disabled={revokingKeyId === item.id}
-                            onClick={() => void handleRevokeApiKey(item.id)}
-                            className="inline-flex items-center gap-1 rounded border border-red-500/30 bg-red-500/15 px-2.5 py-1 text-red-300 hover:bg-red-500/25 cursor-pointer disabled:opacity-40"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            <span>Відкликати</span>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {apiKeys.map((item) => {
+                      const isExpired =
+                        item.expiresAt !== null && new Date(item.expiresAt).getTime() <= Date.now();
+                      return (
+                        <tr key={item.id} className="hover:bg-white/5">
+                          <td className="p-3 font-semibold text-white">{item.name}</td>
+                          <td className="p-3 text-amber-300">{item.prefix}••••••••</td>
+                          <td className="p-3 text-gray-400">{item.scopes.join(', ')}</td>
+                          <td className="p-3">
+                            {item.expiresAt ? (
+                              <span className={isExpired ? 'text-red-400 font-semibold' : 'text-gray-300'}>
+                                {new Date(item.expiresAt).toLocaleDateString()}
+                                {isExpired ? ' (Прострочено)' : ''}
+                              </span>
+                            ) : (
+                              <span className="text-gray-500">Безстроково</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-gray-400">
+                            {item.lastUsedAt
+                              ? new Date(item.lastUsedAt).toLocaleString()
+                              : 'Ще не використовувався'}
+                          </td>
+                          <td className="p-3 text-right">
+                            <button
+                              type="button"
+                              disabled={revokingKeyId === item.id}
+                              onClick={() => void handleRevokeApiKey(item.id)}
+                              className="inline-flex items-center gap-1 rounded border border-red-500/30 bg-red-500/15 px-2.5 py-1 text-red-300 hover:bg-red-500/25 cursor-pointer disabled:opacity-40"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              <span>Відкликати</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
           </div>
 
-          {/* Блок сповіщень Telegram */}
           <div className="bg-gray-950/40 backdrop-blur-md border border-white/10 rounded-xl p-6 shadow-2xl font-mono space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
               <div>
@@ -673,4 +738,3 @@ export default function BillingPage(): React.JSX.Element {
     </div>
   );
 }
-

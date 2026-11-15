@@ -29,6 +29,12 @@ export interface ApiKeySummary {
   createdAt: string;
 }
 
+export interface ApiKeyQuotaSummary {
+  used: number;
+  limit: number;
+  planCode: string;
+}
+
 const ALLOWED_SCOPES = new Set([
   'read:products',
   'write:products',
@@ -38,6 +44,19 @@ const ALLOWED_SCOPES = new Set([
   'write:reviews',
   'read:warehouses',
 ]);
+
+const PLAN_API_KEY_LIMITS: Record<string, number> = {
+  FREE: 3,
+  PRO: 10,
+  ENTERPRISE: 50,
+};
+
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['ACTIVE', 'TRIALING']);
+
+function resolveKeyLimitForPlan(planCode: string): number {
+  const normalized = planCode.trim().toUpperCase();
+  return PLAN_API_KEY_LIMITS[normalized] ?? 3;
+}
 
 @Injectable()
 export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
@@ -76,6 +95,7 @@ export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
     name: string,
     requestedScopes?: string[],
     companyId?: string,
+    expiresInDays?: number,
   ): Promise<ApiKeySummary & { apiKey: string }> {
     const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
     if (!activeCompanyId) {
@@ -87,6 +107,33 @@ export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('Вкажіть назву API-ключа (наприклад, "Інтернет-магазин").');
     }
 
+    const [company, existingCount] = await Promise.all([
+      this.prisma.company.findUnique({
+        where: { id: activeCompanyId },
+        select: { planCode: true, subscriptionStatus: true },
+      }),
+      this.prisma.companyApiKey.count({
+        where: { companyId: activeCompanyId },
+      }),
+    ]);
+
+    if (!company) {
+      throw new ForbiddenException('Робочий простір компанії не знайдено.');
+    }
+
+    if (!ACTIVE_SUBSCRIPTION_STATUSES.has(company.subscriptionStatus)) {
+      throw new ForbiddenException(
+        `Створення API-ключів призупинено: статус підписки "${company.subscriptionStatus}". Оновіть оплату в розділі Білінг.`,
+      );
+    }
+
+    const maxKeysForPlan = resolveKeyLimitForPlan(company.planCode);
+    if (existingCount >= maxKeysForPlan) {
+      throw new ForbiddenException(
+        `Досягнуто ліміт API-ключів (${maxKeysForPlan}) для тарифу ${company.planCode}. Відкличте невикористаний ключ або перейдіть на вищий тариф.`,
+      );
+    }
+
     const scopes =
       Array.isArray(requestedScopes) && requestedScopes.length > 0
         ? requestedScopes.filter((s) => ALLOWED_SCOPES.has(s))
@@ -94,6 +141,12 @@ export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
 
     if (scopes.length === 0) {
       throw new BadRequestException('Оберіть хоча б один коректний дозвіл (scope).');
+    }
+
+    let expiresAt: Date | null = null;
+    if (typeof expiresInDays === 'number' && Number.isFinite(expiresInDays) && expiresInDays > 0) {
+      const clampedDays = Math.min(3650, Math.floor(expiresInDays));
+      expiresAt = new Date(Date.now() + clampedDays * 24 * 60 * 60 * 1000);
     }
 
     const rawKey = `nx_live_${randomBytes(24).toString('hex')}`;
@@ -107,6 +160,7 @@ export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
         keyHash,
         prefix,
         scopes,
+        expiresAt,
       },
     });
 
@@ -117,7 +171,12 @@ export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
           action: 'API_KEY_CREATED',
           entityType: 'CompanyApiKey',
           entityId: record.id,
-          metadata: { name: record.name, prefix: record.prefix, scopes: record.scopes },
+          metadata: {
+            name: record.name,
+            prefix: record.prefix,
+            scopes: record.scopes,
+            expiresAt: record.expiresAt ? record.expiresAt.toISOString() : null,
+          },
         },
       })
       .catch(() => undefined);
@@ -135,16 +194,27 @@ export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async listKeys(companyId?: string): Promise<{ keys: ApiKeySummary[] }> {
+  async listKeys(
+    companyId?: string,
+  ): Promise<{ keys: ApiKeySummary[]; quota: ApiKeyQuotaSummary }> {
     const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
     if (!activeCompanyId) {
       throw new ForbiddenException('A business workspace is required.');
     }
 
-    const rows = await this.prisma.companyApiKey.findMany({
-      where: { companyId: activeCompanyId },
-      orderBy: { createdAt: 'desc' },
-    });
+    const [rows, company] = await Promise.all([
+      this.prisma.companyApiKey.findMany({
+        where: { companyId: activeCompanyId },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.company.findUnique({
+        where: { id: activeCompanyId },
+        select: { planCode: true },
+      }),
+    ]);
+
+    const planCode = company?.planCode ?? 'FREE';
+    const limit = resolveKeyLimitForPlan(planCode);
 
     return {
       keys: rows.map((row) => ({
@@ -157,6 +227,11 @@ export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
         expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
         createdAt: row.createdAt.toISOString(),
       })),
+      quota: {
+        used: rows.length,
+        limit,
+        planCode,
+      },
     };
   }
 
@@ -198,7 +273,7 @@ export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
     return { revoked: true };
   }
 
-    async validateRawApiKey(rawKey: string): Promise<ValidatedApiKeyContext | null> {
+  async validateRawApiKey(rawKey: string): Promise<ValidatedApiKeyContext | null> {
     const trimmed = rawKey.trim();
     if (!trimmed.startsWith('nx_live_') || trimmed.length < 24) {
       return null;
@@ -228,12 +303,21 @@ export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
             scopes: true,
             isActive: true,
             expiresAt: true,
+            company: {
+              select: {
+                subscriptionStatus: true,
+              },
+            },
           },
         }),
       ),
     );
 
     if (!record || !record.isActive) {
+      return null;
+    }
+
+    if (!ACTIVE_SUBSCRIPTION_STATUSES.has(record.company.subscriptionStatus)) {
       return null;
     }
 
@@ -267,5 +351,4 @@ export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
 
     return context;
   }
-
 }
