@@ -25,8 +25,18 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     env:
       DATABASE_URL: postgresql://nextops:ci-only-password@localhost:5432/nextops_ci?schema=public
+      REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-only-jwt-secret-minimum-32-characters-long
     steps:
       - uses: actions/checkout@v5
@@ -38,6 +48,7 @@ jobs:
       - run: yarn install --immutable
       - run: yarn db:validate
       - run: yarn db:generate
+      - run: node scan_audit.js
       - run: yarn --cwd nextops-backend prisma migrate deploy --schema src/prisma/schema.prisma
       - run: yarn build
       - run: yarn typecheck
