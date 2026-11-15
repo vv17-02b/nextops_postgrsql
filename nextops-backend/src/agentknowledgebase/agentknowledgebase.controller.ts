@@ -1,11 +1,16 @@
 import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
-import { AgentKnowledgeBaseService } from './agentknowledgebase.service';
+import {
+  AgentKnowledgeBaseService,
+  type AskAssistantResponse,
+} from './agentknowledgebase.service';
 import { CreateAgentKnowledgeBaseDto } from './dto/create-agentknowledgebase.dto';
 import { UpdateAgentKnowledgeBaseDto } from './dto/update-agentknowledgebase.dto';
+import { AskKnowledgeBaseDto } from './dto/ask-knowledge-base.dto';
 import type { AgentKnowledgeBase } from '@prisma/client';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
+import { RateLimit } from '../auth/rate-limit.guard';
 
 interface RequestWithUser extends Request {
   user?: {
@@ -22,6 +27,19 @@ export class AgentKnowledgeBaseController {
     @Inject(AgentKnowledgeBaseService)
     private readonly service: AgentKnowledgeBaseService,
   ) {}
+
+  @Post('ask')
+  @RateLimit(30, 60)
+  ask(
+    @Body() dto: AskKnowledgeBaseDto,
+    @Req() req: RequestWithUser,
+  ): Promise<AskAssistantResponse> {
+    return this.service.askAssistant(dto.question, {
+      companyId: req.user?.companyId,
+      userId: req.user?.id,
+      projectId: dto.projectId,
+    });
+  }
 
   @Post()
   create(
