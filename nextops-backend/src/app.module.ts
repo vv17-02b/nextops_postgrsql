@@ -27,6 +27,7 @@ import { TenantContext } from './prisma/tenant-context';
 import { InvitationModule } from './invitation/invitation.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { StorefrontModule } from './storefront/storefront.module';
+import { SearchModule } from './search/search.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { StorefrontModule } from './storefront/storefront.module';
     HealthModule,
     DashboardModule,
     StorefrontModule,
+    SearchModule,
   ],
   providers: [
     {
