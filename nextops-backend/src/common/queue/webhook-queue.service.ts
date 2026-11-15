@@ -3,6 +3,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
+import { assertSafeWebhookUrl } from '../../webhookconfig/webhook-url.validator';
 
 export interface WebhookDeliveryJob {
   configId: string;
@@ -28,6 +29,7 @@ export function signWebhookPayload(
 }
 
 export async function deliverWebhookHttp(job: WebhookDeliveryJob): Promise<void> {
+  const safeTargetUrl = assertSafeWebhookUrl(job.url);
   const deliveryId = randomUUID();
   const body = JSON.stringify({
     id: deliveryId,
@@ -37,7 +39,7 @@ export async function deliverWebhookHttp(job: WebhookDeliveryJob): Promise<void>
     data: job.payload,
   });
 
-  const response = await fetch(job.url, {
+  const response = await fetch(safeTargetUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
