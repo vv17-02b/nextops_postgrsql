@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState } from 'react';
+
 import { useAgentKnowledgeBase } from '@/hooks/useAgentknowledgebase';
 import AgentKnowledgeBaseForm from '@/components/agentknowledgebase/agentknowledgebase-form';
 import { apiFetch, getApiHeaders, getApiUrl } from '@/lib/api';
 import { ApiErrorBanner } from '@/components/common/collection-controls';
 import { Trash2, Bot, Send, Sparkles, BookOpen, Wallet } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 
 interface KnowledgeSourceRef {
   id: string;
@@ -29,6 +30,15 @@ export default function AgentKnowledgeBasePage(): React.JSX.Element {
   const [asking, setAsking] = useState<boolean>(false);
   const [askError, setAskError] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<AskAssistantResponse | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const initialQuery = params.get('q');
+    if (initialQuery) {
+      setQuestion(initialQuery);
+    }
+  }, []);
+
 
   const handleAskAssistant = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
