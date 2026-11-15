@@ -9,6 +9,7 @@ import {
   IsString,
   Matches,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -17,6 +18,7 @@ import { RateLimit } from '../auth/rate-limit.guard';
 import { RequireScope } from '../auth/scope.guard';
 import { ShippingAddressDto } from '../order/dto/create-order.dto';
 import { StorefrontService, type StorefrontProductDto } from './storefront.service';
+import type { AskAssistantResponse } from '../agentknowledgebase/agentknowledgebase.service';
 
 class StorefrontOrderItemDto {
   @IsString()
@@ -69,6 +71,17 @@ class CreateStorefrontReviewDto {
   comment?: string;
 }
 
+class StorefrontAskDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2000)
+  question!: string;
+
+  @IsString()
+  @IsOptional()
+  projectId?: string;
+}
+
 interface RequestWithCompany extends Request {
   user?: {
     id: string;
@@ -102,5 +115,15 @@ export class StorefrontController {
   @RequireScope('write:reviews')
   createReview(@Body() dto: CreateStorefrontReviewDto, @Req() req: RequestWithCompany) {
     return this.storefrontService.createReview(dto, req.user?.companyId);
+  }
+
+  @Post('ask')
+  @RateLimit(20, 60)
+  @RequireScope('read:products')
+  askAssistant(
+    @Body() dto: StorefrontAskDto,
+    @Req() req: RequestWithCompany,
+  ): Promise<AskAssistantResponse> {
+    return this.storefrontService.askAssistant(dto.question, dto.projectId, req.user?.companyId);
   }
 }

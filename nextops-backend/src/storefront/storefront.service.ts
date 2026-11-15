@@ -7,6 +7,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
 import { OrderService } from '../order/order.service';
+import {
+  AgentKnowledgeBaseService,
+  type AskAssistantResponse,
+} from '../agentknowledgebase/agentknowledgebase.service';
 import type { ShippingAddressDto } from '../order/dto/create-order.dto';
 
 export interface StorefrontProductDto {
@@ -48,8 +52,9 @@ export class StorefrontService {
     private readonly tenantContext: TenantContext,
     @Inject(OrderService)
     private readonly orderService: OrderService,
+    @Inject(AgentKnowledgeBaseService)
+    private readonly knowledgeBaseService: AgentKnowledgeBaseService,
   ) {}
-
   private resolveCompanyId(companyId?: string): string {
     const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
     if (!activeCompanyId) {
@@ -166,6 +171,18 @@ export class StorefrontService {
         rating: input.rating,
         comment: input.comment ?? null,
       },
+    });
+  }
+
+  async askAssistant(
+    question: string,
+    projectId?: string,
+    companyId?: string,
+  ): Promise<AskAssistantResponse> {
+    const activeCompanyId = this.resolveCompanyId(companyId);
+    return this.knowledgeBaseService.askAssistant(question, {
+      companyId: activeCompanyId,
+      projectId,
     });
   }
 }
