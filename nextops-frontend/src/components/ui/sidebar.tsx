@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -8,10 +8,10 @@ import {
   User, ShieldCheck, Key, FolderHeart, Cpu, BarChart3,
   Layers, MessageSquare, ShieldAlert, ShoppingBag,
   Coins, Box, Activity, Sliders, CreditCard, Building2,
-  Pencil, Check, LogOut, LucideIcon
+  Pencil, Check, LogOut, Bot, ArrowUpRight, LucideIcon
 } from 'lucide-react';
 import { useWorkspace } from '@/context/WorkspaceContext';
-import { apiFetch, getApiUrl } from '@/lib/api';
+import { apiFetch, getApiHeaders, getApiUrl } from '@/lib/api';
 
 const WorkspacePostman = dynamic(() => import('@/components/WorkspacePostman'), { ssr: false });
 const WorkspaceDb = dynamic(() => import('@/components/WorkspaceDb'), { ssr: false });
@@ -20,6 +20,22 @@ interface SidebarLink {
   name: string;
   href: string;
   icon: LucideIcon;
+}
+
+interface GlobalSearchHit {
+  id: string;
+  category: 'PRODUCT' | 'ORDER' | 'USER' | 'KNOWLEDGE';
+  title: string;
+  subtitle: string;
+  href: string;
+  badge?: string;
+}
+
+interface GlobalSearchResponse {
+  query: string;
+  aiEnabled: boolean;
+  hits: GlobalSearchHit[];
+  cached: boolean;
 }
 
 const links: SidebarLink[] = [
@@ -49,6 +65,10 @@ export default function Sidebar(): React.JSX.Element {
   const { currentUser, updateWorkspaceName } = useWorkspace();
 
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [dbHits, setDbHits] = useState<GlobalSearchHit[]>([]);
+  const [aiSearchEnabled, setAiSearchEnabled] = useState<boolean>(false);
+  const [searchingDb, setSearchingDb] = useState<boolean>(false);
+
   const [isPostmanOpen, setIsPostmanOpen] = useState<boolean>(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState<boolean>(false);
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
@@ -62,6 +82,40 @@ export default function Sidebar(): React.JSX.Element {
     return links.filter((link: SidebarLink) => link.name.toLowerCase().includes(query));
   }, [searchQuery]);
 
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length < 2) {
+      setDbHits([]);
+      setSearchingDb(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setSearchingDb(true);
+      void apiFetch(getApiUrl(`/api/search?q=${encodeURIComponent(trimmed)}`), {
+        headers: getApiHeaders(),
+        signal: controller.signal,
+      })
+        .then(async (res) => {
+          if (!res.ok) return;
+          const payload = (await res.json()) as GlobalSearchResponse;
+          setDbHits(Array.isArray(payload.hits) ? payload.hits : []);
+          setAiSearchEnabled(Boolean(payload.aiEnabled));
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setSearchingDb(false);
+          }
+        });
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchQuery]);
   async function handleSaveCompanyName(): Promise<void> {
     if (!companyDraft.trim() || isSavingCompany) return;
     setIsSavingCompany(true);
@@ -83,6 +137,7 @@ export default function Sidebar(): React.JSX.Element {
   }
 
   const canEditWorkspace = currentUser?.role === 'OWNER' || currentUser?.role === 'ADMIN';
+  const trimmedSearch = searchQuery.trim();
 
   return (
     <>
@@ -200,50 +255,117 @@ export default function Sidebar(): React.JSX.Element {
             </div>
           )}
 
+          {/* Глобальний пошук по модулях та базі даних компанії */}
           <div className="p-4 border-b border-slate-800/40 shrink-0">
             <div className="relative flex items-center bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5 focus-within:border-blue-500/50 transition-colors">
-              <Search className="h-3.5 w-3.5 text-slate-500 mr-2" />
+              <Search className="h-3.5 w-3.5 text-slate-500 mr-2 shrink-0" />
               <input
                 type="text"
-                placeholder="Шукати module..."
+                placeholder="Пошук по базі та модулях..."
                 value={searchQuery}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                 className="bg-transparent text-xs text-white placeholder-slate-600 outline-none w-full font-mono"
               />
               {searchQuery && (
-                <X className="h-3 w-3 text-slate-500 cursor-pointer hover:text-white" onClick={() => setSearchQuery('')} />
+                <X
+                  className="h-3 w-3 text-slate-500 cursor-pointer hover:text-white shrink-0"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setDbHits([]);
+                  }}
+                />
               )}
             </div>
           </div>
+          <nav className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent bg-slate-950/20">
+            {/* Живі результати пошуку по базі PostgreSQL поточної компанії */}
+            {trimmedSearch.length >= 2 && (
+              <div className="space-y-1.5 border-b border-slate-800/70 pb-3">
+                <div className="px-2 flex items-center justify-between text-[10px] font-mono font-bold uppercase tracking-wider text-blue-400">
+                  <span>База компанії ({dbHits.length})</span>
+                  {searchingDb && <span className="text-slate-500">пошук...</span>}
+                </div>
 
-          <nav className="flex-1 overflow-y-auto p-4 space-y-1 min-h-0 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent bg-slate-950/20">
-            <span className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2 select-none">
-              Згенеровані модулі ({filteredLinks.length})
-            </span>
+                {dbHits.map((hit) => (
+                  <Link
+                    key={`${hit.category}-${hit.id}`}
+                    href={hit.href}
+                    onClick={() => {
+                      setIsMobileOpen(false);
+                      setSearchQuery('');
+                    }}
+                    className="block rounded-lg border border-white/10 bg-slate-900/80 px-2.5 py-2 hover:border-blue-500/40 hover:bg-slate-800/70 transition"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-white truncate font-mono">
+                        {hit.title}
+                      </span>
+                      {hit.badge && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 shrink-0">
+                          {hit.badge}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5 font-mono">
+                      {hit.subtitle}
+                    </p>
+                  </Link>
+                ))}
 
-            {filteredLinks.map((link: SidebarLink) => {
-              const isActive = pathname === link.href;
-              const IconComponent = link.icon;
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setIsMobileOpen(false)}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={`flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg font-mono transition-all duration-150 ${isActive
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-950/50 border border-blue-500/40'
-                    : 'hover:bg-slate-800/40 text-slate-400 hover:text-white border border-transparent'
-                    }`}
-                >
-                  <IconComponent className={`h-4 w-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-blue-400'}`} />
-                  <span className="truncate tracking-wide">{link.name}</span>
-                </Link>
-              );
-            })}
+                {!searchingDb && dbHits.length === 0 && (
+                  <div className="px-2 py-1 text-[11px] text-slate-500 font-mono">
+                    Записів у базі не знайдено
+                  </div>
+                )}
 
-            {filteredLinks.length === 0 && (
-              <div className="text-center text-xs text-slate-500 font-mono py-4 select-none">Нічого не знайдено</div>
+                {aiSearchEnabled && (
+                  <Link
+                    href={`/agentknowledgebase?q=${encodeURIComponent(trimmedSearch)}`}
+                    onClick={() => {
+                      setIsMobileOpen(false);
+                      setSearchQuery('');
+                    }}
+                    className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-xs font-mono text-amber-200 hover:bg-amber-500/20 transition"
+                  >
+                    <span className="flex items-center gap-1.5 truncate">
+                      <Bot className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                      <span className="truncate">Запитати AI: «{trimmedSearch}»</span>
+                    </span>
+                    <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                  </Link>
+                )}
+              </div>
             )}
+
+            <div className="space-y-1">
+              <span className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2 select-none">
+                Модулі платформи ({filteredLinks.length})
+              </span>
+
+              {filteredLinks.map((link: SidebarLink) => {
+                const isActive = pathname === link.href;
+                const IconComponent = link.icon;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setIsMobileOpen(false)}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg font-mono transition-all duration-150 ${isActive
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-950/50 border border-blue-500/40'
+                      : 'hover:bg-slate-800/40 text-slate-400 hover:text-white border border-transparent'
+                      }`}
+                  >
+                    <IconComponent className={`h-4 w-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-blue-400'}`} />
+                    <span className="truncate tracking-wide">{link.name}</span>
+                  </Link>
+                );
+              })}
+
+              {filteredLinks.length === 0 && trimmedSearch.length < 2 && (
+                <div className="text-center text-xs text-slate-500 font-mono py-4 select-none">Нічого не знайдено</div>
+              )}
+            </div>
           </nav>
 
           <div className="p-4 border-t border-slate-800/60 bg-slate-950/60 mt-auto shrink-0 space-y-2.5">
@@ -307,4 +429,3 @@ export default function Sidebar(): React.JSX.Element {
     </>
   );
 }
-

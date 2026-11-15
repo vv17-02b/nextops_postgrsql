@@ -1,27 +1,66 @@
-yourdomain.com, ://yourdomain.com {
-    # Автоматичне стиснення трафіку для швидкого завантаження інтерфейсу
-    encode gzip zstd
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-    # Заголовки безпеки рівня продакшену
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "DENY"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        -Server
-    }
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"]
+    volumes:
+      - redis-data:/data
 
-    # Усі запити /api/* та /uploads/* напряму йдуть на NestJS Backend (порт 3001)
-    handle /api/* {
-        reverse_proxy localhost:3001
-    }
+  migrate:
+    build:
+      context: .
+      dockerfile: nextops-backend/Dockerfile
+    working_dir: /app/nextops-backend
+    command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy", "--schema", "src/prisma/schema.prisma"]
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
-    handle /uploads/* {
-        reverse_proxy localhost:3001
-    }
+  backend:
+    build:
+      context: .
+      dockerfile: nextops-backend/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
-    # Усі інші запити (інтерфейс кабінету) йдуть на Next.js Frontend (порт 3000)
-    handle {
-        reverse_proxy localhost:3000
-    }
-}
+  frontend:
+    build:
+      context: .
+      dockerfile: nextops-frontend/Dockerfile
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:
