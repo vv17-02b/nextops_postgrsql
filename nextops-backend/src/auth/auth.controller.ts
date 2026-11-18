@@ -35,7 +35,15 @@ import { TokenRevocationService } from './token-revocation.service';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-recovery.dto';
 import { EmailQueueService } from '../common/queue/email-queue.service';
 
+
 const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+function isPlatformOwnerEmail(email: string | null | undefined): boolean {
+  const bootstrapEmail = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
+  if (!bootstrapEmail || !email) return false;
+  return email.trim().toLowerCase() === bootstrapEmail;
+}
+
 
 export class UpdateWorkspaceDto {
   @IsString()
@@ -235,6 +243,7 @@ export class AuthController {
     return { csrfToken };
   }
 
+
   @Get('me')
   async currentUser(
     @Req() request: Request & { user: AuthenticatedRequestUser },
@@ -242,15 +251,19 @@ export class AuthController {
     user: AuthenticatedRequestUser & {
       companyName: string | null;
       planCode: string | null;
+      isPlatformOwner: boolean;
     };
   }> {
     const companyId = request.user.companyId;
+    const isPlatformOwner = isPlatformOwnerEmail(request.user.email);
+
     if (!companyId) {
       return {
         user: {
           ...request.user,
           companyName: null,
           planCode: null,
+          isPlatformOwner,
         },
       };
     }
@@ -267,9 +280,11 @@ export class AuthController {
         ...request.user,
         companyName: company?.name ?? null,
         planCode: company?.planCode ?? null,
+        isPlatformOwner,
       },
     };
   }
+
 
   @Patch('workspace')
   @Roles('OWNER', 'ADMIN')

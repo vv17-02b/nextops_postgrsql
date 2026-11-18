@@ -28,6 +28,7 @@ import { InvitationModule } from './invitation/invitation.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { StorefrontModule } from './storefront/storefront.module';
 import { SearchModule } from './search/search.module';
+import { PlatformModule } from './platform/platform.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { SearchModule } from './search/search.module';
     DashboardModule,
     StorefrontModule,
     SearchModule,
+    PlatformModule 
   ],
   providers: [
     {

@@ -408,7 +408,7 @@ export class BillingService {
       success_url: `${frontendBase}/billing?checkout=success&plan=${plan.code}`,
       cancel_url: `${frontendBase}/billing?checkout=canceled`,
     });
-
+    // API для приёма платежей.
     const stripeSessionsEndpoint = 'https://stripe.com';
     const response = await fetch(stripeSessionsEndpoint, {
       method: 'POST',

@@ -77,10 +77,14 @@ export default function Sidebar(): React.JSX.Element {
   const [isSavingCompany, setIsSavingCompany] = useState<boolean>(false);
 
   const filteredLinks = useMemo(() => {
+    const allLinks: SidebarLink[] = currentUser?.isPlatformOwner
+      ? [{ name: 'SaaS Компанії', href: '/platform', icon: Building2 }, ...links]
+      : links;
     const query = searchQuery.toLowerCase().trim();
-    if (!query) return links;
-    return links.filter((link: SidebarLink) => link.name.toLowerCase().includes(query));
-  }, [searchQuery]);
+    if (!query) return allLinks;
+    return allLinks.filter((link: SidebarLink) => link.name.toLowerCase().includes(query));
+  }, [searchQuery, currentUser?.isPlatformOwner]);
+
 
   useEffect(() => {
     const trimmed = searchQuery.trim();

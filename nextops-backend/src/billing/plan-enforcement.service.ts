@@ -32,7 +32,7 @@ export class PlanEnforcementService {
       throw new ForbiddenException('A business workspace is required.');
     }
 
-    const company = await this.prisma.runSystemQuery(() =>
+    let company = await this.prisma.runSystemQuery(() =>
       this.prisma.company.findUnique({
         where: { id: activeCompanyId },
         include: { plan: true },
@@ -41,6 +41,22 @@ export class PlanEnforcementService {
 
     if (!company) {
       throw new ForbiddenException('Workspace not found.');
+    }
+
+    // Автоматична прострочка: якщо оплачений період закінчився, переводимо в PAST_DUE
+    if (
+      company.planCode !== 'FREE' &&
+      (company.subscriptionStatus === 'ACTIVE' || company.subscriptionStatus === 'TRIALING') &&
+      company.currentPeriodEnd &&
+      company.currentPeriodEnd.getTime() < Date.now()
+    ) {
+      company = await this.prisma.runSystemQuery(() =>
+        this.prisma.company.update({
+          where: { id: activeCompanyId },
+          data: { subscriptionStatus: 'PAST_DUE' },
+          include: { plan: true },
+        }),
+      );
     }
 
     const { usersCount, pendingInvitesCount, productsCount } = await this.tenantContext.runWithCompany(
@@ -83,6 +99,17 @@ export class PlanEnforcementService {
   async assertActiveSubscription(companyId?: string): Promise<void> {
     const snapshot = await this.getBillingSnapshot(companyId);
 
+    if (snapshot.subscriptionStatus === 'SUSPENDED') {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.PAYMENT_REQUIRED,
+          errorCode: 'WORKSPACE_SUSPENDED',
+          message: 'Робочий простір заблоковано адміністрацією платформи або через прострочення оренди. Зверніться до підтримки або оновіть оплату в розділі Білінг.',
+        },
+        HttpStatus.PAYMENT_REQUIRED,
+      );
+    }
+
     if (snapshot.subscriptionStatus === 'CANCELED') {
       throw new HttpException(
         {
@@ -103,7 +130,7 @@ export class PlanEnforcementService {
         {
           statusCode: HttpStatus.PAYMENT_REQUIRED,
           errorCode: 'SUBSCRIPTION_PAST_DUE',
-          message: 'Workspace subscription payment is past due. Please update your billing method.',
+          message: 'Термін дії підписки закінчився. Оплатіть тариф у розділі Білінг, щоб відновити доступ.',
         },
         HttpStatus.PAYMENT_REQUIRED,
       );
@@ -111,18 +138,8 @@ export class PlanEnforcementService {
   }
 
   async assertUserSeatLimit(companyId?: string): Promise<void> {
+    await this.assertActiveSubscription(companyId);
     const snapshot = await this.getBillingSnapshot(companyId);
-
-    if (snapshot.subscriptionStatus === 'CANCELED') {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.PAYMENT_REQUIRED,
-          errorCode: 'SUBSCRIPTION_CANCELED',
-          message: 'Workspace subscription is canceled. Renew your plan to invite team members.',
-        },
-        HttpStatus.PAYMENT_REQUIRED,
-      );
-    }
 
     if (snapshot.usedSeats >= snapshot.maxUsers) {
       throw new HttpException(
@@ -137,18 +154,8 @@ export class PlanEnforcementService {
   }
 
   async assertProductLimit(companyId?: string): Promise<void> {
+    await this.assertActiveSubscription(companyId);
     const snapshot = await this.getBillingSnapshot(companyId);
-
-    if (snapshot.subscriptionStatus === 'CANCELED') {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.PAYMENT_REQUIRED,
-          errorCode: 'SUBSCRIPTION_CANCELED',
-          message: 'Workspace subscription is canceled. Renew your plan to add products.',
-        },
-        HttpStatus.PAYMENT_REQUIRED,
-      );
-    }
 
     if (snapshot.usedProducts >= snapshot.maxProducts) {
       throw new HttpException(

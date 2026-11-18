@@ -8,8 +8,8 @@ async function main(): Promise<void> {
   console.log('Starting enterprise PostgreSQL seed for nextops_db...');
 
   const companyId = '00000000-0000-4000-8000-000000000001';
-  const adminEmail = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim() || 'admin@nextops.local';
-  const adminPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD?.trim() || 'nextops123456789';
+  const adminEmail = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim() || 'bessv6591@gmail.com';
+  const adminPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD?.trim() || 'nextops12345vvb';
   const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN?.trim() || null;
   const telegramChatId = process.env.TELEGRAM_CHAT_ID?.trim() || null;
 

@@ -50,6 +50,7 @@ export interface CurrentSessionUser {
   companyId: string | null;
   companyName: string | null;
   planCode: string | null;
+  isPlatformOwner?: boolean;
 }
 
 interface WorkspaceContextType {
@@ -81,6 +82,7 @@ function parseSessionUser(payload: unknown): CurrentSessionUser | null {
     companyId: typeof user.companyId === "string" ? user.companyId : null,
     companyName: typeof user.companyName === "string" ? user.companyName : null,
     planCode: typeof user.planCode === "string" ? user.planCode : null,
+    isPlatformOwner: Boolean(user.isPlatformOwner),
   };
 }
 

@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -92,12 +92,39 @@ export class UserService {
 
   async remove(id: string, companyId?: string): Promise<SafeUser> {
     const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
-    if (activeCompanyId) {
-      const existing = await this.prisma.user.findFirst({ where: { id, companyId: activeCompanyId } });
-      if (!existing) throw new NotFoundException(`Користувача не знайдено`);
+    if (!activeCompanyId) {
+      throw new ForbiddenException('A business workspace is required.');
     }
 
-    const deletedUser = await this.prisma.user.delete({ where: { id } });
+    const existing = await this.prisma.user.findFirst({
+      where: { id, companyId: activeCompanyId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Користувача не знайдено`);
+    }
+
+    if (existing.role === 'OWNER') {
+      throw new BadRequestException(
+        'Неможливо видалити власника компанії. Щоб закрити робочий простір, видаліть компанію цілком.',
+      );
+    }
+
+    const owner = await this.prisma.user.findFirst({
+      where: { companyId: activeCompanyId, role: 'OWNER' },
+      select: { id: true },
+    });
+
+    const deletedUser = await this.prisma.$transaction(async (tx) => {
+      if (owner && owner.id !== existing.id) {
+        await tx.order.updateMany({
+          where: { userId: existing.id, companyId: activeCompanyId },
+          data: { userId: owner.id },
+        });
+      }
+
+      return tx.user.delete({ where: { id: existing.id } });
+    });
+
     return withoutPassword(deletedUser);
   }
 }
