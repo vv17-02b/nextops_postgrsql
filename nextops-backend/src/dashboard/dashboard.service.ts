@@ -86,7 +86,12 @@ export class DashboardService {
         take: 1000,
       }),
       this.prisma.orderItem.findMany({
-        where: { companyId: activeCompanyId },
+        where: {
+          companyId: activeCompanyId,
+          order: {
+            status: { notIn: ['CANCELED', 'CANCELLED'] },
+          },
+        },
         select: {
           productId: true,
           quantity: true,
@@ -100,7 +105,9 @@ export class DashboardService {
           id: true,
           name: true,
           slug: true,
-          inventory: true,
+          inventory: {
+            select: { quantity: true },
+          },
         },
       }),
       this.prisma.userAiBudget.findMany({
@@ -112,7 +119,6 @@ export class DashboardService {
       }),
       this.planEnforcement.getBillingSnapshot(activeCompanyId),
     ]);
-
     const statusBreakdown: OrderStatusBreakdown = {
       pending: 0,
       confirmed: 0,
@@ -170,7 +176,8 @@ export class DashboardService {
 
     for (const order of orders) {
       if (order.createdAt < sevenDaysAgo) continue;
-      if (order.status.toUpperCase() === 'CANCELED') continue;
+      const normalizedStatus = order.status.toUpperCase();
+      if (normalizedStatus === 'CANCELED' || normalizedStatus === 'CANCELLED') continue;
       const isoKey = order.createdAt.toISOString().slice(0, 10);
       const bucket = dailyMap.get(isoKey);
       if (bucket) {
@@ -183,19 +190,7 @@ export class DashboardService {
 
     // Підрахунок залишків на складі для кожного товару через inventory
     const normalizedProducts = products.map((p) => {
-      const invList = Array.isArray(p.inventory) ? p.inventory : [];
-      const totalStock = invList.reduce((sum, inv) => {
-        const rec = inv as Record<string, unknown>;
-        const qty =
-          typeof rec.quantity === 'number'
-            ? rec.quantity
-            : typeof rec.stock === 'number'
-              ? rec.stock
-              : typeof rec.availableQuantity === 'number'
-                ? rec.availableQuantity
-                : 0;
-        return sum + qty;
-      }, 0);
+      const totalStock = p.inventory.reduce((sum, inv) => sum + inv.quantity, 0);
       return {
         id: p.id,
         name: p.name,
@@ -243,23 +238,8 @@ export class DashboardService {
     let aiLimitMinor = 0;
     let aiUsedMinor = 0;
     for (const budget of aiBudgets) {
-      const record = budget as Record<string, unknown>;
-      const limitVal =
-        typeof record.monthlyLimitMinor === 'number'
-          ? record.monthlyLimitMinor
-          : typeof record.limitMinor === 'number'
-            ? record.limitMinor
-            : typeof record.budgetMinor === 'number'
-              ? record.budgetMinor
-              : 1000;
-      const usedVal =
-        typeof record.usedMinor === 'number'
-          ? record.usedMinor
-          : typeof record.spentMinor === 'number'
-            ? record.spentMinor
-            : 0;
-      aiLimitMinor += limitVal;
-      aiUsedMinor += usedVal;
+      aiLimitMinor += budget.monthlyLimitMinor;
+      aiUsedMinor += budget.currentUsageMinor;
     }
     const aiRemainingMinor = Math.max(0, aiLimitMinor - aiUsedMinor);
 

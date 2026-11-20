@@ -10,7 +10,7 @@ import {
 import { Prisma } from '@prisma/client';
 import Redis from 'ioredis';
 import { rm } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
 import { TokenRevocationService } from '../auth/token-revocation.service';
@@ -58,6 +58,7 @@ export interface PlatformOverviewResponse {
   };
   companies: PlatformCompanyItem[];
 }
+
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const THIRTY_DAYS_MS = 30 * DAY_MS;
@@ -127,6 +128,7 @@ export class PlatformService implements OnModuleInit, OnModuleDestroy {
       this.redisClient = null;
     }
   }
+
   private async checkAndRunHourlyMaintenance(trigger: 'startup' | 'scheduled'): Promise<void> {
     const nowMs = Date.now();
     let downtimeHours = 0;
@@ -204,6 +206,7 @@ export class PlatformService implements OnModuleInit, OnModuleDestroy {
         : {}),
     };
   }
+
   async getPlatformOverview(query: PlatformOverviewQuery = {}): Promise<PlatformOverviewResponse> {
     const bootstrapEmail = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase() ?? '';
     const page = Math.max(1, Math.floor(query.page ?? 1));
@@ -342,6 +345,7 @@ export class PlatformService implements OnModuleInit, OnModuleDestroy {
       }),
     );
   }
+
   async suspendCompany(companyId: string): Promise<{ suspended: true; id: string; name: string }> {
     const bootstrapEmail = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
 
@@ -435,6 +439,7 @@ export class PlatformService implements OnModuleInit, OnModuleDestroy {
       }),
     );
   }
+
   async deleteCompanyPermanently(
     companyId: string,
   ): Promise<{ deleted: true; id: string; name: string }> {
@@ -479,7 +484,7 @@ export class PlatformService implements OnModuleInit, OnModuleDestroy {
 
       const uploadsRoot = resolve(join(process.cwd(), 'uploads'));
       const companyUploadsDir = resolve(join(uploadsRoot, companyId));
-      if (companyUploadsDir.startsWith(uploadsRoot)) {
+      if (companyUploadsDir.startsWith(uploadsRoot + sep)) {
         await rm(companyUploadsDir, { recursive: true, force: true }).catch(() => undefined);
       }
 
@@ -510,6 +515,7 @@ export class PlatformService implements OnModuleInit, OnModuleDestroy {
 
     return { deletedCount };
   }
+
   async runAutomatedLifecycleMaintenance(): Promise<{
     pastDueMarked: number;
     expiredDeletedCount: number;

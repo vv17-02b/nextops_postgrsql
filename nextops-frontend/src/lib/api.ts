@@ -18,12 +18,12 @@ function getOrCreateTabIdempotencyKey(method: string, requestUrl: string): strin
   }
   tabRequestCounter += 1;
   const normalizedUrl = requestUrl.split("?")[0] ?? requestUrl;
-  const raw = `${method}:${normalizedUrl}:${tabRequestCounter}`;
+  const raw = `${tabIdempotencySalt}:${method}:${normalizedUrl}:${tabRequestCounter}`;
   let hash = 0;
   for (let index = 0; index < raw.length; index += 1) {
     hash = (hash * 31 + raw.charCodeAt(index)) | 0;
   }
-  const key = `tab-${Math.abs(hash).toString(36)}`;
+  const key = `tab-${tabIdempotencySalt.slice(0, 8)}-${Math.abs(hash).toString(36)}`;
   return key.length >= 8 ? key : key.padEnd(8, "0");
 }
 

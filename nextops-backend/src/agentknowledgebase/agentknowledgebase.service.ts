@@ -61,7 +61,7 @@ export class AgentKnowledgeBaseService {
     private readonly prisma: PrismaService,
     @Inject(TenantContext)
     private readonly tenantContext: TenantContext,
-  ) { }
+  ) {}
 
   async executeAiTask(
     userId: string,
@@ -273,7 +273,7 @@ export class AgentKnowledgeBaseService {
     const fallbackAnswer =
       topSources.length > 0
         ? `Знайдено релевантну інформацію в базі знань компанії (${topSources.length} дж.):\n\n` +
-        topSources.map((s, i) => `${i + 1}. **${s.title}** — ${s.snippet}`).join('\n')
+          topSources.map((s, i) => `${i + 1}. **${s.title}** — ${s.snippet}`).join('\n')
         : 'У базі знань компанії поки немає документів за вашим запитом. Додайте інструкції або прайси у розділі AgentKnowledgeBase.';
 
     return {
@@ -290,7 +290,8 @@ export class AgentKnowledgeBaseService {
     if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
     return this.prisma.agentKnowledgeBase.create({ data: { ...dto, companyId: activeCompanyId } });
   }
-  async findAll(
+
+    async findAll(
     query: PaginationQueryDto,
     companyId?: string,
   ): Promise<PaginatedResponse<AgentKnowledgeBase>> {

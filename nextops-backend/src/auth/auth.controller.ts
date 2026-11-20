@@ -34,7 +34,7 @@ import {
 import { TokenRevocationService } from './token-revocation.service';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-recovery.dto';
 import { EmailQueueService } from '../common/queue/email-queue.service';
-
+import { TelegramNotifierService } from '../common/queue/telegram-notifier.service';
 
 const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -44,6 +44,12 @@ function isPlatformOwnerEmail(email: string | null | undefined): boolean {
   return email.trim().toLowerCase() === bootstrapEmail;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 
 export class UpdateWorkspaceDto {
   @IsString()
@@ -71,8 +77,12 @@ export class AuthController {
     private readonly tenantContext: TenantContext,
     @Inject(TokenRevocationService)
     private readonly tokenRevocation: TokenRevocationService,
+    @Inject(EmailQueueService)
     private readonly emailQueue: EmailQueueService,
-  ) { }
+    @Inject(TelegramNotifierService)
+    private readonly telegramNotifier: TelegramNotifierService,
+  ) {}
+
 
   private async issueSessionCookies(
     response: Response,
@@ -160,6 +170,17 @@ export class AuthController {
       role: created.role,
     });
 
+    // Системне сповіщення власнику платформи у приватний TELEGRAM_CHAT_ID
+    void this.telegramNotifier.notifyPlatformOwner(
+      [
+        `🆕 <b>Нова реєстрація на сервері NextOps</b>`,
+        ``,
+        `🏢 <b>Компанія:</b> ${escapeHtml(created.companyName)}`,
+        `👤 <b>Власник:</b> ${escapeHtml(created.email ?? email)}`,
+        `🆔 <b>ID простору:</b> <code>${created.companyId}</code>`,
+      ].join('\n'),
+    );
+
     return {
       success: true,
       message: 'Business workspace created.',
@@ -175,6 +196,7 @@ export class AuthController {
       },
     };
   }
+
   @Post('login')
   @Public()
   @RateLimit(10, 900)
@@ -243,7 +265,6 @@ export class AuthController {
     return { csrfToken };
   }
 
-
   @Get('me')
   async currentUser(
     @Req() request: Request & { user: AuthenticatedRequestUser },
@@ -284,7 +305,6 @@ export class AuthController {
       },
     };
   }
-
 
   @Patch('workspace')
   @Roles('OWNER', 'ADMIN')
@@ -331,6 +351,7 @@ export class AuthController {
     response.clearCookie(SESSION_COOKIE, clearedSessionCookieOptions());
     return { success: true };
   }
+
   @Post('forgot-password')
   @Public()
   @RateLimit(5, 900)

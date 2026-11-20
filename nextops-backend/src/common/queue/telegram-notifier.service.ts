@@ -87,9 +87,9 @@ function telegramHttpsRequest(
         timeout: 10_000,
         headers: serialized
           ? {
-              'Content-Type': 'application/json',
-              'Content-Length': Buffer.byteLength(serialized),
-            }
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(serialized),
+          }
           : undefined,
       },
       (res) => {
@@ -128,7 +128,7 @@ export class TelegramNotifierService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
-  ) {}
+  ) { }
 
   onModuleInit(): void {
     if (process.env.TELEGRAM_POLLING_ENABLED === 'false') {
@@ -145,6 +145,22 @@ export class TelegramNotifierService implements OnModuleInit, OnModuleDestroy {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
+  }
+
+  /**
+   * Системне сповіщення виключно власнику SaaS-платформи у його приватний TELEGRAM_CHAT_ID із .env.
+   */
+  async notifyPlatformOwner(text: string): Promise<void> {
+    const platformToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
+    const ownerChatId = process.env.TELEGRAM_CHAT_ID?.trim();
+    if (!platformToken || !ownerChatId) {
+      return;
+    }
+    await this.sendMessage(platformToken, ownerChatId, text).catch((err: unknown) => {
+      this.logger.warn(
+        `Failed to send platform owner Telegram alert: ${err instanceof Error ? err.message : 'unknown error'}`,
+      );
+    });
   }
 
   async getPlatformBotUsername(): Promise<string | null> {
@@ -228,6 +244,7 @@ export class TelegramNotifierService implements OnModuleInit, OnModuleDestroy {
       show_alert: false,
     }).catch(() => undefined);
   }
+
   async notifyNewOrder(companyId: string, order: OrderTelegramSummary): Promise<void> {
     const company = await this.prisma.runSystemQuery(() =>
       this.prisma.company.findUnique({
@@ -236,7 +253,7 @@ export class TelegramNotifierService implements OnModuleInit, OnModuleDestroy {
       }),
     );
 
-    const botToken = company?.telegramBotToken?.trim() || process.env.TELEGRAM_BOT_TOKEN?.trim();
+    const botToken = company?.telegramBotToken?.trim();
     const chatId = company?.telegramChatId?.trim();
 
     if (!company || !botToken || !chatId) {
@@ -415,11 +432,10 @@ export class TelegramNotifierService implements OnModuleInit, OnModuleDestroy {
     boundCompanies: BoundCompanyTarget[],
   ): Promise<void> {
     const chatId = query.message?.chat.id ? String(query.message.chat.id) : null;
-    const targets = chatId
-      ? boundCompanies.filter((item) => item.telegramChatId === chatId)
-      : boundCompanies;
-    const companiesToUpdate = targets.length > 0 ? targets : boundCompanies;
-    if (companiesToUpdate.length === 0 || !query.data) return;
+    if (!chatId || !query.data) return;
+
+    const companiesToUpdate = boundCompanies.filter((item) => item.telegramChatId === chatId);
+    if (companiesToUpdate.length === 0) return;
 
     const [action, orderId] = query.data.split(':');
     if (!orderId || (action !== 'order_confirm' && action !== 'order_cancel')) {
@@ -477,13 +493,11 @@ export class TelegramNotifierService implements OnModuleInit, OnModuleDestroy {
         : '❌ Замовлення скасовано в NextOps!';
     await this.answerCallbackQuery(botToken, query.id, toastText);
 
-    if (chatId) {
-      await this.sendMessage(
-        botToken,
-        chatId,
-        `${toastText}\n🆔 <code>${orderId}</code>\n👤 <b>Виконав:</b> ${sender}`,
-      ).catch(() => undefined);
-    }
+    await this.sendMessage(
+      botToken,
+      chatId,
+      `${toastText}\n🆔 <code>${orderId}</code>\n👤 <b>Виконав:</b> ${sender}`,
+    ).catch(() => undefined);
   }
 
   private async handleIncomingMessage(
@@ -516,7 +530,7 @@ export class TelegramNotifierService implements OnModuleInit, OnModuleDestroy {
             });
           });
 
-                    if (updatedCompany) {
+          if (updatedCompany) {
             await this.sendMessage(
               botToken,
               chatId,
@@ -528,8 +542,7 @@ export class TelegramNotifierService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const targets = boundCompanies.filter((item) => item.telegramChatId === chatId);
-    const companiesToNotify = targets.length > 0 ? targets : boundCompanies;
+    const companiesToNotify = boundCompanies.filter((item) => item.telegramChatId === chatId);
     if (companiesToNotify.length === 0) return;
 
     const sender = this.formatSenderName(message.from);

@@ -5,7 +5,7 @@ import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { LoggingInterceptor } from './prisma/logging.interceptor'; 
+import { LoggingInterceptor } from './prisma/logging.interceptor';
 import { PrismaService } from './prisma/prisma.service';
 import { ApiExceptionFilter } from './common/filters/api-exception.filter';
 import type { ValidationError } from 'class-validator';
@@ -31,9 +31,16 @@ function flattenValidationErrors(
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+    rawBody: true,
+  });
   app.useLogger(new PinoLogger());
-  
+
+  if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+  }
+
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({
     transform: true,

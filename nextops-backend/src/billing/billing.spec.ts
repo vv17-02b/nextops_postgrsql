@@ -1,4 +1,3 @@
-import { TelegramNotifierService } from '../common/queue/telegram-notifier.service';
 import 'dotenv/config';
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -6,8 +5,19 @@ import { createHmac } from 'node:crypto';
 import { HttpException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
+import { TelegramNotifierService } from '../common/queue/telegram-notifier.service';
 import { PlanEnforcementService } from './plan-enforcement.service';
 import { BillingService, type BillingWebhookPayload } from './billing.service';
+
+if (process.env.DATABASE_URL?.includes('@postgres:5432')) {
+  process.env.DATABASE_URL = process.env.DATABASE_URL.replace('@postgres:5432', '@localhost:5432');
+}
+if (process.env.APP_DATABASE_URL?.includes('@postgres:5432')) {
+  process.env.APP_DATABASE_URL = process.env.APP_DATABASE_URL.replace(
+    '@postgres:5432',
+    '@localhost:5432',
+  );
+}
 
 describe('SaaS Billing, Plan Enforcement & Signed Webhooks (Integration)', () => {
   let tenantContext: TenantContext;
@@ -25,7 +35,12 @@ describe('SaaS Billing, Plan Enforcement & Signed Webhooks (Integration)', () =>
     prisma = new PrismaService(tenantContext);
     await prisma.$connect();
     planEnforcement = new PlanEnforcementService(prisma, tenantContext);
-    billingService = new BillingService(prisma, tenantContext, planEnforcement, new TelegramNotifierService(prisma));
+    billingService = new BillingService(
+      prisma,
+      tenantContext,
+      planEnforcement,
+      new TelegramNotifierService(prisma),
+    );
 
     await prisma.runSystemQuery(async () => {
       await prisma.processedWebhookEvent.deleteMany({ where: { id: testEventId } });

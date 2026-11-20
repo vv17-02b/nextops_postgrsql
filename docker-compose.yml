@@ -57,13 +57,25 @@ services:
       PORT: 3001
       HOST: 0.0.0.0
       DATABASE_URL: "postgresql://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}?schema=public"
+      APP_DATABASE_URL: ${APP_DATABASE_URL:-}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       REDIS_URL: "redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379"
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      CSRF_ENABLED: ${CSRF_ENABLED:-true}
       AUTH_COOKIE_SAME_SITE: ${AUTH_COOKIE_SAME_SITE:-lax}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      BILLING_WEBHOOK_SECRET: ${BILLING_WEBHOOK_SECRET:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_LOGS_RETENTION_DAYS: ${TELEGRAM_LOGS_RETENTION_DAYS:-14}
+      API_HISTORY_RETENTION_DAYS: ${API_HISTORY_RETENTION_DAYS:-30}
+      AI_ENABLED: ${AI_ENABLED:-true}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       SMTP_URL: ${SMTP_URL:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -108,6 +120,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-}
     volumes:
       - postgres-backups:/backups
     depends_on:
@@ -118,8 +131,13 @@ services:
       - -c
       - >-
         while true; do
-          PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -Fc -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f "/backups/nextops-$$(date +%Y%m%d-%H%M%S).dump" &&
-          find /backups -type f -name 'nextops-*.dump' -mtime +7 -delete;
+          STAMP=$$(date +%Y%m%d-%H%M%S);
+          PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -Fc -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f "/backups/nextops-$$STAMP.dump" &&
+          if [ -n "$$BACKUP_ENCRYPTION_KEY" ]; then
+            openssl enc -aes-256-cbc -pbkdf2 -salt -in "/backups/nextops-$$STAMP.dump" -out "/backups/nextops-$$STAMP.dump.enc" -pass env:BACKUP_ENCRYPTION_KEY &&
+            rm -f "/backups/nextops-$$STAMP.dump";
+          fi &&
+          find /backups -type f -name 'nextops-*' -mtime +7 -delete;
           sleep 86400;
         done
     restart: unless-stopped
