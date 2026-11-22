@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
 import { Reflector } from '@nestjs/core';
 import { IdempotencyService } from './idempotency.service';
 
@@ -21,16 +20,12 @@ interface IdempotentRequest extends Request {
   user?: { id?: string };
 }
 
-/**
- * Wraps mutating endpoints decorated with @Idempotent() in the Redis-backed
- * IdempotencyService. Requires an Idempotency-Key header on those requests.
- */
 @Injectable()
 export class IdempotencyInterceptor {
   constructor(
     private readonly idempotency: IdempotencyService,
     private readonly reflector: Reflector,
-  ) { }
+  ) {}
 
   private static resolveBody(value: unknown): object {
     return typeof value === 'object' && value !== null ? (value as object) : {};
@@ -52,7 +47,8 @@ export class IdempotencyInterceptor {
       return next.handle();
     }
 
-    const scope = `${request.method ?? 'MUTATION'}:${request.user?.id ?? 'anon'}`;
+    const routePath = `${request.baseUrl ?? ''}${request.path ?? ''}` || '/';
+    const scope = `${request.method ?? 'MUTATION'}:${routePath}:${request.user?.id ?? 'anon'}`;
     const body = IdempotencyInterceptor.resolveBody(request.body);
 
     return new Observable<unknown>((subscriber) => {

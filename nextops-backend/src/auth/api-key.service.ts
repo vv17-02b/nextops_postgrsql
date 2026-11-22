@@ -113,7 +113,7 @@ export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
         select: { planCode: true, subscriptionStatus: true },
       }),
       this.prisma.companyApiKey.count({
-        where: { companyId: activeCompanyId },
+        where: { companyId: activeCompanyId, isActive: true },
       }),
     ]);
 
@@ -215,6 +215,7 @@ export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
 
     const planCode = company?.planCode ?? 'FREE';
     const limit = resolveKeyLimitForPlan(planCode);
+    const activeCount = rows.filter((row) => row.isActive).length;
 
     return {
       keys: rows.map((row) => ({
@@ -228,7 +229,7 @@ export class ApiKeyService implements OnModuleInit, OnModuleDestroy {
         createdAt: row.createdAt.toISOString(),
       })),
       quota: {
-        used: rows.length,
+        used: activeCount,
         limit,
         planCode,
       },

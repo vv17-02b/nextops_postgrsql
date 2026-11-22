@@ -1,9 +1,21 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
+import type { WebhookConfig } from '@prisma/client';
 import { WebhookConfigService } from './webhookconfig.service';
 import { CreateWebhookConfigDto } from './dto/create-webhookconfig.dto';
 import { UpdateWebhookConfigDto } from './dto/update-webhookconfig.dto';
-import type { WebhookConfig } from '@prisma/client';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
 import { Roles } from '../auth/roles.decorator';
@@ -35,7 +47,7 @@ export class WebhookConfigController {
 
   @Post(':id/trigger')
   trigger(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() payload: Record<string, unknown>,
     @Req() req: RequestWithUser,
   ): Promise<{ success: boolean; attempts: number }> {
@@ -51,13 +63,16 @@ export class WebhookConfigController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<WebhookConfig> {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<WebhookConfig> {
     return this.service.findOne(id, req.user?.companyId);
   }
 
   @Patch(':id')
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateWebhookConfigDto,
     @Req() req: RequestWithUser,
   ): Promise<WebhookConfig> {
@@ -65,7 +80,10 @@ export class WebhookConfigController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<WebhookConfig> {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<WebhookConfig> {
     return this.service.remove(id, req.user?.companyId);
   }
 }

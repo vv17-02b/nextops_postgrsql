@@ -1,9 +1,21 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
+import type { OrderItem } from '@prisma/client';
 import { OrderItemService } from './orderitem.service';
 import { CreateOrderItemDto } from './dto/create-orderitem.dto';
 import { UpdateOrderItemDto } from './dto/update-orderitem.dto';
-import type { OrderItem } from '@prisma/client';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
 
@@ -37,13 +49,16 @@ export class OrderItemController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<OrderItem> {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<OrderItem> {
     return this.service.findOne(id, req.user?.companyId);
   }
 
   @Patch(':id')
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateOrderItemDto,
     @Req() req: RequestWithUser,
   ): Promise<OrderItem> {
@@ -51,7 +66,10 @@ export class OrderItemController {
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<OrderItem> {
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<OrderItem> {
     return this.service.remove(id, req.user?.companyId);
   }
 }

@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 const BLOCKED_HOSTNAMES = new Set([
@@ -16,7 +17,13 @@ const BLOCKED_HOSTNAMES = new Set([
 
 function isPrivateOrLoopbackIp(ip: string): boolean {
   const normalized = ip.replace(/^\[|\]$/g, '').toLowerCase();
-  if (normalized === '::1' || normalized === '::' || normalized.startsWith('fe80:') || normalized.startsWith('fc') || normalized.startsWith('fd')) {
+  if (
+    normalized === '::1' ||
+    normalized === '::' ||
+    normalized.startsWith('fe80:') ||
+    normalized.startsWith('fc') ||
+    normalized.startsWith('fd')
+  ) {
     return true;
   }
 
@@ -28,14 +35,14 @@ function isPrivateOrLoopbackIp(ip: string): boolean {
 
   const [a, b] = parts;
   if (a === 0 || a === 10 || a === 127) return true;
-  if (a === 169 && b === 254) return true; // Cloud metadata (AWS/GCP/Azure)
+  if (a === 169 && b === 254) return true;
   if (a === 172 && b >= 16 && b <= 31) return true;
   if (a === 192 && b === 168) return true;
-  if (a === 100 && b >= 64 && b <= 127) return true; // Carrier-grade NAT
+  if (a === 100 && b >= 64 && b <= 127) return true;
   return false;
 }
 
-export function assertSafeWebhookUrl(rawUrl: string): string {
+export async function assertSafeWebhookUrl(rawUrl: string): Promise<string> {
   const trimmed = rawUrl.trim();
   let parsed: URL;
   try {
@@ -62,12 +69,35 @@ export function assertSafeWebhookUrl(rawUrl: string): string {
   if (
     BLOCKED_HOSTNAMES.has(hostname) ||
     hostname.endsWith('.local') ||
-    hostname.endsWith('.internal') ||
-    (isIP(hostname) !== 0 && isPrivateOrLoopbackIp(hostname))
+    hostname.endsWith('.internal')
   ) {
     throw new BadRequestException(
       'Заборонено вказувати локальні або приватні мережеві адреси для вебхуків (захист від SSRF).',
     );
+  }
+
+  const strippedHost = hostname.replace(/^\[|\]$/g, '');
+  if (isIP(strippedHost) !== 0) {
+    if (isPrivateOrLoopbackIp(strippedHost)) {
+      throw new BadRequestException(
+        'Заборонено вказувати локальні або приватні IP-адреси для вебхуків (захист від SSRF).',
+      );
+    }
+    return parsed.toString();
+  }
+
+  try {
+    const resolved = await lookup(strippedHost, { all: true, verbatim: true });
+    if (resolved.length === 0 || resolved.some((entry) => isPrivateOrLoopbackIp(entry.address))) {
+      throw new BadRequestException(
+        'Домен вебхука вказує на приватну або локальну IP-адресу (захист від DNS Rebinding SSRF).',
+      );
+    }
+  } catch (err) {
+    if (err instanceof BadRequestException) {
+      throw err;
+    }
+    throw new BadRequestException('Не вдалося перевірити DNS-запис домену вебхука.');
   }
 
   return parsed.toString();

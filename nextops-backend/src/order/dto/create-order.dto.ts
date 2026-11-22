@@ -1,4 +1,16 @@
-import { IsString, IsNotEmpty, IsArray, IsOptional, ValidateNested, IsInstance, IsInt, IsPositive, Matches, ArrayMinSize } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsInstance,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsUUID,
+  Matches,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ShippingAddressDto {
@@ -20,7 +32,7 @@ export class ShippingAddressDto {
 }
 
 export class OrderItemInputDto {
-  @IsString()
+  @IsUUID('4', { message: 'Некоректний формат productId' })
   @IsNotEmpty()
   productId!: string;
 

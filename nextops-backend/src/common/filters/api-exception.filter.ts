@@ -81,17 +81,23 @@ export class ApiExceptionFilter implements ExceptionFilter {
       ? responseObject.errors as ApiError[]
       : [];
     const rawExceptionMessage =
-      typeof responseObject.message === 'string'
-        ? responseObject.message
-        : typeof exceptionResponse === 'string'
-          ? exceptionResponse
+      typeof responseObject.message === 'string' && responseObject.message.trim().length > 0
+        ? responseObject.message.trim()
+        : typeof exceptionResponse === 'string' && exceptionResponse.trim().length > 0
+          ? exceptionResponse.trim()
           : undefined;
+
+    const isClientHttpError =
+      exception instanceof HttpException
+      && statusCode >= HttpStatus.BAD_REQUEST
+      && statusCode < HttpStatus.INTERNAL_SERVER_ERROR;
 
     const message = errors.length > 0
       ? 'Request validation failed.'
-      : (statusCode === HttpStatus.FORBIDDEN || statusCode === HttpStatus.PAYMENT_REQUIRED) && rawExceptionMessage
+      : isClientHttpError && rawExceptionMessage
         ? rawExceptionMessage
         : getSafeMessage(statusCode);
+
     const errorCode = typeof responseObject.errorCode === 'string'
       ? responseObject.errorCode
       : prismaCode
@@ -99,6 +105,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
         : statusCode === HttpStatus.BAD_REQUEST && errors.length > 0
           ? 'VALIDATION_ERROR'
           : `HTTP_${statusCode}`;
+
     const body: ErrorBody = {
       statusCode,
       message,

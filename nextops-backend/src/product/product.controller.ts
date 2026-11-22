@@ -1,10 +1,23 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, Req, Header } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
+import type { Product } from '@prisma/client';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ImportProductsDto } from './dto/import-products.dto';
-import type { Product } from '@prisma/client';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
 
@@ -53,13 +66,16 @@ export class ProductController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<Product> {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<Product> {
     return this.service.findOne(id, req.user?.companyId);
   }
 
   @Patch(':id')
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateProductDto,
     @Req() req: RequestWithUser,
   ): Promise<Product> {
@@ -67,7 +83,10 @@ export class ProductController {
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<Product> {
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<Product> {
     return this.service.remove(id, req.user?.companyId);
   }
 }

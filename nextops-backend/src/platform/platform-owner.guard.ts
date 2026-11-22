@@ -3,6 +3,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@
 interface AuthenticatedUserRequest {
   user?: {
     email?: string | null;
+    emailVerified?: boolean;
   };
 }
 
@@ -15,6 +16,10 @@ export class PlatformOwnerGuard implements CanActivate {
 
     if (!bootstrapEmail || !userEmail || userEmail !== bootstrapEmail) {
       throw new ForbiddenException('Доступ дозволено лише власнику SaaS-платформи.');
+    }
+
+    if (request.user?.emailVerified === false) {
+      throw new ForbiddenException('Підтвердіть email власника SaaS-платформи.');
     }
 
     return true;

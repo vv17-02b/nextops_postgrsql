@@ -21,19 +21,23 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   migrate:
     build:
@@ -96,6 +100,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    restart: unless-stopped
 
   frontend:
     build:
@@ -107,43 +112,15 @@ services:
       NODE_ENV: production
       PORT: 3000
       HOSTNAME: 0.0.0.0
+      BACKEND_URL: http://backend:3001
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     depends_on:
       backend:
         condition: service_healthy
-
-  backup:
-    image: postgres:17-alpine
-    profiles: ["backups"]
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
-      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-}
-    volumes:
-      - postgres-backups:/backups
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command:
-      - sh
-      - -c
-      - >-
-        while true; do
-          STAMP=$$(date +%Y%m%d-%H%M%S);
-          PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -Fc -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f "/backups/nextops-$$STAMP.dump" &&
-          if [ -n "$$BACKUP_ENCRYPTION_KEY" ]; then
-            openssl enc -aes-256-cbc -pbkdf2 -salt -in "/backups/nextops-$$STAMP.dump" -out "/backups/nextops-$$STAMP.dump.enc" -pass env:BACKUP_ENCRYPTION_KEY &&
-            rm -f "/backups/nextops-$$STAMP.dump";
-          fi &&
-          find /backups -type f -name 'nextops-*' -mtime +7 -delete;
-          sleep 86400;
-        done
     restart: unless-stopped
 
 volumes:
   postgres-data:
   redis-data:
   backend-uploads:
-  postgres-backups:

@@ -8,6 +8,8 @@ import type { Request } from 'express';
 import { readCookie, SESSION_COOKIE } from '../cookie-session';
 import { TokenRevocationService } from '../token-revocation.service';
 
+type RequestWithRawToken = Request & { rawToken?: string };
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
@@ -22,18 +24,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           const token =
             readCookie(request, SESSION_COOKIE) ??
             ExtractJwt.fromAuthHeaderAsBearerToken()(request);
-          if (token) (request as Request & { rawToken?: string }).rawToken = token;
+          if (token) (request as RequestWithRawToken).rawToken = token;
           return token;
         },
       ]),
       ignoreExpiration: false,
       secretOrKey: jwtSecret as string,
+      passReqToCallback: true,
     });
   }
 
   async validate(
+    request: RequestWithRawToken,
     payload: { sub?: string; epoch?: number } & Record<string, unknown>,
-    request?: Request & { rawToken?: string },
   ): Promise<{
     id: string;
     email: string | null;
@@ -42,7 +45,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }> {
     if (!payload.sub) throw new UnauthorizedException('Invalid authentication token.');
 
-    // Fail closed when Redis knows the token or its session epoch is stale.
     if (request?.rawToken) {
       const revoked = await this.tokenRevocation.isTokenRevoked(request.rawToken);
       if (revoked) throw new UnauthorizedException('This session has been revoked.');

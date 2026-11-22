@@ -1,4 +1,16 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { AccountService, type SafeAccount } from './account.service';
 import { CreateAccountDto } from './dto/create-account.dto';
@@ -38,13 +50,16 @@ export class AccountController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<SafeAccount> {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<SafeAccount> {
     return this.accountService.findOne(id, req.user?.companyId);
   }
 
   @Patch(':id')
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateAccountDto,
     @Req() req: RequestWithUser,
   ): Promise<SafeAccount> {
@@ -52,7 +67,10 @@ export class AccountController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<SafeAccount> {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<SafeAccount> {
     return this.accountService.remove(id, req.user?.companyId);
   }
 }

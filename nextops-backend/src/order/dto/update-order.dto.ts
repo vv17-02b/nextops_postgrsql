@@ -1,11 +1,11 @@
-import { IsString, IsOptional, ValidateNested, IsInstance, IsIn } from 'class-validator';
+import { IsIn, IsInstance, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ShippingAddressDto } from './create-order.dto';
 
 export class UpdateOrderDto {
   @IsString()
   @IsOptional()
-  @IsIn(['PENDING', 'PROCESSING', 'SHIPPED', 'CANCELLED'])
+  @IsIn(['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED'])
   status?: string;
 
   @IsInstance(ShippingAddressDto)

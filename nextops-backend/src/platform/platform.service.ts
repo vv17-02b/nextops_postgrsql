@@ -398,7 +398,7 @@ export class PlatformService implements OnModuleInit, OnModuleDestroy {
       this.prisma.$transaction(async (tx) => {
         const company = await tx.company.findUnique({
           where: { id: companyId },
-          select: { id: true, name: true, planCode: true },
+          select: { id: true, name: true, planCode: true, currentPeriodEnd: true },
         });
 
         if (!company) {
@@ -416,8 +416,13 @@ export class PlatformService implements OnModuleInit, OnModuleDestroy {
         }
 
         const safeDays = Number.isFinite(days) && days > 0 ? Math.min(3650, Math.floor(days)) : 30;
+        const nowMs = Date.now();
+        const baseStartMs =
+          company.currentPeriodEnd && company.currentPeriodEnd.getTime() > nowMs
+            ? company.currentPeriodEnd.getTime()
+            : nowMs;
         const nextPeriodEnd =
-          plan.priceMinor === 0 && !planCode ? null : new Date(Date.now() + safeDays * DAY_MS);
+          plan.priceMinor === 0 && !planCode ? null : new Date(baseStartMs + safeDays * DAY_MS);
 
         const updated = await tx.company.update({
           where: { id: companyId },
@@ -439,6 +444,7 @@ export class PlatformService implements OnModuleInit, OnModuleDestroy {
       }),
     );
   }
+
 
   async deleteCompanyPermanently(
     companyId: string,

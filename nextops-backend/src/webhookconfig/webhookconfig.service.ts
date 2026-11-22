@@ -1,20 +1,19 @@
 import { randomBytes } from 'node:crypto';
 import {
   ForbiddenException,
-  Injectable,
-  NotFoundException,
   Inject,
+  Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
+import { Prisma, type WebhookConfig } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
 import { CreateWebhookConfigDto } from './dto/create-webhookconfig.dto';
 import { UpdateWebhookConfigDto } from './dto/update-webhookconfig.dto';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
-import { Prisma } from '@prisma/client';
-import type { WebhookConfig } from '@prisma/client';
 import { deliverWebhookHttp } from '../common/queue/webhook-queue.service';
 import { assertSafeWebhookUrl } from './webhook-url.validator';
 
@@ -41,10 +40,21 @@ export class WebhookConfigService {
     private readonly tenantContext: TenantContext,
   ) {}
 
-  private async findRawOne(id: string, companyId?: string): Promise<WebhookConfig> {
+  private resolveCompanyId(companyId?: string): string {
     const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) {
+      throw new ForbiddenException('A business workspace is required.');
+    }
+    if (!this.tenantContext.getCompanyId()) {
+      this.tenantContext.setCompanyId(activeCompanyId);
+    }
+    return activeCompanyId;
+  }
+
+  private async findRawOne(id: string, companyId?: string): Promise<WebhookConfig> {
+    const activeCompanyId = this.resolveCompanyId(companyId);
     const item = await this.prisma.webhookConfig.findFirst({
-      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+      where: { id, companyId: activeCompanyId },
     });
     if (!item) {
       throw new NotFoundException(`Конфігурацію вебхука з ID ${id} не знайдено`);
@@ -63,6 +73,7 @@ export class WebhookConfigService {
       return { success: false, attempts: 0 };
     }
 
+    const safeUrl = await assertSafeWebhookUrl(config.url);
     const maxRetries = 3;
     let attempts = 0;
     let success = false;
@@ -74,7 +85,7 @@ export class WebhookConfigService {
         await deliverWebhookHttp({
           configId: config.id,
           companyId: config.companyId,
-          url: config.url,
+          url: safeUrl,
           secret: config.secret,
           event: eventName,
           payload:
@@ -101,10 +112,8 @@ export class WebhookConfigService {
   }
 
   async create(dto: CreateWebhookConfigDto, companyId?: string): Promise<WebhookConfig> {
-    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
-    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
-
-    const safeUrl = assertSafeWebhookUrl(dto.url);
+    const activeCompanyId = this.resolveCompanyId(companyId);
+    const safeUrl = await assertSafeWebhookUrl(dto.url);
 
     const inputData: Prisma.WebhookConfigUncheckedCreateInput = {
       projectId: dto.projectId,
@@ -115,7 +124,6 @@ export class WebhookConfigService {
       companyId: activeCompanyId,
     };
 
-    // Повертаємо повний secret один раз під час створення
     return this.prisma.webhookConfig.create({
       data: inputData,
     });
@@ -125,8 +133,8 @@ export class WebhookConfigService {
     query: PaginationQueryDto,
     companyId?: string,
   ): Promise<PaginatedResponse<WebhookConfig>> {
-    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
-    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+    const activeCompanyId = this.resolveCompanyId(companyId);
+    const where = { companyId: activeCompanyId };
 
     return paginate(
       query,
@@ -149,12 +157,16 @@ export class WebhookConfigService {
     companyId?: string,
   ): Promise<WebhookConfig> {
     await this.findRawOne(id, companyId);
-    const safeUrl = dto.url !== undefined ? assertSafeWebhookUrl(dto.url) : undefined;
+    const safeUrl = dto.url !== undefined ? await assertSafeWebhookUrl(dto.url) : undefined;
+
+    const trimmedSecret = dto.secret?.trim();
+    const shouldUpdateSecret =
+      trimmedSecret !== undefined && trimmedSecret.length > 0 && !trimmedSecret.includes('•');
 
     const updateData: Prisma.WebhookConfigUncheckedUpdateInput = {
       ...(dto.projectId !== undefined ? { projectId: dto.projectId } : {}),
       ...(safeUrl !== undefined ? { url: safeUrl } : {}),
-      ...(dto.secret !== undefined ? { secret: dto.secret } : {}),
+      ...(shouldUpdateSecret ? { secret: trimmedSecret } : {}),
       ...(dto.events !== undefined ? { events: dto.events } : {}),
       ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
     };

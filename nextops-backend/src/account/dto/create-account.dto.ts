@@ -1,7 +1,7 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateAccountDto {
-  @IsString()
+  @IsUUID('4', { message: 'Некоректний формат User ID' })
   @IsNotEmpty({ message: 'User ID є обовʼязковим для привʼязки акаунта' })
   userId!: string;
 

@@ -1,7 +1,7 @@
-import { IsString, IsOptional, IsInt } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class UpdateAccountDto {
-  @IsString()
+  @IsUUID('4', { message: 'Некоректний формат User ID' })
   @IsOptional()
   userId?: string;
 

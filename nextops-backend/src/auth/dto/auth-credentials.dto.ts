@@ -6,7 +6,7 @@ export class AuthCredentialsDto {
   email!: string;
 
   @IsString()
-  @MinLength(6, { message: 'Пароль має бути не менше 6 символів' })
+  @MinLength(12, { message: 'Пароль має містити щонайменше 12 символів' })
   @MaxLength(128)
   password!: string;
 }

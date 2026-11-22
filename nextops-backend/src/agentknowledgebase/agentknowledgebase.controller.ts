@@ -1,5 +1,18 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
+import type { AgentKnowledgeBase } from '@prisma/client';
 import {
   AgentKnowledgeBaseService,
   type AskAssistantResponse,
@@ -7,7 +20,6 @@ import {
 import { CreateAgentKnowledgeBaseDto } from './dto/create-agentknowledgebase.dto';
 import { UpdateAgentKnowledgeBaseDto } from './dto/update-agentknowledgebase.dto';
 import { AskKnowledgeBaseDto } from './dto/ask-knowledge-base.dto';
-import type { AgentKnowledgeBase } from '@prisma/client';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
 import { RateLimit } from '../auth/rate-limit.guard';
@@ -37,6 +49,7 @@ export class AgentKnowledgeBaseController {
     return this.service.askAssistant(dto.question, {
       companyId: req.user?.companyId,
       userId: req.user?.id,
+      userRole: req.user?.role,
       projectId: dto.projectId,
     });
   }
@@ -58,13 +71,16 @@ export class AgentKnowledgeBaseController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<AgentKnowledgeBase> {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<AgentKnowledgeBase> {
     return this.service.findOne(id, req.user?.companyId);
   }
 
   @Patch(':id')
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateAgentKnowledgeBaseDto,
     @Req() req: RequestWithUser,
   ): Promise<AgentKnowledgeBase> {
@@ -72,7 +88,10 @@ export class AgentKnowledgeBaseController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<AgentKnowledgeBase> {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<AgentKnowledgeBase> {
     return this.service.remove(id, req.user?.companyId);
   }
 }

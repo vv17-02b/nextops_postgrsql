@@ -29,7 +29,7 @@ export function signWebhookPayload(
 }
 
 export async function deliverWebhookHttp(job: WebhookDeliveryJob): Promise<void> {
-  const safeTargetUrl = assertSafeWebhookUrl(job.url);
+  const safeTargetUrl = await assertSafeWebhookUrl(job.url);
   const deliveryId = randomUUID();
   const body = JSON.stringify({
     id: deliveryId,

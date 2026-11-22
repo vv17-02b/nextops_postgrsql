@@ -1,17 +1,17 @@
 import {
   BadRequestException,
+  ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
-  Inject,
-  ForbiddenException,
 } from '@nestjs/common';
+import type { AgentKnowledgeBase } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
 import { CreateAgentKnowledgeBaseDto } from './dto/create-agentknowledgebase.dto';
 import { UpdateAgentKnowledgeBaseDto } from './dto/update-agentknowledgebase.dto';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
-import type { AgentKnowledgeBase } from '@prisma/client';
 
 export interface KnowledgeSourceRef {
   id: string;
@@ -28,7 +28,7 @@ export interface AskAssistantResponse {
   sources: KnowledgeSourceRef[];
 }
 
-const DEFAULT_QUERY_COST_MINOR = 5; // $0.05 за запит
+const DEFAULT_QUERY_COST_MINOR = 5;
 
 function tokenizeQuery(text: string): string[] {
   return [
@@ -61,7 +61,18 @@ export class AgentKnowledgeBaseService {
     private readonly prisma: PrismaService,
     @Inject(TenantContext)
     private readonly tenantContext: TenantContext,
-  ) {}
+  ) { }
+
+  private resolveCompanyId(companyId?: string): string {
+    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    if (!activeCompanyId) {
+      throw new ForbiddenException('A business workspace is required.');
+    }
+    if (!this.tenantContext.getCompanyId()) {
+      this.tenantContext.setCompanyId(activeCompanyId);
+    }
+    return activeCompanyId;
+  }
 
   async executeAiTask(
     userId: string,
@@ -108,21 +119,22 @@ export class AgentKnowledgeBaseService {
     options: {
       companyId?: string;
       userId?: string;
+      userRole?: string;
       projectId?: string;
     },
   ): Promise<AskAssistantResponse> {
-    const activeCompanyId = options.companyId ?? this.tenantContext.getCompanyId();
-    if (!activeCompanyId) {
-      throw new ForbiddenException('A business workspace is required.');
-    }
+    const activeCompanyId = this.resolveCompanyId(options.companyId);
 
     const cleanQuestion = question.trim();
     if (!cleanQuestion) {
       throw new BadRequestException('Запитання не може бути порожнім.');
     }
 
-    // 1. Знаходимо активний ШІ-гаманець користувача або компанії
-    const isApiClient = !options.userId || options.userId.startsWith('apikey:');
+    const isApiClient =
+      options.userRole === 'API_CLIENT'
+      || !options.userId
+      || options.userId.startsWith('apikey:');
+
     const budget = await this.prisma.userAiBudget.findFirst({
       where: {
         companyId: activeCompanyId,
@@ -160,27 +172,46 @@ export class AgentKnowledgeBaseService {
       budget.monthlyLimitMinor - (budget.currentUsageMinor + costMinor),
     );
 
-    // 2. Вибірка релевантних документів із бази знань та каталогу товарів компанії (RLS ізоляція)
-    const [docs, products] = await Promise.all([
+    const tokens = tokenizeQuery(cleanQuestion);
+    const searchTokens = tokens.slice(0, 8);
+
+    const [matchedDocs, matchedProducts] = await Promise.all([
       this.prisma.agentKnowledgeBase.findMany({
         where: {
           companyId: activeCompanyId,
           ...(options.projectId ? { projectId: options.projectId } : {}),
+          ...(searchTokens.length > 0
+            ? {
+              OR: searchTokens.flatMap((token) => [
+                { title: { contains: token, mode: 'insensitive' as const } },
+                { content: { contains: token, mode: 'insensitive' as const } },
+              ]),
+            }
+            : {}),
         },
         take: 40,
         orderBy: { updatedAt: 'desc' },
       }),
       this.prisma.product.findMany({
-        where: { companyId: activeCompanyId, isActive: true },
+        where: {
+          companyId: activeCompanyId,
+          isActive: true,
+          ...(searchTokens.length > 0
+            ? {
+              OR: searchTokens.flatMap((token) => [
+                { name: { contains: token, mode: 'insensitive' as const } },
+                { description: { contains: token, mode: 'insensitive' as const } },
+              ]),
+            }
+            : {}),
+        },
         select: { id: true, name: true, description: true, priceMinor: true },
         take: 30,
         orderBy: { updatedAt: 'desc' },
       }),
     ]);
 
-    const tokens = tokenizeQuery(cleanQuestion);
-
-    const rankedDocs = docs
+    const rankedDocs = matchedDocs
       .map((doc) => ({
         score: scoreTextMatch(`${doc.title} ${doc.content}`, tokens),
         source: {
@@ -192,7 +223,7 @@ export class AgentKnowledgeBaseService {
       }))
       .sort((a, b) => b.score - a.score);
 
-    const rankedProducts = products
+    const rankedProducts = matchedProducts
       .map((prod) => {
         const priceFormatted = `$${(prod.priceMinor / 100).toFixed(2)}`;
         const text = `${prod.name} (${priceFormatted})${prod.description ? `: ${prod.description}` : ''}`;
@@ -214,10 +245,28 @@ export class AgentKnowledgeBaseService {
     ];
 
     if (topSources.length === 0) {
-      topSources.push(...rankedDocs.slice(0, 2).map((d) => d.source));
+      const fallbackDocs =
+        matchedDocs.length > 0
+          ? matchedDocs
+          : await this.prisma.agentKnowledgeBase.findMany({
+            where: {
+              companyId: activeCompanyId,
+              ...(options.projectId ? { projectId: options.projectId } : {}),
+            },
+            take: 2,
+            orderBy: { updatedAt: 'desc' },
+          });
+
+      topSources.push(
+        ...fallbackDocs.slice(0, 2).map((doc) => ({
+          id: doc.id,
+          title: doc.title,
+          type: 'KNOWLEDGE_DOC' as const,
+          snippet: doc.content.slice(0, 320),
+        })),
+      );
     }
 
-    // 3. Якщо задано OPENAI_API_KEY — генеруємо відповідь через LLM, інакше локальний RAG-синтез
     const openAiKey = process.env.OPENAI_API_KEY?.trim();
     if (openAiKey) {
       const contextBlock =
@@ -239,7 +288,7 @@ export class AgentKnowledgeBaseService {
               {
                 role: 'system',
                 content:
-                  'Ти корпоративний AI-асистент компанії в платформі NextOps. Відповідай стисло, точно й українською мовою, спираючись виключно на наданий контекст бази знань та каталогу товарів.',
+                  'Ти корпоративний AI-асистент компанії в платформі NextOps. Відповідай стисло, точно й мовою запиту користувача, спираючись виключно на наданий контекст бази знань та каталогу товарів.',
               },
               {
                 role: 'user',
@@ -254,7 +303,8 @@ export class AgentKnowledgeBaseService {
           const data = (await response.json()) as {
             choices?: Array<{ message?: { content?: string } }>;
           };
-          const generated = data.choices?.[0]?.message?.content?.trim();
+          const firstChoice = Array.isArray(data.choices) ? data.choices[0] : undefined;
+          const generated = firstChoice?.message?.content?.trim();
           if (generated) {
             return {
               answer: generated,
@@ -273,7 +323,7 @@ export class AgentKnowledgeBaseService {
     const fallbackAnswer =
       topSources.length > 0
         ? `Знайдено релевантну інформацію в базі знань компанії (${topSources.length} дж.):\n\n` +
-          topSources.map((s, i) => `${i + 1}. **${s.title}** — ${s.snippet}`).join('\n')
+        topSources.map((s, i) => `${i + 1}. **${s.title}** — ${s.snippet}`).join('\n')
         : 'У базі знань компанії поки немає документів за вашим запитом. Додайте інструкції або прайси у розділі AgentKnowledgeBase.';
 
     return {
@@ -286,17 +336,18 @@ export class AgentKnowledgeBaseService {
   }
 
   async create(dto: CreateAgentKnowledgeBaseDto, companyId?: string): Promise<AgentKnowledgeBase> {
-    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
-    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
-    return this.prisma.agentKnowledgeBase.create({ data: { ...dto, companyId: activeCompanyId } });
+    const activeCompanyId = this.resolveCompanyId(companyId);
+    return this.prisma.agentKnowledgeBase.create({
+      data: { ...dto, companyId: activeCompanyId },
+    });
   }
 
-    async findAll(
+  async findAll(
     query: PaginationQueryDto,
     companyId?: string,
   ): Promise<PaginatedResponse<AgentKnowledgeBase>> {
-    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
-    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+    const activeCompanyId = this.resolveCompanyId(companyId);
+    const where = { companyId: activeCompanyId };
 
     return paginate(
       query,
@@ -306,11 +357,13 @@ export class AgentKnowledgeBaseService {
   }
 
   async findOne(id: string, companyId?: string): Promise<AgentKnowledgeBase> {
-    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const activeCompanyId = this.resolveCompanyId(companyId);
     const item = await this.prisma.agentKnowledgeBase.findFirst({
-      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+      where: { id, companyId: activeCompanyId },
     });
-    if (!item) throw new NotFoundException(`Документ бази знань з ID ${id} не знайдено`);
+    if (!item) {
+      throw new NotFoundException(`Документ бази знань з ID ${id} не знайдено`);
+    }
     return item;
   }
 

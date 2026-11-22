@@ -1,19 +1,30 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, UseGuards, ServiceUnavailableException, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { Request } from 'express';
+import type { Order } from '@prisma/client';
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
-import type { Order } from '@prisma/client';
-import { Idempotent } from '../common/idempotency/idempotency.interceptor';
 
 interface RequestWithUser extends Request {
-  user: {
+  user?: {
     id: string;
-    email?: string;
-    role?: string;
+    email: string;
+    role: string;
     companyId?: string;
   };
 }
@@ -26,47 +37,43 @@ export class OrderController {
   ) {}
 
   @Post()
-  @Idempotent()
-  create(
-    @Body() dto: CreateOrderDto,
-    @Req() request: RequestWithUser,
-  ): Promise<Order> {
-    return this.service.create(dto, request.user.id, request.user.companyId);
+  async create(@Body() dto: CreateOrderDto, @Req() req: RequestWithUser): Promise<Order> {
+    if (!req.user?.id) {
+      throw new UnauthorizedException('Authentication is required.');
+    }
+    return this.service.create(dto, req.user.id, req.user.companyId);
   }
 
   @Get()
-  findAll(
+  async findAll(
     @Query() query: PaginationQueryDto,
-    @Req() request: RequestWithUser,
+    @Req() req: RequestWithUser,
   ): Promise<PaginatedResponse<Order>> {
-    return this.service.findAll(query, request.user.companyId);
+    return this.service.findAll(query, req.user?.companyId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @Req() request: RequestWithUser): Promise<Order> {
-    return this.service.findOne(id, request.user.companyId);
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<Order> {
+    return this.service.findOne(id, req.user?.companyId);
   }
 
   @Patch(':id')
-  update(
-    @Param('id') id: string,
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateOrderDto,
-    @Req() request: RequestWithUser,
+    @Req() req: RequestWithUser,
   ): Promise<Order> {
-    return this.service.update(id, dto, request.user.companyId, request.user.role);
+    return this.service.update(id, dto, req.user?.companyId, req.user?.role);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @Req() request: RequestWithUser): Promise<Order> {
-    return this.service.remove(id, request.user.companyId);
-  }
-
-  @Patch(':id/pay')
-  @UseGuards(JwtAuthGuard)
-  pay(): never {
-    throw new ServiceUnavailableException({
-      message: 'Payment confirmation is disabled until a signed payment provider webhook is configured.',
-      errorCode: 'PAYMENT_PROVIDER_NOT_CONFIGURED',
-    });
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<Order> {
+    return this.service.remove(id, req.user?.companyId);
   }
 }

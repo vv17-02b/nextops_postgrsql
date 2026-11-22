@@ -92,12 +92,13 @@ export class ApiHistoryInterceptor implements NestInterceptor {
     statusCode: number,
     durationMs: number,
   ): void {
-    const userId = request.user?.id;
     const companyId = request.user?.companyId;
-
-    if (!userId || !companyId) {
+    if (!companyId) {
       return;
     }
+
+    const isApiClient = request.user?.role === 'API_CLIENT';
+    const userId = !isApiClient && request.user?.id ? request.user.id : null;
 
     void this.prisma
       .runSystemQuery(() =>

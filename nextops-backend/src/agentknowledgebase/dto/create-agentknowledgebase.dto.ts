@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
 
 export class CreateAgentKnowledgeBaseDto {
   @IsString()
@@ -9,7 +9,7 @@ export class CreateAgentKnowledgeBaseDto {
   @IsNotEmpty({ message: 'Контент бази знань (content) не може бути порожнім' })
   content!: string;
 
-  @IsString()
+  @IsUUID('4', { message: 'Некоректний формат projectId' })
   @IsNotEmpty({ message: 'projectId є обовʼязковим для привʼязки бази знань' })
   projectId!: string;
 }

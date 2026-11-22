@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class AskKnowledgeBaseDto {
   @IsString()
@@ -6,7 +6,7 @@ export class AskKnowledgeBaseDto {
   @MaxLength(2000)
   question!: string;
 
-  @IsString()
+  @IsUUID('4', { message: 'Некоректний формат projectId' })
   @IsOptional()
   projectId?: string;
 }

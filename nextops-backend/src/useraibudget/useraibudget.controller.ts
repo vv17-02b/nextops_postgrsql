@@ -1,10 +1,22 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
+import type { UserAiBudget } from '@prisma/client';
 import { UserAiBudgetService } from './useraibudget.service';
 import type { UserAiBudgetExtended } from './useraibudget.service';
 import { CreateUserAiBudgetDto } from './dto/create-useraibudget.dto';
 import { UpdateUserAiBudgetDto } from './dto/update-useraibudget.dto';
-import type { UserAiBudget } from '@prisma/client';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
 import { Roles } from '../auth/roles.decorator';
@@ -27,7 +39,10 @@ export class UserAiBudgetController {
   ) {}
 
   @Post()
-  create(@Body() dto: CreateUserAiBudgetDto, @Req() req: RequestWithUser): Promise<UserAiBudget> {
+  create(
+    @Body() dto: CreateUserAiBudgetDto,
+    @Req() req: RequestWithUser,
+  ): Promise<UserAiBudgetExtended> {
     return this.service.create(dto, req.user?.companyId);
   }
 
@@ -40,21 +55,27 @@ export class UserAiBudgetController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<UserAiBudgetExtended> {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<UserAiBudgetExtended> {
     return this.service.findOne(id, req.user?.companyId);
   }
 
   @Patch(':id')
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserAiBudgetDto,
     @Req() req: RequestWithUser,
-  ): Promise<UserAiBudget> {
+  ): Promise<UserAiBudgetExtended> {
     return this.service.update(id, dto, req.user?.companyId);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<UserAiBudget> {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<UserAiBudget> {
     return this.service.remove(id, req.user?.companyId);
   }
 }

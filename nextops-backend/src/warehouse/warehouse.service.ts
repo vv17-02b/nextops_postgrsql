@@ -1,23 +1,52 @@
-import { ForbiddenException, Injectable, NotFoundException, Inject } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import type { Warehouse } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
 import { CreateWarehouseDto } from './dto/create-warehouse.dto';
 import { UpdateWarehouseDto } from './dto/update-warehouse.dto';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
-import type { Warehouse } from '@prisma/client';
 
 @Injectable()
 export class WarehouseService {
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
-    @Inject(TenantContext) private readonly tenantContext: TenantContext,
+    @Inject(TenantContext)
+    private readonly tenantContext: TenantContext,
   ) {}
 
-  async create(dto: CreateWarehouseDto, companyId?: string): Promise<Warehouse> {
+  private resolveCompanyId(companyId?: string): string {
     const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
-    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
+    if (!activeCompanyId) {
+      throw new ForbiddenException('A business workspace is required.');
+    }
+    if (!this.tenantContext.getCompanyId()) {
+      this.tenantContext.setCompanyId(activeCompanyId);
+    }
+    return activeCompanyId;
+  }
+
+  private async assertProductBelongsToCompany(productId: string, companyId: string): Promise<void> {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, companyId },
+      select: { id: true },
+    });
+    if (!product) {
+      throw new BadRequestException('Вказаний товар не знайдено у вашому робочому просторі.');
+    }
+  }
+
+  async create(dto: CreateWarehouseDto, companyId?: string): Promise<Warehouse> {
+    const activeCompanyId = this.resolveCompanyId(companyId);
+    await this.assertProductBelongsToCompany(dto.productId, activeCompanyId);
+
     return this.prisma.warehouse.create({
       data: {
         companyId: activeCompanyId,
@@ -28,9 +57,12 @@ export class WarehouseService {
     });
   }
 
-  async findAll(query: PaginationQueryDto, companyId?: string): Promise<PaginatedResponse<Warehouse>> {
-    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
-    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+  async findAll(
+    query: PaginationQueryDto,
+    companyId?: string,
+  ): Promise<PaginatedResponse<Warehouse>> {
+    const activeCompanyId = this.resolveCompanyId(companyId);
+    const where = { companyId: activeCompanyId };
 
     return paginate(
       query,
@@ -46,9 +78,9 @@ export class WarehouseService {
   }
 
   async findOne(id: string, companyId?: string): Promise<Warehouse> {
-    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const activeCompanyId = this.resolveCompanyId(companyId);
     const item = await this.prisma.warehouse.findFirst({
-      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+      where: { id, companyId: activeCompanyId },
     });
     if (!item) {
       throw new NotFoundException(`Запис складу з ID ${id} не знайдено`);
@@ -57,7 +89,12 @@ export class WarehouseService {
   }
 
   async update(id: string, dto: UpdateWarehouseDto, companyId?: string): Promise<Warehouse> {
-    await this.findOne(id, companyId);
+    const existing = await this.findOne(id, companyId);
+
+    if (dto.productId !== undefined) {
+      await this.assertProductBelongsToCompany(dto.productId, existing.companyId);
+    }
+
     return this.prisma.warehouse.update({
       where: { id },
       data: dto,

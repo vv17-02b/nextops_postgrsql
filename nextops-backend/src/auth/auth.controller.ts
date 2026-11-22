@@ -81,8 +81,7 @@ export class AuthController {
     private readonly emailQueue: EmailQueueService,
     @Inject(TelegramNotifierService)
     private readonly telegramNotifier: TelegramNotifierService,
-  ) {}
-
+  ) { }
 
   private async issueSessionCookies(
     response: Response,
@@ -170,7 +169,6 @@ export class AuthController {
       role: created.role,
     });
 
-    // Системне сповіщення власнику платформи у приватний TELEGRAM_CHAT_ID
     void this.telegramNotifier.notifyPlatformOwner(
       [
         `🆕 <b>Нова реєстрація на сервері NextOps</b>`,
@@ -227,12 +225,15 @@ export class AuthController {
         'This account has no business workspace. Contact an administrator to migrate it.',
       );
     }
-    this.tenantContext.setCompanyId(user.companyId);
+      this.tenantContext.setCompanyId(user.companyId);
     if (verification.needsRehash) {
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: { passwordHash: await hashPassword(dto.password) },
-      });
+      const nextHash = await hashPassword(dto.password);
+      await this.prisma.runSystemQuery(() =>
+        this.prisma.user.update({
+          where: { id: user.id },
+          data: { passwordHash: nextHash },
+        }),
+      );
     }
 
     await this.issueSessionCookies(response, {
@@ -331,7 +332,6 @@ export class AuthController {
       companyName: updated.name,
     };
   }
-
   @Post('logout')
   @Public()
   async logout(
@@ -364,19 +364,22 @@ export class AuthController {
       return { success: true, message: 'If the account exists, a reset link has been sent.' };
     }
 
-    this.tenantContext.setCompanyId(user.companyId);
+    const companyId = user.companyId;
+    this.tenantContext.setCompanyId(companyId);
     const token = randomBytes(32).toString('base64url');
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const expires = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
 
-    await this.prisma.verificationToken.create({
-      data: {
-        companyId: user.companyId,
-        identifier: user.email ?? email,
-        token: tokenHash,
-        expires,
-      },
-    });
+    await this.prisma.runSystemQuery(() =>
+      this.prisma.verificationToken.create({
+        data: {
+          companyId,
+          identifier: user.email ?? email,
+          token: tokenHash,
+          expires,
+        },
+      }),
+    );
 
     const resetUrl = new URL('/reset-password', process.env.FRONTEND_URL ?? 'http://localhost:3000');
     resetUrl.searchParams.set('token', token);
@@ -384,7 +387,7 @@ export class AuthController {
     try {
       await this.emailQueue.enqueueInvitation({
         email,
-        companyName: `PASSWORD_RESET:${user.companyId}`,
+        companyName: `PASSWORD_RESET:${companyId}`,
         invitationUrl: resetUrl.toString(),
       });
     } catch {
@@ -407,19 +410,23 @@ export class AuthController {
     }
 
     this.tenantContext.setCompanyId(record.companyId);
-    const user = await this.prisma.user.findFirst({
-      where: { email: record.identifier },
-      select: { id: true },
-    });
+    const user = await this.prisma.runSystemQuery(() =>
+      this.prisma.user.findFirst({
+        where: { email: record.identifier },
+        select: { id: true },
+      }),
+    );
     if (!user) {
       throw new UnauthorizedException('This password reset link is invalid or has expired.');
     }
 
     const passwordHash = await hashPassword(dto.password);
-    await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
-      this.prisma.verificationToken.delete({ where: { token: tokenHash } }),
-    ]);
+    await this.prisma.runSystemQuery(() =>
+      this.prisma.$transaction([
+        this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
+        this.prisma.verificationToken.delete({ where: { token: tokenHash } }),
+      ]),
+    );
 
     await this.tokenRevocation.bumpSessionEpoch(user.id);
 

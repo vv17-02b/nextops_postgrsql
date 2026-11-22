@@ -124,10 +124,12 @@ export class IdempotencyService implements OnModuleInit, OnModuleDestroy {
 
       return result;
     } catch (error) {
-      await this.client.eval(DELETE_LOCK_SCRIPT, {
-        keys: [redisKey],
-        arguments: [lockValue],
-      });
+      await this.client
+        .eval(DELETE_LOCK_SCRIPT, {
+          keys: [redisKey],
+          arguments: [lockValue],
+        })
+        .catch(() => undefined);
       throw error;
     }
   }

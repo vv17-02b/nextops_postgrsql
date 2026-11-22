@@ -1,9 +1,21 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Inject, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
+import type { Warehouse } from '@prisma/client';
 import { WarehouseService } from './warehouse.service';
 import { CreateWarehouseDto } from './dto/create-warehouse.dto';
 import { UpdateWarehouseDto } from './dto/update-warehouse.dto';
-import type { Warehouse } from '@prisma/client';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
 
@@ -37,13 +49,16 @@ export class WarehouseController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<Warehouse> {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<Warehouse> {
     return this.service.findOne(id, req.user?.companyId);
   }
 
   @Patch(':id')
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateWarehouseDto,
     @Req() req: RequestWithUser,
   ): Promise<Warehouse> {
@@ -51,7 +66,10 @@ export class WarehouseController {
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<Warehouse> {
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<Warehouse> {
     return this.service.remove(id, req.user?.companyId);
   }
 }

@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Inject, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { PlatformOwnerGuard } from './platform-owner.guard';
@@ -71,13 +82,15 @@ export class PlatformController {
   }
 
   @Post(':id/suspend')
-  suspendCompany(@Param('id') id: string): Promise<{ suspended: true; id: string; name: string }> {
+  suspendCompany(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ suspended: true; id: string; name: string }> {
     return this.platformService.suspendCompany(id);
   }
 
   @Post(':id/activate')
   activateCompany(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ActivateCompanyDto,
   ): Promise<{
     activated: true;
@@ -90,7 +103,9 @@ export class PlatformController {
   }
 
   @Delete(':id')
-  deleteCompany(@Param('id') id: string): Promise<{ deleted: true; id: string; name: string }> {
+  deleteCompany(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ deleted: true; id: string; name: string }> {
     return this.platformService.deleteCompanyPermanently(id);
   }
 }

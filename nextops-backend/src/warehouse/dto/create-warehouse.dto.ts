@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsString, IsUUID, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateWarehouseDto {
   @IsUUID()
@@ -13,5 +13,6 @@ export class CreateWarehouseDto {
   @Transform(({ value }) => (value === undefined ? value : Number(value)))
   @IsInt()
   @Min(0)
+  @IsOptional()
   quantity?: number;
 }

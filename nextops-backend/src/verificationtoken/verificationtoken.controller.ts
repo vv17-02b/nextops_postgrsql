@@ -1,7 +1,19 @@
-import { Controller, Get, Param, Delete, Inject, Query, Req, MethodNotAllowedException, Post, Patch } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  MethodNotAllowedException,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
-import { VerificationTokenService } from './verificationtoken.service';
 import type { VerificationToken } from '@prisma/client';
+import { VerificationTokenService } from './verificationtoken.service';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import type { PaginatedResponse } from '../common/pagination/paginate';
 import { Roles } from '../auth/roles.decorator';
@@ -33,7 +45,9 @@ export class VerificationTokenController {
 
   @Post()
   create(): never {
-    throw new MethodNotAllowedException('Manual verification token creation via API is disabled for security reasons.');
+    throw new MethodNotAllowedException(
+      'Manual verification token creation via API is disabled for security reasons.',
+    );
   }
 
   @Get()
@@ -49,18 +63,26 @@ export class VerificationTokenController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string, @Req() req: RequestWithUser): Promise<SafeVerificationToken> {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<SafeVerificationToken> {
     const record = await this.service.findOne(id, req.user?.companyId);
     return toSafeVerificationToken(record);
   }
 
   @Patch(':id')
   update(): never {
-    throw new MethodNotAllowedException('Verification token modification via API is disabled for security reasons.');
+    throw new MethodNotAllowedException(
+      'Verification token modification via API is disabled for security reasons.',
+    );
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string, @Req() req: RequestWithUser): Promise<SafeVerificationToken> {
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<SafeVerificationToken> {
     const record = await this.service.remove(id, req.user?.companyId);
     return toSafeVerificationToken(record);
   }

@@ -1,11 +1,11 @@
-import { ForbiddenException, Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import type { Account } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { PaginationQueryDto } from '../common/pagination/pagination-query.dto';
 import { paginate, type PaginatedResponse } from '../common/pagination/paginate';
-import type { Account } from '@prisma/client';
 
 export type SafeAccount = Omit<
   Account,
@@ -32,21 +32,35 @@ export class AccountService {
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
-    @Inject(TenantContext) private readonly tenantContext: TenantContext,
+    @Inject(TenantContext)
+    private readonly tenantContext: TenantContext,
   ) {}
 
-  async create(dto: CreateAccountDto, companyId?: string): Promise<SafeAccount> {
+  private resolveCompanyId(companyId?: string): string {
     const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
-    if (!activeCompanyId) throw new ForbiddenException('A business workspace is required.');
+    if (!activeCompanyId) {
+      throw new ForbiddenException('A business workspace is required.');
+    }
+    if (!this.tenantContext.getCompanyId()) {
+      this.tenantContext.setCompanyId(activeCompanyId);
+    }
+    return activeCompanyId;
+  }
+
+  async create(dto: CreateAccountDto, companyId?: string): Promise<SafeAccount> {
+    const activeCompanyId = this.resolveCompanyId(companyId);
     const created = await this.prisma.account.create({
       data: { ...dto, companyId: activeCompanyId },
     });
     return toSafeAccount(created);
   }
 
-  async findAll(query: PaginationQueryDto, companyId?: string): Promise<PaginatedResponse<SafeAccount>> {
-    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
-    const where = activeCompanyId ? { companyId: activeCompanyId } : {};
+  async findAll(
+    query: PaginationQueryDto,
+    companyId?: string,
+  ): Promise<PaginatedResponse<SafeAccount>> {
+    const activeCompanyId = this.resolveCompanyId(companyId);
+    const where = { companyId: activeCompanyId };
 
     return paginate(
       query,
@@ -59,11 +73,13 @@ export class AccountService {
   }
 
   async findOne(id: string, companyId?: string): Promise<SafeAccount> {
-    const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
+    const activeCompanyId = this.resolveCompanyId(companyId);
     const item = await this.prisma.account.findFirst({
-      where: activeCompanyId ? { id, companyId: activeCompanyId } : { id },
+      where: { id, companyId: activeCompanyId },
     });
-    if (!item) throw new NotFoundException(`Документ з ID ${id} не знайдено`);
+    if (!item) {
+      throw new NotFoundException(`Документ з ID ${id} не знайдено`);
+    }
     return toSafeAccount(item);
   }
 

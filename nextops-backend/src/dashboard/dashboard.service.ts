@@ -1,7 +1,10 @@
 import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../prisma/tenant-context';
-import { PlanEnforcementService, type WorkspaceBillingSnapshot } from '../billing/plan-enforcement.service';
+import {
+  PlanEnforcementService,
+  type WorkspaceBillingSnapshot,
+} from '../billing/plan-enforcement.service';
 
 export interface DailyRevenuePoint {
   date: string;
@@ -60,36 +63,62 @@ export class DashboardService {
     private readonly tenantContext: TenantContext,
     @Inject(PlanEnforcementService)
     private readonly planEnforcement: PlanEnforcementService,
-  ) { }
+  ) {}
 
-  async getOverview(companyId?: string): Promise<DashboardOverviewResponse> {
+  private resolveCompanyId(companyId?: string): string {
     const activeCompanyId = companyId ?? this.tenantContext.getCompanyId();
     if (!activeCompanyId) {
       throw new ForbiddenException('A business workspace is required.');
     }
+    if (!this.tenantContext.getCompanyId()) {
+      this.tenantContext.setCompanyId(activeCompanyId);
+    }
+    return activeCompanyId;
+  }
+
+  async getOverview(companyId?: string): Promise<DashboardOverviewResponse> {
+    const activeCompanyId = this.resolveCompanyId(companyId);
 
     const sevenDaysAgo = new Date();
-    sevenDaysAgo.setHours(0, 0, 0, 0);
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    sevenDaysAgo.setUTCHours(0, 0, 0, 0);
+    sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6);
 
-    const [orders, orderItems, products, aiBudgets, billing] = await Promise.all([
-      this.prisma.order.findMany({
+    const [
+      ordersByStatus,
+      recentOrders,
+      latestOrderCurrency,
+      orderItems,
+      products,
+      aiBudgets,
+      billing,
+    ] = await Promise.all([
+      this.prisma.order.groupBy({
+        by: ['status'],
         where: { companyId: activeCompanyId },
+        _count: { _all: true },
+        _sum: { totalAmountMinor: true },
+      }),
+      this.prisma.order.findMany({
+        where: {
+          companyId: activeCompanyId,
+          createdAt: { gte: sevenDaysAgo },
+          status: { notIn: ['CANCELED', 'CANCELLED', 'canceled', 'cancelled'] },
+        },
         select: {
-          id: true,
-          status: true,
           totalAmountMinor: true,
-          currency: true,
           createdAt: true,
         },
+      }),
+      this.prisma.order.findFirst({
+        where: { companyId: activeCompanyId },
         orderBy: { createdAt: 'desc' },
-        take: 1000,
+        select: { currency: true },
       }),
       this.prisma.orderItem.findMany({
         where: {
           companyId: activeCompanyId,
           order: {
-            status: { notIn: ['CANCELED', 'CANCELLED'] },
+            status: { notIn: ['CANCELED', 'CANCELLED', 'canceled', 'cancelled'] },
           },
         },
         select: {
@@ -97,7 +126,6 @@ export class DashboardService {
           quantity: true,
           priceMinor: true,
         },
-        take: 3000,
       }),
       this.prisma.product.findMany({
         where: { companyId: activeCompanyId },
@@ -119,6 +147,7 @@ export class DashboardService {
       }),
       this.planEnforcement.getBillingSnapshot(activeCompanyId),
     ]);
+
     const statusBreakdown: OrderStatusBreakdown = {
       pending: 0,
       confirmed: 0,
@@ -127,45 +156,50 @@ export class DashboardService {
     };
 
     let totalRevenueMinor = 0;
-    let primaryCurrency = billing.currency || 'USD';
+    let totalOrders = 0;
+    const primaryCurrency = latestOrderCurrency?.currency || billing.currency || 'USD';
 
-    for (const order of orders) {
-      if (order.currency) {
-        primaryCurrency = order.currency;
-      }
-      const normalizedStatus = order.status.toUpperCase();
+    for (const group of ordersByStatus) {
+      const count = group._count._all;
+      const sumMinor = group._sum.totalAmountMinor ?? 0;
+      totalOrders += count;
+
+      const normalizedStatus = group.status.toUpperCase();
       if (normalizedStatus === 'PENDING') {
-        statusBreakdown.pending += 1;
-        totalRevenueMinor += order.totalAmountMinor;
+        statusBreakdown.pending += count;
+        totalRevenueMinor += sumMinor;
       } else if (
         normalizedStatus === 'CONFIRMED' ||
         normalizedStatus === 'PAID' ||
         normalizedStatus === 'COMPLETED'
       ) {
-        statusBreakdown.confirmed += 1;
-        totalRevenueMinor += order.totalAmountMinor;
+        statusBreakdown.confirmed += count;
+        totalRevenueMinor += sumMinor;
       } else if (normalizedStatus === 'CANCELED' || normalizedStatus === 'CANCELLED') {
-        statusBreakdown.canceled += 1;
+        statusBreakdown.canceled += count;
       } else {
-        statusBreakdown.other += 1;
-        totalRevenueMinor += order.totalAmountMinor;
+        statusBreakdown.other += count;
+        totalRevenueMinor += sumMinor;
       }
     }
 
-    const activeOrdersCount = orders.length - statusBreakdown.canceled;
+    const activeOrdersCount = totalOrders - statusBreakdown.canceled;
     const conversionRatePercent =
-      orders.length > 0 ? Math.round((statusBreakdown.confirmed / orders.length) * 100) : 0;
+      totalOrders > 0 ? Math.round((statusBreakdown.confirmed / totalOrders) * 100) : 0;
     const averageOrderValueMinor =
       activeOrdersCount > 0 ? Math.round(totalRevenueMinor / activeOrdersCount) : 0;
 
-    // Динаміка виручки за останні 7 днів
     const dailyMap = new Map<string, DailyRevenuePoint>();
     for (let i = 6; i >= 0; i -= 1) {
       const d = new Date();
-      d.setHours(0, 0, 0, 0);
-      d.setDate(d.getDate() - i);
+      d.setUTCHours(0, 0, 0, 0);
+      d.setUTCDate(d.getUTCDate() - i);
       const isoKey = d.toISOString().slice(0, 10);
-      const label = d.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' });
+      const label = d.toLocaleDateString('uk-UA', {
+        day: '2-digit',
+        month: '2-digit',
+        timeZone: 'UTC',
+      });
       dailyMap.set(isoKey, {
         date: isoKey,
         label,
@@ -174,10 +208,7 @@ export class DashboardService {
       });
     }
 
-    for (const order of orders) {
-      if (order.createdAt < sevenDaysAgo) continue;
-      const normalizedStatus = order.status.toUpperCase();
-      if (normalizedStatus === 'CANCELED' || normalizedStatus === 'CANCELLED') continue;
+    for (const order of recentOrders) {
       const isoKey = order.createdAt.toISOString().slice(0, 10);
       const bucket = dailyMap.get(isoKey);
       if (bucket) {
@@ -188,7 +219,6 @@ export class DashboardService {
 
     const dailyRevenue = Array.from(dailyMap.values());
 
-    // Підрахунок залишків на складі для кожного товару через inventory
     const normalizedProducts = products.map((p) => {
       const totalStock = p.inventory.reduce((sum, inv) => sum + inv.quantity, 0);
       return {
@@ -247,7 +277,7 @@ export class DashboardService {
       kpis: {
         totalRevenueMinor,
         currency: primaryCurrency,
-        totalOrders: orders.length,
+        totalOrders,
         confirmedOrders: statusBreakdown.confirmed,
         conversionRatePercent,
         averageOrderValueMinor,
