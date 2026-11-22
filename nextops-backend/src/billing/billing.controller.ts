@@ -31,8 +31,8 @@ export class ConfigureTelegramDto {
   botToken?: string;
 
   @IsString()
-  @IsNotEmpty()
-  chatId!: string;
+  @IsOptional()
+  chatId?: string;
 }
 
 interface RequestWithUser extends Request {
@@ -50,7 +50,7 @@ export class BillingController {
   constructor(
     @Inject(BillingService)
     private readonly billingService: BillingService,
-  ) { }
+  ) {}
 
   @Get('status')
   getStatus(@Req() req: RequestWithUser) {
@@ -88,7 +88,12 @@ export class BillingController {
     @Body() dto: ConfigureTelegramDto,
     @Req() req: RequestWithUser,
   ): Promise<{ connected: boolean; chatId: string }> {
-    return this.billingService.configureTelegram(dto.botToken ?? '', dto.chatId, true, req.user?.companyId);
+    return this.billingService.configureTelegram(
+      dto.botToken ?? '',
+      dto.chatId ?? '',
+      true,
+      req.user?.companyId,
+    );
   }
 
   @Post('telegram/connect-env')

@@ -15,7 +15,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
-    private readonly tokenRevocation: TokenRevocationService,
+    @Inject(TokenRevocationService) private readonly tokenRevocation: TokenRevocationService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([

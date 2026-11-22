@@ -95,6 +95,7 @@ export default function BillingPage(): React.JSX.Element {
   const [isSoundMuted, setIsSoundMuted] = useState<boolean>(false);
   const [tgTokenInput, setTgTokenInput] = useState<string>('');
   const [tgChatIdInput, setTgChatIdInput] = useState<string>('');
+  const [editingTelegram, setEditingTelegram] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [submittingPlan, setSubmittingPlan] = useState<string | null>(null);
   const [savingTelegram, setSavingTelegram] = useState<boolean>(false);
@@ -141,9 +142,6 @@ export default function BillingPage(): React.JSX.Element {
         }
         const payload = (await resStatus.json()) as BillingStatusResponse;
         setStatusData(payload);
-        if (payload.telegram?.chatId) {
-          setTgChatIdInput(payload.telegram.chatId);
-        }
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Помилка мережі при завантаженні білінгу.');
       } finally {
@@ -224,7 +222,7 @@ export default function BillingPage(): React.JSX.Element {
     const botToken = tgTokenInput.trim();
     const chatId = tgChatIdInput.trim();
 
-    if (!chatId) {
+    if (!chatId && !statusData?.telegram?.connected) {
       setError('Вкажіть ваш Telegram Chat ID.');
       return;
     }
@@ -251,6 +249,8 @@ export default function BillingPage(): React.JSX.Element {
       }
 
       setTgTokenInput('');
+      setTgChatIdInput('');
+      setEditingTelegram(false);
       setNotice('Тестове повідомлення успішно надіслано у ваш Telegram!');
       await loadBilling(true);
     } catch (err: unknown) {
@@ -693,57 +693,93 @@ export default function BillingPage(): React.JSX.Element {
                     : 'border-white/10 bg-white/5 text-gray-400'
                     }`}
                 >
-                  {statusData.telegram?.connected
-                    ? `● Підключено (Chat: ${statusData.telegram.chatId})`
-                    : '○ Не налаштовано'}
+                  {statusData.telegram?.connected ? '● Підключено' : '○ Не налаштовано'}
                 </span>
               </div>
             </div>
 
-            <form
-              onSubmit={(e) => void handleSaveTelegram(e)}
-              className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3 items-end"
-            >
-              <div>
-                <label htmlFor="telegram-bot-token-input" className="block text-xs text-gray-400 mb-1.5">
-                  Telegram Bot Token
-                </label>
-                <input
-                  id="telegram-bot-token-input"
-                  name="telegramBotToken"
-                  type="password"
-                  autoComplete="new-password"
-                  value={tgTokenInput}
-                  onChange={(e) => setTgTokenInput(e.target.value)}
-                  placeholder={statusData.telegram?.maskedToken ?? '123456789:AAH...'}
-                  className="w-full rounded-lg border border-white/10 bg-gray-900/70 px-3 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500"
-                />
+            {statusData.telegram?.connected && !editingTelegram ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-950/20 px-4 py-3 text-xs text-gray-300">
+                <span>Інтеграція активна. Реквізити бота та Chat ID приховані з міркувань безпеки.</span>
+                <button
+                  type="button"
+                  onClick={() => setEditingTelegram(true)}
+                  className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 font-semibold text-white hover:bg-white/10 transition cursor-pointer"
+                >
+                  Змінити налаштування
+                </button>
               </div>
-              <div>
-                <label htmlFor="telegram-chat-id-input" className="block text-xs text-gray-400 mb-1.5">
-                  Telegram Chat ID
-                </label>
-                <input
-                  id="telegram-chat-id-input"
-                  name="telegramChatId"
-                  type="text"
-                  value={tgChatIdInput || statusData.telegram?.chatId || ''}
-                  onChange={(e) => setTgChatIdInput(e.target.value)}
-                  placeholder="Напр. 384920194 або -100..."
-                  className="w-full rounded-lg border border-white/10 bg-gray-900/70 px-3 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={savingTelegram}
-                className="rounded-lg border border-blue-500 bg-blue-600/30 px-4 py-2 text-xs font-semibold text-blue-200 hover:bg-blue-600/50 transition cursor-pointer disabled:opacity-40"
+            ) : (
+              <form
+                onSubmit={(e) => void handleSaveTelegram(e)}
+                className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3 items-end"
               >
-                {savingTelegram ? 'Перевірка бота...' : 'Зберегти та надіслати тест'}
-              </button>
-            </form>
+                <div>
+                  <label htmlFor="telegram-bot-token-input" className="block text-xs text-gray-400 mb-1.5">
+                    Telegram Bot Token
+                  </label>
+                  <input
+                    id="telegram-bot-token-input"
+                    name="telegramBotToken"
+                    type="password"
+                    autoComplete="new-password"
+                    value={tgTokenInput}
+                    onChange={(e) => setTgTokenInput(e.target.value)}
+                    placeholder={
+                      statusData.telegram?.connected
+                        ? '•••••••••••••••• (залиште порожнім без змін)'
+                        : '123456789:AAH...'
+                    }
+                    className="w-full rounded-lg border border-white/10 bg-gray-900/70 px-3 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="telegram-chat-id-input" className="block text-xs text-gray-400 mb-1.5">
+                    Telegram Chat ID
+                  </label>
+                  <input
+                    id="telegram-chat-id-input"
+                    name="telegramChatId"
+                    type="password"
+                    autoComplete="off"
+                    value={tgChatIdInput}
+                    onChange={(e) => setTgChatIdInput(e.target.value)}
+                    placeholder={
+                      statusData.telegram?.connected
+                        ? '•••••••••• (залиште порожнім без змін)'
+                        : 'Напр. 384920194 або -100...'
+                    }
+                    className="w-full rounded-lg border border-white/10 bg-gray-900/70 px-3 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="submit"
+                    disabled={savingTelegram}
+                    className="flex-1 rounded-lg border border-blue-500 bg-blue-600/30 px-4 py-2 text-xs font-semibold text-blue-200 hover:bg-blue-600/50 transition cursor-pointer disabled:opacity-40"
+                  >
+                    {savingTelegram ? 'Перевірка бота...' : 'Зберегти та надіслати тест'}
+                  </button>
+                  {statusData.telegram?.connected && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTelegram(false);
+                        setTgTokenInput('');
+                        setTgChatIdInput('');
+                      }}
+                      className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-gray-300 hover:bg-white/10 transition cursor-pointer"
+                    >
+                      Скасувати
+                    </button>
+                  )}
+                </div>
+              </form>
+            )}
           </div>
         </>
       ) : null}
     </div>
   );
 }
+

@@ -19,10 +19,10 @@ import { PlanEnforcementService, type WorkspaceBillingSnapshot } from './plan-en
 export interface BillingWebhookPayload {
   id: string;
   type:
-  | 'subscription.activated'
-  | 'subscription.renewed'
-  | 'subscription.past_due'
-  | 'subscription.canceled';
+    | 'subscription.activated'
+    | 'subscription.renewed'
+    | 'subscription.past_due'
+    | 'subscription.canceled';
   data: {
     companyId: string;
     planCode: string;
@@ -75,7 +75,7 @@ export class BillingService {
     private readonly planEnforcement: PlanEnforcementService,
     @Inject(TelegramNotifierService)
     private readonly telegramNotifier: TelegramNotifierService,
-  ) { }
+  ) {}
 
   async listPlans(): Promise<Plan[]> {
     return this.prisma.runSystemQuery(() =>
@@ -202,22 +202,16 @@ export class BillingService {
       this.listPlans(),
       activeCompanyId
         ? this.prisma.runSystemQuery(() =>
-          this.prisma.company.findUnique({
-            where: { id: activeCompanyId },
-            select: { telegramBotToken: true, telegramChatId: true },
-          }),
-        )
+            this.prisma.company.findUnique({
+              where: { id: activeCompanyId },
+              select: { telegramBotToken: true, telegramChatId: true },
+            }),
+          )
         : Promise.resolve(null),
       this.telegramNotifier.getPlatformBotUsername(),
     ]);
 
     const rawToken = companyTg?.telegramBotToken ?? null;
-    const maskedToken =
-      rawToken && rawToken.length >= 8
-        ? `${rawToken.slice(0, 4)}••••${rawToken.slice(-4)}`
-        : rawToken
-          ? '••••••••'
-          : null;
 
     const deepLinkUrl =
       botUsername && activeCompanyId
@@ -234,8 +228,8 @@ export class BillingService {
       providerConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
       telegram: {
         connected: Boolean(rawToken && companyTg?.telegramChatId),
-        chatId: companyTg?.telegramChatId ?? null,
-        maskedToken,
+        chatId: null,
+        maskedToken: null,
         platformBotUsername: botUsername,
         deepLinkUrl,
         envQuickConnectAvailable,
@@ -266,22 +260,29 @@ export class BillingService {
       throw new ForbiddenException('A business workspace is required.');
     }
 
-    let resolvedToken = botToken.trim();
+    const existing = await this.prisma.runSystemQuery(() =>
+      this.prisma.company.findUnique({
+        where: { id: activeCompanyId },
+        select: { telegramBotToken: true, telegramChatId: true },
+      }),
+    );
+
+    const resolvedToken =
+      botToken.trim() ||
+      existing?.telegramBotToken?.trim() ||
+      process.env.TELEGRAM_BOT_TOKEN?.trim() ||
+      '';
+
     if (!resolvedToken) {
-      const existing = await this.prisma.runSystemQuery(() =>
-        this.prisma.company.findUnique({
-          where: { id: activeCompanyId },
-          select: { telegramBotToken: true },
-        }),
+      throw new BadRequestException(
+        'Вкажіть Telegram Bot Token або задайте TELEGRAM_BOT_TOKEN у .env.',
       );
-      resolvedToken = existing?.telegramBotToken?.trim() || process.env.TELEGRAM_BOT_TOKEN?.trim() || '';
     }
 
-    if (!resolvedToken) {
-      throw new BadRequestException('Вкажіть Telegram Bot Token або задайте TELEGRAM_BOT_TOKEN у .env.');
+    const trimmedChatId = chatId.trim() || existing?.telegramChatId?.trim() || '';
+    if (!trimmedChatId) {
+      throw new BadRequestException('Вкажіть Telegram Chat ID.');
     }
-
-    const trimmedChatId = chatId.trim();
 
     if (sendTest) {
       await this.telegramNotifier.sendMessage(
@@ -408,7 +409,7 @@ export class BillingService {
       success_url: `${frontendBase}/billing?checkout=success&plan=${plan.code}`,
       cancel_url: `${frontendBase}/billing?checkout=canceled`,
     });
-    // API для приёма платежей.
+
     const stripeSessionsEndpoint = 'https://stripe.com';
     const response = await fetch(stripeSessionsEndpoint, {
       method: 'POST',
@@ -520,7 +521,7 @@ export class BillingService {
             eventType: payload.type,
           },
         }),
-        this.prisma.company.update({
+               this.prisma.company.update({
           where: { id: payload.data.companyId },
           data: {
             ...(nextPlanCode ? { planCode: nextPlanCode } : {}),
