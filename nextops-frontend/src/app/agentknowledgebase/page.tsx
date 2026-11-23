@@ -1,12 +1,11 @@
 "use client";
 
-
 import { useAgentKnowledgeBase } from '@/hooks/useAgentknowledgebase';
 import AgentKnowledgeBaseForm from '@/components/agentknowledgebase/agentknowledgebase-form';
 import { apiFetch, getApiHeaders, getApiUrl } from '@/lib/api';
 import { ApiErrorBanner } from '@/components/common/collection-controls';
-import { Trash2, Bot, Send, Sparkles, BookOpen, Wallet } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import { Trash2, Bot, Send, Sparkles, BookOpen, Wallet, FolderKanban } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 interface KnowledgeSourceRef {
   id: string;
@@ -17,19 +16,62 @@ interface KnowledgeSourceRef {
 
 interface AskAssistantResponse {
   answer: string;
-  provider: 'openai' | 'local-rag';
+  provider: 'openai' | 'local-rag' | 'cache';
   chargedMinor: number;
   remainingBudgetMinor: number;
   sources: KnowledgeSourceRef[];
 }
 
+function formatProviderLabel(provider: AskAssistantResponse['provider']): string {
+  if (provider === 'openai') return 'Groq / OpenAI LLM';
+  if (provider === 'cache') return 'In-Memory Cache';
+  return 'Local RAG Engine';
+}
+
+function renderFormattedAnswer(text: string): React.JSX.Element {
+  const lines = text.split('\n');
+
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line, lineIndex) => {
+        const parts = line.split(/(\*\*[^*]+\*\*)/g);
+        return (
+          <p key={`line-${lineIndex}`} className="leading-relaxed">
+            {parts.map((part, partIndex) => {
+              const isBold = part.startsWith('**') && part.endsWith('**') && part.length > 4;
+              if (isBold) {
+                return (
+                  <strong key={`part-${lineIndex}-${partIndex}`} className="font-semibold text-white">
+                    {part.slice(2, -2)}
+                  </strong>
+                );
+              }
+              return <React.Fragment key={`part-${lineIndex}-${partIndex}`}>{part}</React.Fragment>;
+            })}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function AgentKnowledgeBasePage(): React.JSX.Element {
-  const { data, loading, createItem, deleteItem } = useAgentKnowledgeBase();
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const { data, projects, loading, error, clearError, createItem, deleteItem } =
+    useAgentKnowledgeBase(selectedProjectId || undefined);
 
   const [question, setQuestion] = useState<string>('');
   const [asking, setAsking] = useState<boolean>(false);
   const [askError, setAskError] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<AskAssistantResponse | null>(null);
+
+  const projectNamesMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const proj of projects) {
+      map.set(proj.id, proj.name);
+    }
+    return map;
+  }, [projects]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -38,7 +80,6 @@ export default function AgentKnowledgeBasePage(): React.JSX.Element {
       setQuestion(initialQuery);
     }
   }, []);
-
 
   const handleAskAssistant = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -54,7 +95,10 @@ export default function AgentKnowledgeBasePage(): React.JSX.Element {
       const res = await apiFetch(getApiUrl('/api/agentknowledgebase/ask'), {
         method: 'POST',
         headers: getApiHeaders(true),
-        body: JSON.stringify({ question: trimmed }),
+        body: JSON.stringify({
+          question: trimmed,
+          ...(selectedProjectId ? { projectId: selectedProjectId } : {}),
+        }),
       });
 
       const payload = (await res.json()) as AskAssistantResponse & { message?: string };
@@ -70,6 +114,7 @@ export default function AgentKnowledgeBasePage(): React.JSX.Element {
       setAsking(false);
     }
   };
+
   return (
     <div className="space-y-6 font-sans">
       {/* Шапка */}
@@ -81,12 +126,40 @@ export default function AgentKnowledgeBasePage(): React.JSX.Element {
               <span>База знань та корпоративний AI-консультант</span>
             </h1>
             <p className="text-xs sm:text-sm text-gray-400 font-mono mt-1">
-              RAG-пошук по документах і товарах компанії (<code className="text-blue-400">/api/agentknowledgebase/ask</code>)
+              RAG-пошук по документах і товарах компанії (
+              <code className="text-blue-400">/api/agentknowledgebase/ask</code>)
             </p>
           </div>
-          <span className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold font-mono text-blue-300">
-            PostgreSQL RLS + FinOps Budget
-          </span>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {projects.length > 0 && (
+              <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-gray-900/70 px-2.5 py-1.5">
+                <FolderKanban className="h-4 w-4 text-blue-400 shrink-0" />
+                <label htmlFor="active-project-filter" className="sr-only">
+                  Фільтр за проєктом
+                </label>
+                <select
+                  id="active-project-filter"
+                  value={selectedProjectId}
+                  onChange={(e) => setSelectedProjectId(e.target.value)}
+                  className="bg-transparent text-xs font-mono text-gray-200 outline-none cursor-pointer"
+                >
+                  <option value="" className="bg-gray-900">
+                    Усі проєкти компанії
+                  </option>
+                  {projects.map((proj) => (
+                    <option key={proj.id} value={proj.id} className="bg-gray-900">
+                      {proj.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <span className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-xs font-semibold font-mono text-blue-300">
+              PostgreSQL RLS + FinOps Budget
+            </span>
+          </div>
         </div>
       </div>
 
@@ -100,7 +173,10 @@ export default function AgentKnowledgeBasePage(): React.JSX.Element {
           {aiResult && (
             <div className="flex flex-wrap items-center gap-2 text-[11px]">
               <span className="rounded-md border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-emerald-300">
-                {aiResult.provider === 'openai' ? 'OpenAI LLM' : 'Local RAG Engine'}
+                {formatProviderLabel(aiResult.provider)}
+              </span>
+              <span className="rounded-md border border-white/10 bg-white/5 px-2.5 py-0.5 text-gray-300">
+                Списано: ${(aiResult.chargedMinor / 100).toFixed(2)}
               </span>
               <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-0.5 text-gray-300">
                 <Wallet className="h-3 w-3 text-blue-400" />
@@ -120,6 +196,7 @@ export default function AgentKnowledgeBasePage(): React.JSX.Element {
             id="ai-knowledge-question"
             name="aiKnowledgeQuestion"
             type="text"
+            maxLength={2000}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             placeholder="Напр. Які умови гарантії або яка ціна ноутбука NextOps Pro?"
@@ -137,8 +214,8 @@ export default function AgentKnowledgeBasePage(): React.JSX.Element {
 
         {aiResult && (
           <div className="rounded-xl border border-blue-500/30 bg-blue-950/20 p-4 space-y-3">
-            <div className="text-xs sm:text-sm text-gray-100 whitespace-pre-line leading-relaxed">
-              {aiResult.answer}
+            <div className="text-xs sm:text-sm text-gray-100">
+              {renderFormattedAnswer(aiResult.answer)}
             </div>
 
             {aiResult.sources.length > 0 && (
@@ -169,8 +246,13 @@ export default function AgentKnowledgeBasePage(): React.JSX.Element {
         )}
       </div>
 
-      <AgentKnowledgeBaseForm onSubmit={createItem} />
+      <ApiErrorBanner error={error} onDismiss={clearError} />
 
+      <AgentKnowledgeBaseForm
+        projects={projects}
+        defaultProjectId={selectedProjectId || undefined}
+        onSubmit={createItem}
+      />
       {/* Головний контейнер таблиці */}
       <div className="bg-gray-950/40 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden shadow-2xl">
         <div className="border-b border-white/10 bg-gray-900/30 p-4">
@@ -180,14 +262,16 @@ export default function AgentKnowledgeBasePage(): React.JSX.Element {
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-gray-400 text-sm font-mono">Виконується запит до сервера...</div>
+          <div className="p-8 text-center text-gray-400 text-sm font-mono">
+            Виконується запит до сервера...
+          </div>
         ) : data.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left border-collapse">
               <thead className="bg-gray-900/50 text-xs font-semibold text-gray-400 uppercase border-b border-white/10 font-mono">
                 <tr>
                   <th scope="col" className="px-4 py-3 text-left">ID Документа</th>
-                  <th scope="col" className="px-4 py-3 text-left">Project ID</th>
+                  <th scope="col" className="px-4 py-3 text-left">Проєкт</th>
                   <th scope="col" className="px-4 py-3 text-left">Заголовок бази знань</th>
                   <th scope="col" className="px-4 py-3 text-left">Вміст (Контент)</th>
                   <th scope="col" className="px-4 py-3 text-right">Дії</th>
@@ -196,14 +280,24 @@ export default function AgentKnowledgeBasePage(): React.JSX.Element {
               <tbody className="divide-y divide-white/5 font-mono text-gray-200">
                 {data.map((item) => (
                   <tr key={item.id} className="hover:bg-white/5 transition text-xs sm:text-[13px]">
-                    <td className="px-4 py-3 font-mono text-xs text-blue-400 whitespace-nowrap">{item.id}</td>
-                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">{String(item.projectId || '-')}</td>
-                    <td className="px-4 py-3 text-white font-semibold">{String(item.title || '-')}</td>
-                    <td className="px-4 py-3 break-words text-gray-300 max-w-md">{String(item.content || '-')}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-blue-400 whitespace-nowrap">
+                      {item.id}
+                    </td>
+                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
+                      {item.projectId
+                        ? (projectNamesMap.get(item.projectId) ?? item.projectId)
+                        : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-white font-semibold">
+                      {String(item.title || '-')}
+                    </td>
+                    <td className="px-4 py-3 break-words text-gray-300 max-w-md">
+                      {String(item.content || '-')}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
-                        onClick={() => deleteItem(item.id)}
+                        onClick={() => void deleteItem(item.id)}
                         aria-label="Видалити запис"
                         className="p-1.5 text-gray-400 hover:text-red-400 rounded-md transition inline-flex cursor-pointer"
                       >

@@ -1,7 +1,9 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Inject,
   Param,
@@ -33,12 +35,23 @@ interface RequestWithUser extends Request {
   };
 }
 
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const WRITE_ALLOWED_ROLES = new Set(['OWNER', 'ADMIN', 'MANAGER', 'SUPERADMIN']);
+
 @Controller('agentknowledgebase')
 export class AgentKnowledgeBaseController {
   constructor(
     @Inject(AgentKnowledgeBaseService)
     private readonly service: AgentKnowledgeBaseService,
   ) {}
+
+  private assertWritePermission(role?: string): void {
+    if (!role || !WRITE_ALLOWED_ROLES.has(role.toUpperCase())) {
+      throw new ForbiddenException(
+        'Недостатньо прав для зміни бази знань. Потрібна роль OWNER, ADMIN або MANAGER.',
+      );
+    }
+  }
 
   @Post('ask')
   @RateLimit(30, 60)
@@ -59,15 +72,20 @@ export class AgentKnowledgeBaseController {
     @Body() dto: CreateAgentKnowledgeBaseDto,
     @Req() req: RequestWithUser,
   ): Promise<AgentKnowledgeBase> {
+    this.assertWritePermission(req.user?.role);
     return this.service.create(dto, req.user?.companyId);
   }
 
   @Get()
   findAll(
     @Query() query: PaginationQueryDto,
+    @Query('projectId') projectId: string | undefined,
     @Req() req: RequestWithUser,
   ): Promise<PaginatedResponse<AgentKnowledgeBase>> {
-    return this.service.findAll(query, req.user?.companyId);
+    if (projectId !== undefined && projectId !== '' && !UUID_V4_REGEX.test(projectId)) {
+      throw new BadRequestException('Некоректний формат query-параметра projectId');
+    }
+    return this.service.findAll(query, req.user?.companyId, projectId || undefined);
   }
 
   @Get(':id')
@@ -84,6 +102,7 @@ export class AgentKnowledgeBaseController {
     @Body() dto: UpdateAgentKnowledgeBaseDto,
     @Req() req: RequestWithUser,
   ): Promise<AgentKnowledgeBase> {
+    this.assertWritePermission(req.user?.role);
     return this.service.update(id, dto, req.user?.companyId);
   }
 
@@ -92,6 +111,7 @@ export class AgentKnowledgeBaseController {
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: RequestWithUser,
   ): Promise<AgentKnowledgeBase> {
+    this.assertWritePermission(req.user?.role);
     return this.service.remove(id, req.user?.companyId);
   }
 }

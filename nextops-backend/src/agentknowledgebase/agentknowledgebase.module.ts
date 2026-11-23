@@ -5,6 +5,6 @@ import { AgentKnowledgeBaseController } from './agentknowledgebase.controller';
 @Module({
   controllers: [AgentKnowledgeBaseController],
   providers: [AgentKnowledgeBaseService],
-  exports: [AgentKnowledgeBaseService]
+  exports: [AgentKnowledgeBaseService],
 })
 export class AgentKnowledgeBaseModule {}
